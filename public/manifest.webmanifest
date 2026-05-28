@@ -1,0 +1,12 @@
+{
+  "name": "Geraltest Brasil",
+  "short_name": "Geraltest",
+  "description": "Controle tecnológico de materiais — agendamento e gestão.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#1e3a8a",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon" }
+  ]
+}
