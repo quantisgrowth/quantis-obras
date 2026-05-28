@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera, Bell, BarChart3, Clock, CheckCircle2, FlaskConical, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Painel — Geraltest Brasil" }] }),
