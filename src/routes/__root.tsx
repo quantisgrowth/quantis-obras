@@ -77,11 +77,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Geraltest Brasil — Controle Tecnológico de Materiais" },
       { name: "description", content: "Agendamento e gestão de ensaios tecnológicos: concreto, solo e moldagem de corpos de prova com técnicos certificados." },
       { name: "author", content: "Geraltest Brasil" },
-      { property: "og:title", content: "Geraltest Brasil — Controle Tecnológico" },
-      { property: "og:description", content: "Plataforma de agendamento de medições e ensaios para construção civil." },
+      { property: "og:title", content: "Geraltest Brasil — Controle Tecnológico de Materiais" },
+      { property: "og:description", content: "Agendamento e gestão de ensaios tecnológicos: concreto, solo e moldagem de corpos de prova com técnicos certificados." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Geraltest Brasil — Controle Tecnológico de Materiais" },
+      { name: "twitter:description", content: "Agendamento e gestão de ensaios tecnológicos: concreto, solo e moldagem de corpos de prova com técnicos certificados." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d4e09739-4827-4650-98b4-db52268c5f93/id-preview-ac06d736--cb44c17f-4356-442a-a3ba-a06dcbfe6934.lovable.app-1779980172543.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d4e09739-4827-4650-98b4-db52268c5f93/id-preview-ac06d736--cb44c17f-4356-442a-a3ba-a06dcbfe6934.lovable.app-1779980172543.png" },
     ],
     links: [
       {
