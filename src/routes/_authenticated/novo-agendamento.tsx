@@ -20,7 +20,6 @@ import {
   CreditCard, 
   Sparkles, 
   HardHat, 
-  MessageSquare,
   AlertTriangle 
 } from "lucide-react";
 
@@ -46,6 +45,37 @@ const FALLBACK_CIDADES = [
   { id: "c5", nome_cidade: "Boituva", mobilizacao_base: 500.00, pedagio_estimado: 38.00 },
 ];
 
+// Brazilian states list
+const BR_STATES = [
+  { value: "AC", label: "Acre" },
+  { value: "AL", label: "Alagoas" },
+  { value: "AP", label: "Amapá" },
+  { value: "AM", label: "Amazonas" },
+  { value: "BA", label: "Bahia" },
+  { value: "CE", label: "Ceará" },
+  { value: "DF", label: "Distrito Federal" },
+  { value: "ES", label: "Espírito Santo" },
+  { value: "GO", label: "Goiás" },
+  { value: "MA", label: "Maranhão" },
+  { value: "MT", label: "Mato Grosso" },
+  { value: "MS", label: "Mato Grosso do Sul" },
+  { value: "MG", label: "Minas Gerais" },
+  { value: "PA", label: "Pará" },
+  { value: "PB", label: "Paraíba" },
+  { value: "PR", label: "Paraná" },
+  { value: "PE", label: "Pernambuco" },
+  { value: "PI", label: "Piauí" },
+  { value: "RJ", label: "Rio de Janeiro" },
+  { value: "RN", label: "Rio Grande do Norte" },
+  { value: "RS", label: "Rio Grande do Sul" },
+  { value: "RO", label: "Rondônia" },
+  { value: "RR", label: "Roraima" },
+  { value: "SC", label: "Santa Catarina" },
+  { value: "SP", label: "São Paulo" },
+  { value: "SE", label: "Sergipe" },
+  { value: "TO", label: "Tocantins" },
+];
+
 function NovoAgendamento() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -62,49 +92,22 @@ function NovoAgendamento() {
   // Form State
   const [userProfile, setUserProfile] = useState<any>(null);
   const [selectedObraId, setSelectedObraId] = useState<string>("nova");
-  
-  // New fields for manual address entry
 
+  // Nova obra fields — all declared here
+  const [novaObraNome, setNovaObraNome] = useState("");
+  const [novaObraEndereco, setNovaObraEndereco] = useState("");
+  const [novaObraCidade, setNovaObraCidade] = useState("");
+  const [novaObraLat, setNovaObraLat] = useState(0);
+  const [novaObraLng, setNovaObraLng] = useState(0);
+  const [novaObraCEP, setNovaObraCEP] = useState("");
   const [novaObraNumero, setNovaObraNumero] = useState("");
   const [novaObraBairro, setNovaObraBairro] = useState("");
   const [novaObraEstado, setNovaObraEstado] = useState("");
+
   // Additional obra details
   const [cnoObra, setCnoObra] = useState("");
   const [responsavelObra, setResponsavelObra] = useState("");
   const [cargoResponsavel, setCargoResponsavel] = useState("");
-
-  // Brazilian states list (value,label)
-  const BR_STATES = [
-    { value: "AC", label: "Acre" },
-    { value: "AL", label: "Alagoas" },
-    { value: "AP", label: "Amapá" },
-    { value: "AM", label: "Amazonas" },
-    { value: "BA", label: "Bahia" },
-    { value: "CE", label: "Ceará" },
-    { value: "DF", label: "Distrito Federal" },
-    { value: "ES", label: "Espírito Santo" },
-    { value: "GO", label: "Goiás" },
-    { value: "MA", label: "Maranhão" },
-    { value: "MT", label: "Mato Grosso" },
-    { value: "MS", label: "Mato Grosso do Sul" },
-    { value: "MG", label: "Minas Gerais" },
-    { value: "PA", label: "Pará" },
-    { value: "PB", label: "Paraíba" },
-    { value: "PR", label: "Paraná" },
-    { value: "PE", label: "Pernambuco" },
-    { value: "PI", label: "Piauí" },
-    { value: "RJ", label: "Rio de Janeiro" },
-    { value: "RN", label: "Rio Grande do Norte" },
-    { value: "RS", label: "Rio Grande do Sul" },
-    { value: "RO", label: "Rondônia" },
-    { value: "RR", label: "Roraima" },
-    { value: "SC", label: "Santa Catarina" },
-    { value: "SP", label: "São Paulo" },
-    { value: "SE", label: "Sergipe" },
-    { value: "TO", label: "Tocantins" },
-  ];
-
-
 
   // Service details
   const [selectedServicoId, setSelectedServicoId] = useState("");
@@ -133,11 +136,9 @@ function NovoAgendamento() {
         .single();
       
       if (profile) {
-        // If company is missing, create a default one to make sure foreign key checks pass
         if (!profile.empresa_id) {
           toast.info("Configurando empresa de testes no seu perfil...");
           
-          // Check if default mock company exists or create it
           let { data: empresa } = await supabase
             .from("empresas_clientes")
             .select("id")
@@ -212,20 +213,17 @@ function NovoAgendamento() {
     loadData();
   }, [user]);
 
-  // Handle Autocomplete selection
+  // Handle Autocomplete selection — populates all address fields
   const handlePlaceSelected = (place: PlaceResult) => {
     setNovaObraEndereco(place.formattedAddress);
     setNovaObraCidade(place.cidade);
     setNovaObraLat(place.latitude);
     setNovaObraLng(place.longitude);
     if (place.cep) setNovaObraCEP(place.cep);
-    // If the place includes state component, you could set it here (placeholder for now)
-    // Example: setNovaObraEstado(place.estado);
   };
 
   // Auto calculate CPs based on trucks
   useEffect(() => {
-    // Standard rule: 4 CPs per truck (for testing ages e.g. 7, 14, 28 + backup)
     setCpsContratados(qtdCaminhoes * 4);
   }, [qtdCaminhoes]);
 
@@ -246,7 +244,6 @@ function NovoAgendamento() {
     const cityName = getSelectedObraCity();
     const city = cidades.find((c) => c.nome_cidade.toLowerCase() === cityName.toLowerCase());
     
-    // Convert base values if exists
     const mobBase = city ? parseFloat(city.mobilizacao_base) : 0;
     const toll = city ? parseFloat(city.pedagio_estimado) : 0;
     
@@ -263,13 +260,25 @@ function NovoAgendamento() {
   
   const subtotal = rawServiceCost + mobilizacao + pedagios;
   
-  // App settings parameters (default fallbacks matching public.app_settings migrations)
-  const impostoPct = 0.12; // 12%
-  const descontoPct = formaPagamento === "Pix" || formaPagamento === "Cartao" ? 0.05 : 0; // 5%
+  const impostoPct = 0.12;
+  const descontoPct = formaPagamento === "Pix" || formaPagamento === "Cartao" ? 0.05 : 0;
   
   const imposto = subtotal * impostoPct;
   const desconto = subtotal * descontoPct;
   const total = subtotal + imposto - desconto;
+
+  // Validate step 1 before proceeding
+  const step1Valid = selectedObraId !== "nova" || (
+    !!novaObraNome.trim() &&
+    !!novaObraEndereco.trim() &&
+    !!novaObraCEP.trim() &&
+    !!novaObraNumero.trim() &&
+    !!novaObraBairro.trim() &&
+    !!novaObraEstado &&
+    !!cnoObra.trim() &&
+    !!responsavelObra.trim() &&
+    !!cargoResponsavel.trim()
+  );
 
   // Submit Booking to Supabase
   const handleConfirmBooking = async () => {
@@ -320,7 +329,7 @@ function NovoAgendamento() {
           servico_id: selectedServicoId,
           criado_por: user.id,
           data_servico: dataServico,
-          horario_na_obra: horarioNaObra + ":00", // Format HH:MM:SS
+          horario_na_obra: horarioNaObra + ":00",
           volume_m3: volumeM3,
           qtd_caminhoes: qtdCaminhoes,
           cps_contratados: cpsContratados,
@@ -360,7 +369,6 @@ function NovoAgendamento() {
         text: userText,
       });
 
-      // Redirect back to dashboard
       navigate({ to: "/dashboard" });
 
     } catch (err: any) {
@@ -401,7 +409,7 @@ function NovoAgendamento() {
             <div className={`grid h-8 w-8 place-items-center rounded-full text-xs transition-colors ${
               step === num ? "bg-primary text-primary-foreground" : step > num ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
             }`}>
-              {step > num ? <Check className="h-4 w-4" /> : num}
+              {step > num ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
             </div>
             <span className="hidden sm:inline">{label}</span>
           </div>
@@ -411,6 +419,7 @@ function NovoAgendamento() {
       {/* WIZARD CARD PANEL */}
       <Card className="shadow-[var(--shadow-elegant)]">
         <CardContent className="pt-6">
+
           {/* STEP 1: OBRA DETAILS */}
           {step === 1 && (
             <div className="space-y-6">
@@ -439,7 +448,8 @@ function NovoAgendamento() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
+                    {/* Nome da Obra */}
+                    <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="obra-nome">Identificação / Nome da Obra</Label>
                       <Input
                         id="obra-nome"
@@ -449,123 +459,125 @@ function NovoAgendamento() {
                       />
                     </div>
 
-          {/* CEP */}
-          <div className="space-y-2">
-            <Label htmlFor="obra-cep">CEP</Label>
-            <Input
-              id="obra-cep"
-              placeholder="Ex: 18000-000"
-              value={novaObraCEP}
-              onChange={(e) => setNovaObraCEP(e.target.value)}
-            />
-          </div>
-          {/* Endereço Autocomplete */}
-          <div className="space-y-2">
-            <Label htmlFor="obra-autocomplete">Buscar Endereço (Google Maps)</Label>
-            <AddressAutocomplete
-              value={novaObraEndereco}
-              onChange={setNovaObraEndereco}
-              onPlaceSelected={handlePlaceSelected}
-            />
-          </div>
-          {/* Número */}
-          <div className="space-y-2">
-            <Label htmlFor="obra-numero">Número</Label>
-            <Input
-              id="obra-numero"
-              placeholder="Ex: 123"
-              value={novaObraNumero}
-              onChange={(e) => setNovaObraNumero(e.target.value)}
-            />
-          </div>
-          {/* Bairro */}
-          <div className="space-y-2">
-            <Label htmlFor="obra-bairro">Bairro</Label>
-            <Input
-              id="obra-bairro"
-              placeholder="Ex: Centro"
-              value={novaObraBairro}
-              onChange={(e) => setNovaObraBairro(e.target.value)}
-            />
-          </div>
-          {/* Estado */}
-          <div className="space-y-2">
-            <Label htmlFor="obra-estado">Estado</Label>
-            <Select value={novaObraEstado} onValueChange={setNovaObraEstado}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Selecione o estado" />
-              </SelectTrigger>
-              <SelectContent>
-                {BR_STATES.map((st) => (
-                  <SelectItem key={st.value} value={st.value}>
-                    {st.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Cidade (auto preenchido) */}
-          <div className="space-y-2">
-            <Label htmlFor="obra-cidade">Cidade</Label>
-            <Input
-              id="obra-cidade"
-              disabled
-              value={novaObraCidade}
-              className="bg-muted text-muted-foreground"
-            />
-          </div>
-          {/* Novo campos de obra */}
-          <div className="space-y-2">
-            <Label htmlFor="obra-cno">CNO</Label>
-            <Input
-              id="obra-cno"
-              placeholder="Ex: 12345678"
-              value={cnoObra}
-              onChange={(e) => setCnoObra(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="obra-responsavel">Responsável Pela Obra</Label>
-            <Input
-              id="obra-responsavel"
-              placeholder="Nome completo"
-              value={responsavelObra}
-              onChange={(e) => setResponsavelObra(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="obra-cargo">Cargo do Responsável</Label>
-            <Input
-              id="obra-cargo"
-              placeholder="Ex: Engenheiro" 
-              value={cargoResponsavel}
-              onChange={(e) => setCargoResponsavel(e.target.value)}
-            />
-          </div>
+                    {/* CEP */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-cep">CEP</Label>
+                      <Input
+                        id="obra-cep"
+                        placeholder="Ex: 18000-000"
+                        value={novaObraCEP}
+                        onChange={(e) => setNovaObraCEP(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Endereço Autocomplete */}
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="obra-autocomplete">Buscar Endereço (Google Maps)</Label>
+                      <AddressAutocomplete
+                        value={novaObraEndereco}
+                        onChange={setNovaObraEndereco}
+                        onPlaceSelected={handlePlaceSelected}
+                      />
+                    </div>
+
+                    {/* Número */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-numero">Número</Label>
+                      <Input
+                        id="obra-numero"
+                        placeholder="Ex: 123"
+                        value={novaObraNumero}
+                        onChange={(e) => setNovaObraNumero(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Bairro */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-bairro">Bairro</Label>
+                      <Input
+                        id="obra-bairro"
+                        placeholder="Ex: Centro"
+                        value={novaObraBairro}
+                        onChange={(e) => setNovaObraBairro(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Estado */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-estado">Estado</Label>
+                      <Select value={novaObraEstado} onValueChange={setNovaObraEstado}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o estado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BR_STATES.map((st) => (
+                            <SelectItem key={st.value} value={st.value}>
+                              {st.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Cidade (auto preenchido) */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-cidade">Cidade</Label>
+                      <Input
+                        id="obra-cidade"
+                        disabled
+                        value={novaObraCidade}
+                        className="bg-muted text-muted-foreground"
+                        placeholder="Preenchido automaticamente"
+                      />
+                    </div>
+
+                    {/* CNO */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-cno">CNO</Label>
+                      <Input
+                        id="obra-cno"
+                        placeholder="Ex: 12345678"
+                        value={cnoObra}
+                        onChange={(e) => setCnoObra(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Responsável */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-responsavel">Responsável Pela Obra</Label>
+                      <Input
+                        id="obra-responsavel"
+                        placeholder="Nome completo"
+                        value={responsavelObra}
+                        onChange={(e) => setResponsavelObra(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Cargo */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-cargo">Cargo do Responsável</Label>
+                      <Input
+                        id="obra-cargo"
+                        placeholder="Ex: Engenheiro"
+                        value={cargoResponsavel}
+                        onChange={(e) => setCargoResponsavel(e.target.value)}
+                      />
+                    </div>
                   </div>
-                  
-                  <div className="text-xs text-muted-foreground bg-muted p-3 rounded-md flex gap-2 items-center">
-                    <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
-                    <span>Lat: {novaObraLat.toFixed(6)} | Lng: {novaObraLng.toFixed(6)} detectado pelo satélite da obra.</span>
-                  </div>
+
+                  {(novaObraLat !== 0 || novaObraLng !== 0) && (
+                    <div className="text-xs text-muted-foreground bg-muted p-3 rounded-md flex gap-2 items-center">
+                      <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
+                      <span>Lat: {novaObraLat.toFixed(6)} | Lng: {novaObraLng.toFixed(6)} detectado pelo satélite da obra.</span>
+                    </div>
+                  )}
                 </div>
               )}
 
               <div className="flex justify-end">
-                <Button 
+                <Button
                   onClick={() => setStep(2)}
-                  disabled={
-                    selectedObraId === "nova" && (
-                      !novaObraCEP ||
-                      !novaObraEndereco ||
-                      !novaObraNumero ||
-                      !novaObraBairro ||
-                      !novaObraEstado ||
-                      !cnoObra ||
-                      !responsavelObra ||
-                      !cargoResponsavel
-                    )
-                  }
+                  disabled={!step1Valid}
                 >
                   Próximo Passo <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -586,7 +598,7 @@ function NovoAgendamento() {
                     <SelectContent>
                       {servicos.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
-                          {s.nome_servico} - R$ {s.valor_venda_editavel.toFixed(2)} / CP
+                          {s.nome_servico} - R$ {Number(s.valor_venda_editavel).toFixed(2)} / CP
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -634,7 +646,7 @@ function NovoAgendamento() {
                 <Button variant="ghost" onClick={() => setStep(1)}>
                   <ChevronLeft className="mr-2 h-4 w-4" /> Voltar
                 </Button>
-                <Button onClick={() => setStep(3)}>
+                <Button onClick={() => setStep(3)} disabled={!selectedServicoId}>
                   Próximo Passo <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -704,7 +716,7 @@ function NovoAgendamento() {
                 </div>
 
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Deslocamento e Mobilização ({getSelectedObraCity()})</span>
+                  <span className="text-muted-foreground">Deslocamento e Mobilização ({getSelectedObraCity() || "Sorocaba"})</span>
                   <span className="font-semibold text-foreground">R$ {mobilizacao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                 </div>
 
@@ -720,7 +732,7 @@ function NovoAgendamento() {
                   <span className="text-foreground">R$ {subtotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                 </div>
 
-                <div className="flex justify-between text-sm text-green-600">
+                <div className="flex justify-between text-sm text-amber-600">
                   <span>Imposto de Serviço Retido (12%)</span>
                   <span>+ R$ {imposto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                 </div>
@@ -742,7 +754,7 @@ function NovoAgendamento() {
               <div className="space-y-3">
                 <Label className="text-base font-bold flex items-center gap-2">
                   <CreditCard className="h-5 w-5 text-primary" />
-                  Escolha a Forma de Pagamento (Validação Rápida)
+                  Escolha a Forma de Pagamento
                 </Label>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {[
@@ -781,8 +793,8 @@ function NovoAgendamento() {
                   <ChevronLeft className="mr-2 h-4 w-4" /> Voltar
                 </Button>
                 
-                <Button 
-                  onClick={handleConfirmBooking} 
+                <Button
+                  onClick={handleConfirmBooking}
                   disabled={loading}
                   className="bg-emerald-600 hover:bg-emerald-700 font-bold"
                 >
@@ -791,6 +803,7 @@ function NovoAgendamento() {
               </div>
             </div>
           )}
+
         </CardContent>
       </Card>
     </div>
