@@ -63,13 +63,48 @@ function NovoAgendamento() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [selectedObraId, setSelectedObraId] = useState<string>("nova");
   
-  // New Obra details
-  const [novaObraNome, setNovaObraNome] = useState("");
-  const [novaObraEndereco, setNovaObraEndereco] = useState("");
-  const [novaObraCidade, setNovaObraCidade] = useState("Sorocaba");
-  const [novaObraCEP, setNovaObraCEP] = useState("");
-  const [novaObraLat, setNovaObraLat] = useState<number>(-23.4975);
-  const [novaObraLng, setNovaObraLng] = useState<number>(-47.4522);
+  // New fields for manual address entry
+
+  const [novaObraNumero, setNovaObraNumero] = useState("");
+  const [novaObraBairro, setNovaObraBairro] = useState("");
+  const [novaObraEstado, setNovaObraEstado] = useState("");
+  // Additional obra details
+  const [cnoObra, setCnoObra] = useState("");
+  const [responsavelObra, setResponsavelObra] = useState("");
+  const [cargoResponsavel, setCargoResponsavel] = useState("");
+
+  // Brazilian states list (value,label)
+  const BR_STATES = [
+    { value: "AC", label: "Acre" },
+    { value: "AL", label: "Alagoas" },
+    { value: "AP", label: "Amapá" },
+    { value: "AM", label: "Amazonas" },
+    { value: "BA", label: "Bahia" },
+    { value: "CE", label: "Ceará" },
+    { value: "DF", label: "Distrito Federal" },
+    { value: "ES", label: "Espírito Santo" },
+    { value: "GO", label: "Goiás" },
+    { value: "MA", label: "Maranhão" },
+    { value: "MT", label: "Mato Grosso" },
+    { value: "MS", label: "Mato Grosso do Sul" },
+    { value: "MG", label: "Minas Gerais" },
+    { value: "PA", label: "Pará" },
+    { value: "PB", label: "Paraíba" },
+    { value: "PR", label: "Paraná" },
+    { value: "PE", label: "Pernambuco" },
+    { value: "PI", label: "Piauí" },
+    { value: "RJ", label: "Rio de Janeiro" },
+    { value: "RN", label: "Rio Grande do Norte" },
+    { value: "RS", label: "Rio Grande do Sul" },
+    { value: "RO", label: "Rondônia" },
+    { value: "RR", label: "Roraima" },
+    { value: "SC", label: "Santa Catarina" },
+    { value: "SP", label: "São Paulo" },
+    { value: "SE", label: "Sergipe" },
+    { value: "TO", label: "Tocantins" },
+  ];
+
+
 
   // Service details
   const [selectedServicoId, setSelectedServicoId] = useState("");
@@ -184,6 +219,8 @@ function NovoAgendamento() {
     setNovaObraLat(place.latitude);
     setNovaObraLng(place.longitude);
     if (place.cep) setNovaObraCEP(place.cep);
+    // If the place includes state component, you could set it here (placeholder for now)
+    // Example: setNovaObraEstado(place.estado);
   };
 
   // Auto calculate CPs based on trucks
@@ -255,7 +292,13 @@ function NovoAgendamento() {
           .insert({
             empresa_id: userProfile.empresa_id,
             nome_obra: novaObraNome,
+            cno: cnoObra,
+            responsavel: responsavelObra,
+            cargo_responsavel: cargoResponsavel,
             endereco: novaObraEndereco,
+            numero: novaObraNumero,
+            bairro: novaObraBairro,
+            estado: novaObraEstado,
             cidade: novaObraCidade,
             cep: novaObraCEP || null,
             latitude: novaObraLat,
@@ -406,34 +449,99 @@ function NovoAgendamento() {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="obra-autocomplete">Buscar Endereço (Google Maps)</Label>
-                      <AddressAutocomplete
-                        value={novaObraEndereco}
-                        onChange={setNovaObraEndereco}
-                        onPlaceSelected={handlePlaceSelected}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="obra-cidade">Cidade</Label>
-                      <Input
-                        id="obra-cidade"
-                        disabled
-                        value={novaObraCidade}
-                        className="bg-muted text-muted-foreground"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="obra-cep">CEP</Label>
-                      <Input
-                        id="obra-cep"
-                        placeholder="Ex: 18000-000"
-                        value={novaObraCEP}
-                        onChange={(e) => setNovaObraCEP(e.target.value)}
-                      />
-                    </div>
+          {/* CEP */}
+          <div className="space-y-2">
+            <Label htmlFor="obra-cep">CEP</Label>
+            <Input
+              id="obra-cep"
+              placeholder="Ex: 18000-000"
+              value={novaObraCEP}
+              onChange={(e) => setNovaObraCEP(e.target.value)}
+            />
+          </div>
+          {/* Endereço Autocomplete */}
+          <div className="space-y-2">
+            <Label htmlFor="obra-autocomplete">Buscar Endereço (Google Maps)</Label>
+            <AddressAutocomplete
+              value={novaObraEndereco}
+              onChange={setNovaObraEndereco}
+              onPlaceSelected={handlePlaceSelected}
+            />
+          </div>
+          {/* Número */}
+          <div className="space-y-2">
+            <Label htmlFor="obra-numero">Número</Label>
+            <Input
+              id="obra-numero"
+              placeholder="Ex: 123"
+              value={novaObraNumero}
+              onChange={(e) => setNovaObraNumero(e.target.value)}
+            />
+          </div>
+          {/* Bairro */}
+          <div className="space-y-2">
+            <Label htmlFor="obra-bairro">Bairro</Label>
+            <Input
+              id="obra-bairro"
+              placeholder="Ex: Centro"
+              value={novaObraBairro}
+              onChange={(e) => setNovaObraBairro(e.target.value)}
+            />
+          </div>
+          {/* Estado */}
+          <div className="space-y-2">
+            <Label htmlFor="obra-estado">Estado</Label>
+            <Select value={novaObraEstado} onValueChange={setNovaObraEstado}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecione o estado" />
+              </SelectTrigger>
+              <SelectContent>
+                {BR_STATES.map((st) => (
+                  <SelectItem key={st.value} value={st.value}>
+                    {st.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Cidade (auto preenchido) */}
+          <div className="space-y-2">
+            <Label htmlFor="obra-cidade">Cidade</Label>
+            <Input
+              id="obra-cidade"
+              disabled
+              value={novaObraCidade}
+              className="bg-muted text-muted-foreground"
+            />
+          </div>
+          {/* Novo campos de obra */}
+          <div className="space-y-2">
+            <Label htmlFor="obra-cno">CNO</Label>
+            <Input
+              id="obra-cno"
+              placeholder="Ex: 12345678"
+              value={cnoObra}
+              onChange={(e) => setCnoObra(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="obra-responsavel">Responsável Pela Obra</Label>
+            <Input
+              id="obra-responsavel"
+              placeholder="Nome completo"
+              value={responsavelObra}
+              onChange={(e) => setResponsavelObra(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="obra-cargo">Cargo do Responsável</Label>
+            <Input
+              id="obra-cargo"
+              placeholder="Ex: Engenheiro" 
+              value={cargoResponsavel}
+              onChange={(e) => setCargoResponsavel(e.target.value)}
+            />
+          </div>
                   </div>
                   
                   <div className="text-xs text-muted-foreground bg-muted p-3 rounded-md flex gap-2 items-center">
@@ -446,7 +554,18 @@ function NovoAgendamento() {
               <div className="flex justify-end">
                 <Button 
                   onClick={() => setStep(2)}
-                  disabled={selectedObraId === "nova" && (!novaObraNome || !novaObraEndereco)}
+                  disabled={
+                    selectedObraId === "nova" && (
+                      !novaObraCEP ||
+                      !novaObraEndereco ||
+                      !novaObraNumero ||
+                      !novaObraBairro ||
+                      !novaObraEstado ||
+                      !cnoObra ||
+                      !responsavelObra ||
+                      !cargoResponsavel
+                    )
+                  }
                 >
                   Próximo Passo <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
