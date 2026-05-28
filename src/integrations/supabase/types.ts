@@ -14,16 +14,449 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agendamentos_medicoes: {
+        Row: {
+          codigo_pedido: string
+          cps_contratados: number
+          cps_moldados_real: number | null
+          created_at: string
+          criado_por: string | null
+          data_servico: string
+          diarias_necessarias: number
+          empresa_id: string
+          forma_pagamento: Database["public"]["Enums"]["forma_pagamento"] | null
+          horario_na_obra: string
+          horario_saida_lab: string | null
+          id: string
+          idades_selecionadas: number[]
+          memoria_calculo: Json | null
+          obra_id: string
+          observacoes: string | null
+          qtd_caminhoes: number
+          servico_id: string
+          status_agendamento: Database["public"]["Enums"]["agendamento_status"]
+          status_pagamento: Database["public"]["Enums"]["pagamento_status"]
+          tecnico_id: string | null
+          updated_at: string
+          valor_desconto: number
+          valor_imposto_12: number
+          valor_subtotal: number
+          valor_total: number
+          volume_m3: number
+        }
+        Insert: {
+          codigo_pedido?: string
+          cps_contratados?: number
+          cps_moldados_real?: number | null
+          created_at?: string
+          criado_por?: string | null
+          data_servico: string
+          diarias_necessarias?: number
+          empresa_id: string
+          forma_pagamento?:
+            | Database["public"]["Enums"]["forma_pagamento"]
+            | null
+          horario_na_obra: string
+          horario_saida_lab?: string | null
+          id?: string
+          idades_selecionadas?: number[]
+          memoria_calculo?: Json | null
+          obra_id: string
+          observacoes?: string | null
+          qtd_caminhoes?: number
+          servico_id: string
+          status_agendamento?: Database["public"]["Enums"]["agendamento_status"]
+          status_pagamento?: Database["public"]["Enums"]["pagamento_status"]
+          tecnico_id?: string | null
+          updated_at?: string
+          valor_desconto?: number
+          valor_imposto_12?: number
+          valor_subtotal?: number
+          valor_total?: number
+          volume_m3?: number
+        }
+        Update: {
+          codigo_pedido?: string
+          cps_contratados?: number
+          cps_moldados_real?: number | null
+          created_at?: string
+          criado_por?: string | null
+          data_servico?: string
+          diarias_necessarias?: number
+          empresa_id?: string
+          forma_pagamento?:
+            | Database["public"]["Enums"]["forma_pagamento"]
+            | null
+          horario_na_obra?: string
+          horario_saida_lab?: string | null
+          id?: string
+          idades_selecionadas?: number[]
+          memoria_calculo?: Json | null
+          obra_id?: string
+          observacoes?: string | null
+          qtd_caminhoes?: number
+          servico_id?: string
+          status_agendamento?: Database["public"]["Enums"]["agendamento_status"]
+          status_pagamento?: Database["public"]["Enums"]["pagamento_status"]
+          tecnico_id?: string | null
+          updated_at?: string
+          valor_desconto?: number
+          valor_imposto_12?: number
+          valor_subtotal?: number
+          valor_total?: number
+          volume_m3?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agendamentos_medicoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas_clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agendamentos_medicoes_obra_id_fkey"
+            columns: ["obra_id"]
+            isOneToOne: false
+            referencedRelation: "obras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agendamentos_medicoes_servico_id_fkey"
+            columns: ["servico_id"]
+            isOneToOne: false
+            referencedRelation: "servicos_catalogo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agendamentos_medicoes_tecnico_id_fkey"
+            columns: ["tecnico_id"]
+            isOneToOne: false
+            referencedRelation: "tecnicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_settings: {
+        Row: {
+          descricao: string | null
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          descricao?: string | null
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          descricao?: string | null
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
+      cidades_atendidas: {
+        Row: {
+          created_at: string
+          id: string
+          is_base: boolean
+          minutos_deslocamento: number
+          mobilizacao_base: number
+          nome_cidade: string
+          pedagio_estimado: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_base?: boolean
+          minutos_deslocamento?: number
+          mobilizacao_base?: number
+          nome_cidade: string
+          pedagio_estimado?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_base?: boolean
+          minutos_deslocamento?: number
+          mobilizacao_base?: number
+          nome_cidade?: string
+          pedagio_estimado?: number
+        }
+        Relationships: []
+      }
+      empresas_clientes: {
+        Row: {
+          cnpj: string
+          created_at: string
+          diarias_mes_atual: number
+          id: string
+          mes_referencia: string
+          razao_social: string
+          total_servicos_concluidos: number
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          diarias_mes_atual?: number
+          id?: string
+          mes_referencia?: string
+          razao_social: string
+          total_servicos_concluidos?: number
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          diarias_mes_atual?: number
+          id?: string
+          mes_referencia?: string
+          razao_social?: string
+          total_servicos_concluidos?: number
+        }
+        Relationships: []
+      }
+      historico_fotos: {
+        Row: {
+          agendamento_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          tipo_foto: Database["public"]["Enums"]["foto_tipo"]
+          url_foto: string
+        }
+        Insert: {
+          agendamento_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          tipo_foto: Database["public"]["Enums"]["foto_tipo"]
+          url_foto: string
+        }
+        Update: {
+          agendamento_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          tipo_foto?: Database["public"]["Enums"]["foto_tipo"]
+          url_foto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historico_fotos_agendamento_id_fkey"
+            columns: ["agendamento_id"]
+            isOneToOne: false
+            referencedRelation: "agendamentos_medicoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      obras: {
+        Row: {
+          cep: string | null
+          cidade: string
+          created_at: string
+          empresa_id: string
+          endereco: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          nome_obra: string
+        }
+        Insert: {
+          cep?: string | null
+          cidade: string
+          created_at?: string
+          empresa_id: string
+          endereco: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          nome_obra: string
+        }
+        Update: {
+          cep?: string | null
+          cidade?: string
+          created_at?: string
+          empresa_id?: string
+          endereco?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          nome_obra?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "obras_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas_clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          empresa_id: string | null
+          id: string
+          nome_completo: string
+          tecnico_id: string | null
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id?: string | null
+          id: string
+          nome_completo?: string
+          tecnico_id?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string | null
+          id?: string
+          nome_completo?: string
+          tecnico_id?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      servicos_catalogo: {
+        Row: {
+          ativo: boolean
+          categoria: string
+          created_at: string
+          equipamentos_inclusos: Json
+          id: string
+          nome_servico: string
+          sku: string
+          unidade: string
+          valor_custo_base: number
+          valor_venda_editavel: number
+        }
+        Insert: {
+          ativo?: boolean
+          categoria: string
+          created_at?: string
+          equipamentos_inclusos?: Json
+          id?: string
+          nome_servico: string
+          sku: string
+          unidade: string
+          valor_custo_base?: number
+          valor_venda_editavel?: number
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string
+          created_at?: string
+          equipamentos_inclusos?: Json
+          id?: string
+          nome_servico?: string
+          sku?: string
+          unidade?: string
+          valor_custo_base?: number
+          valor_venda_editavel?: number
+        }
+        Relationships: []
+      }
+      tecnicos: {
+        Row: {
+          certificacoes: string | null
+          cpf: string | null
+          created_at: string
+          foto_url: string | null
+          horario_fim_ultimo_servico: string | null
+          id: string
+          nome: string
+          ranking_score: number
+          rg: string | null
+          status: Database["public"]["Enums"]["tecnico_status"]
+          user_id: string | null
+        }
+        Insert: {
+          certificacoes?: string | null
+          cpf?: string | null
+          created_at?: string
+          foto_url?: string | null
+          horario_fim_ultimo_servico?: string | null
+          id?: string
+          nome: string
+          ranking_score?: number
+          rg?: string | null
+          status?: Database["public"]["Enums"]["tecnico_status"]
+          user_id?: string | null
+        }
+        Update: {
+          certificacoes?: string | null
+          cpf?: string | null
+          created_at?: string
+          foto_url?: string | null
+          horario_fim_ultimo_servico?: string | null
+          id?: string
+          nome?: string
+          ranking_score?: number
+          rg?: string | null
+          status?: Database["public"]["Enums"]["tecnico_status"]
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      agendamento_status:
+        | "Pendente_Tecnico"
+        | "Confirmado"
+        | "Em_Execucao"
+        | "Aguardando_Medicao"
+        | "Validado"
+        | "Laboratorio"
+        | "Cancelado"
+      app_role: "cliente" | "tecnico" | "admin"
+      forma_pagamento: "Pix" | "Cartao" | "Boleto_14" | "Boleto_28"
+      foto_tipo:
+        | "Ciclo_CP"
+        | "Final_Panoramica"
+        | "Retorno_Carga"
+        | "Checkin_QR"
+      pagamento_status: "Pendente" | "Pago" | "Boleto_Aberto" | "Cancelado"
+      tecnico_status: "Disponivel" | "Em_Campo" | "Folga"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +583,26 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      agendamento_status: [
+        "Pendente_Tecnico",
+        "Confirmado",
+        "Em_Execucao",
+        "Aguardando_Medicao",
+        "Validado",
+        "Laboratorio",
+        "Cancelado",
+      ],
+      app_role: ["cliente", "tecnico", "admin"],
+      forma_pagamento: ["Pix", "Cartao", "Boleto_14", "Boleto_28"],
+      foto_tipo: [
+        "Ciclo_CP",
+        "Final_Panoramica",
+        "Retorno_Carga",
+        "Checkin_QR",
+      ],
+      pagamento_status: ["Pendente", "Pago", "Boleto_Aberto", "Cancelado"],
+      tecnico_status: ["Disponivel", "Em_Campo", "Folga"],
+    },
   },
 } as const
