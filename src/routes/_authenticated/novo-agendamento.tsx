@@ -933,7 +933,7 @@ function NovoAgendamento() {
                     { val: "Boleto_14", label: "Boleto 14 dias", desc: "Sujeito a crédito" },
                     { val: "Boleto_28", label: "Boleto 28 dias", desc: "Sujeito a crédito" },
                   ].map((p) => (
-                    <button key={p.val} type="button" onClick={() => setFormaPagamento(p.val)}
+                    <button key={p.val} type="button" onClick={() => setFormaPagamento(p.val as typeof formaPagamento)}
                       className={`flex flex-col items-center justify-center p-3 rounded-lg border text-center transition-all ${formaPagamento === p.val ? "border-primary bg-primary/5 text-primary shadow-sm" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>
                       <span className="text-sm font-bold block">{p.label}</span>
                       <span className="text-[10px] block opacity-80 mt-1">{p.desc}</span>
