@@ -164,11 +164,12 @@ function NovoAgendamento() {
   // ── Load data ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
+    const currentUserId = user.id;
     async function loadData() {
       let { data: profile } = await supabase
         .from("profiles")
         .select("*, empresa:empresas_clientes(*)")
-        .eq("id", user.id)
+        .eq("id", currentUserId)
         .single();
 
       if (profile) {
@@ -181,7 +182,7 @@ function NovoAgendamento() {
             newEmpresaId = newEmpresa?.id;
           }
           if (newEmpresaId) {
-            await supabase.from("profiles").update({ empresa_id: newEmpresaId }).eq("id", user.id);
+            await supabase.from("profiles").update({ empresa_id: newEmpresaId }).eq("id", currentUserId);
             profile.empresa_id = newEmpresaId;
           }
         }
