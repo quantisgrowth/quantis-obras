@@ -155,7 +155,8 @@ function NovoAgendamento() {
   const custoExtra = horasExtras * valorHoraExtra;
 
   // Step 4 — Pagamento
-  const [formaPagamento, setFormaPagamento] = useState("Pix");
+  type FormaPagamento = "Pix" | "Cartao" | "Boleto_14" | "Boleto_28";
+  const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>("Pix");
 
   // ── Derived values ────────────────────────────────────────────────────
   // Total de CPs = soma de (qtd por idade) × nº de caminhões
@@ -380,7 +381,9 @@ function NovoAgendamento() {
           data_servico: dataServico, horario_na_obra: horarioNaObra + ":00",
           volume_m3: volumeM3, qtd_caminhoes: qtdCaminhoes,
           cps_contratados: cpsContratados,
-          idades_cp: JSON.stringify(idadesCP),
+          idades_cp: idadesCP,
+          idades_selecionadas: idadesCP.map((i) => i.idade),
+          horario_saida_lab: horarioFim ? horarioFim + ":00" : null,
           status_pagamento: formaPagamento === "Pix" || formaPagamento === "Cartao" ? "Pago" : "Pendente",
           forma_pagamento: formaPagamento, status_agendamento: "Pendente_Tecnico",
           valor_subtotal: subtotal, valor_desconto: desconto,
