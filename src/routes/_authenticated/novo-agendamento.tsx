@@ -381,7 +381,7 @@ function NovoAgendamento() {
           data_servico: dataServico, horario_na_obra: horarioNaObra + ":00",
           volume_m3: volumeM3, qtd_caminhoes: qtdCaminhoes,
           cps_contratados: cpsContratados,
-          idades_cp: idadesCP,
+          idades_cp: idadesCP as unknown as Record<string, unknown>[],
           idades_selecionadas: idadesCP.map((i) => i.idade),
           horario_saida_lab: horarioFim ? horarioFim + ":00" : null,
           status_pagamento: formaPagamento === "Pix" || formaPagamento === "Cartao" ? "Pago" : "Pendente",
