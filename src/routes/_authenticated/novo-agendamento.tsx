@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -155,7 +155,7 @@ function NovoAgendamento() {
   const custoExtra = horasExtras * valorHoraExtra;
 
   // Step 4 — Pagamento
-  const [formaPagamento, setFormaPagamento] = useState<"Pix" | "Cartao" | "Boleto_14" | "Boleto_28">("Pix");
+  const [formaPagamento, setFormaPagamento] = useState("Pix");
 
   // ── Derived values ────────────────────────────────────────────────────
   // Total de CPs = soma de (qtd por idade) × nº de caminhões
@@ -296,18 +296,18 @@ function NovoAgendamento() {
         });
 
         // Gerar array de datas disponíveis (próximos 60 dias, sem finais de semana e datas lotadas)
-        const disponíveis: string[] = [];
+        const datasOk: string[] = [];
         const cursor = new Date(hoje);
         cursor.setDate(cursor.getDate() + 1); // começa amanhã
         while (cursor <= limite) {
           const dow = cursor.getDay();
           const iso = cursor.toISOString().split("T")[0];
           if (dow !== 0 && dow !== 6 && !datasOcupadas.has(iso)) {
-            disponíveis.push(iso);
+            datasOk.push(iso);
           }
           cursor.setDate(cursor.getDate() + 1);
         }
-        setDatasDisponiveis(disponíveis);
+        setDatasDisponiveis(datasOk);
       } catch (err) {
         console.error("Erro ao buscar disponibilidade:", err);
       } finally {
