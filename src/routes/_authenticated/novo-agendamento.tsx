@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AddressAutocomplete, lookupCEP, PlaceResult } from "@/components/address-autocomplete";
 import { sendWhatsappMessage } from "@/lib/whatsapp.functions";
+import { createBooking } from "@/lib/booking.functions";
 import { toast } from "sonner";
 import {
   Building,
@@ -355,43 +356,36 @@ function NovoAgendamento() {
     if (!user || !userProfile) return;
     setLoading(true);
     try {
-      let finalObraId = selectedObraId;
-
-      if (selectedObraId === "nova") {
-        const { data: newObra, error: obraErr } = await supabase
-          .from("obras")
-          .insert({
-            empresa_id: userProfile.empresa_id,
-            nome_obra: novaObraNome, cno: cnoObra, responsavel: responsavelObra,
-            cargo_responsavel: cargoResponsavel, endereco: novaObraEndereco,
-            numero: novaObraNumero, bairro: novaObraBairro, estado: novaObraEstado,
-            cidade: novaObraCidade, cep: novaObraCEP || null,
-            latitude: novaObraLat, longitude: novaObraLng,
-          })
-          .select("id").single();
-        if (obraErr) throw obraErr;
-        finalObraId = newObra.id;
-      }
-
-      const { data: agendamento, error: bookingErr } = await supabase
-        .from("agendamentos_medicoes")
-        .insert({
-          obra_id: finalObraId, empresa_id: userProfile.empresa_id,
-          servico_id: selectedServicoId, criado_por: user.id,
-          data_servico: dataServico, horario_na_obra: horarioNaObra + ":00",
-          volume_m3: volumeM3, qtd_caminhoes: qtdCaminhoes,
-          cps_contratados: cpsContratados,
-          idades_cp: idadesCP as unknown as never,
-          idades_selecionadas: idadesCP.map((i) => i.idade),
-          horario_saida_lab: horarioFim ? horarioFim + ":00" : null,
-          status_pagamento: formaPagamento === "Pix" || formaPagamento === "Cartao" ? "Pago" : "Pendente",
-          forma_pagamento: formaPagamento, status_agendamento: "Pendente_Tecnico",
-          valor_subtotal: subtotal, valor_desconto: desconto,
-          valor_imposto_12: imposto, valor_total: total,
+      const agendamento = await createBooking({
+        data: {
+          obra_id: selectedObraId === "nova" ? null : selectedObraId,
+          nova_obra:
+            selectedObraId === "nova"
+              ? {
+                  nome_obra: novaObraNome,
+                  endereco: novaObraEndereco,
+                  numero: novaObraNumero,
+                  bairro: novaObraBairro,
+                  cidade: novaObraCidade,
+                  estado: novaObraEstado,
+                  cep: novaObraCEP || null,
+                  cno: cnoObra,
+                  responsavel: responsavelObra,
+                  cargo_responsavel: cargoResponsavel,
+                  latitude: novaObraLat ?? null,
+                  longitude: novaObraLng ?? null,
+                }
+              : null,
+          servico_id: selectedServicoId,
+          data_servico: dataServico,
+          horario_na_obra: horarioNaObra,
+          qtd_caminhoes: qtdCaminhoes,
+          idades_cp: idadesCP,
+          volume_m3: volumeM3,
+          forma_pagamento: formaPagamento,
           observacoes: observacoes || null,
-        })
-        .select("*").single();
-      if (bookingErr) throw bookingErr;
+        },
+      });
 
       toast.success("Agendamento criado com sucesso!");
 
@@ -409,7 +403,7 @@ function NovoAgendamento() {
           `📋 *Serviço:* ${getSelectedService().nome_servico}\n` +
           `🏗️ *CPs Contratados:* ${cpsContratados} unidades\n` +
           `🧪 *Idades:* ${idadesCP.map((i) => `${i.idade}d(${i.qtd}CPs)`).join(", ")}\n` +
-          `💰 *Valor Total:* R$ ${total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n` +
+          `💰 *Valor Total:* R$ ${agendamento.valor_total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n` +
           `💳 *Forma de Pagamento:* ${formaPagamento}\n\n` +
           `Um técnico certificado será alocado em breve. Obrigado pela preferência!`,
         },
