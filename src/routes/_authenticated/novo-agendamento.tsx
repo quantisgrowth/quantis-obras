@@ -137,7 +137,7 @@ function NovoAgendamento() {
     const fimMin = h * 60 + m + JORNADA_TOTAL_H * 60;
     const fimH = Math.floor(fimMin / 60) % 24;
     const fimM = fimMin % 60;
-    return \`\${String(fimH).padStart(2, "0")}:\${String(fimM).padStart(2, "0")}\`;
+    return `${String(fimH).padStart(2, "0")}:${String(fimM).padStart(2, "0")}`;
   };
 
   const horarioFim = calcularHorarioFim(horarioNaObra);
