@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AddressAutocomplete, lookupCEP, PlaceResult } from "@/components/address-autocomplete";
-import { sendWhatsappMessage } from "@/lib/evolution";
+import { sendWhatsappMessage } from "@/lib/whatsapp.functions";
 import { toast } from "sonner";
 import {
   Building,
@@ -397,8 +397,9 @@ function NovoAgendamento() {
 
       const phoneToNotify = userProfile.telefone || "5515999999999";
       await sendWhatsappMessage({
-        number: phoneToNotify,
-        text:
+        data: {
+          number: phoneToNotify,
+          text:
           `🛠️ *Geraltest Brasil - Confirmação de Agendamento*\n\n` +
           `Olá, *${userProfile.nome_completo || user.email}*!\n` +
           `Seu pedido de controle tecnológico foi criado com sucesso.\n\n` +
@@ -411,6 +412,7 @@ function NovoAgendamento() {
           `💰 *Valor Total:* R$ ${total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n` +
           `💳 *Forma de Pagamento:* ${formaPagamento}\n\n` +
           `Um técnico certificado será alocado em breve. Obrigado pela preferência!`,
+        },
       });
 
       navigate({ to: "/dashboard" });
