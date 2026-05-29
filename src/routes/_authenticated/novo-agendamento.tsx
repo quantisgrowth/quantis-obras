@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AddressAutocomplete, lookupCEP, PlaceResult } from "@/components/address-autocomplete";
 import { sendWhatsappMessage } from "@/lib/whatsapp.functions";
+import { createBooking } from "@/lib/booking.functions";
 import { toast } from "sonner";
 import {
   Building,
