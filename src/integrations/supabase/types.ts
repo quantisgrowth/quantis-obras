@@ -28,6 +28,7 @@ export type Database = {
           horario_na_obra: string
           horario_saida_lab: string | null
           id: string
+          idades_cp: Json | null
           idades_selecionadas: number[]
           memoria_calculo: Json | null
           obra_id: string
@@ -59,6 +60,7 @@ export type Database = {
           horario_na_obra: string
           horario_saida_lab?: string | null
           id?: string
+          idades_cp?: Json | null
           idades_selecionadas?: number[]
           memoria_calculo?: Json | null
           obra_id: string
@@ -90,6 +92,7 @@ export type Database = {
           horario_na_obra?: string
           horario_saida_lab?: string | null
           id?: string
+          idades_cp?: Json | null
           idades_selecionadas?: number[]
           memoria_calculo?: Json | null
           obra_id?: string
@@ -129,10 +132,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "agendamentos_medicoes_servico_id_fkey"
+            columns: ["servico_id"]
+            isOneToOne: false
+            referencedRelation: "servicos_catalogo_pub"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "agendamentos_medicoes_tecnico_id_fkey"
             columns: ["tecnico_id"]
             isOneToOne: false
             referencedRelation: "tecnicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agendamentos_medicoes_tecnico_id_fkey"
+            columns: ["tecnico_id"]
+            isOneToOne: false
+            referencedRelation: "tecnicos_pub"
             referencedColumns: ["id"]
           },
         ]
@@ -255,37 +272,55 @@ export type Database = {
       }
       obras: {
         Row: {
+          bairro: string | null
+          cargo_responsavel: string | null
           cep: string | null
           cidade: string
+          cno: string | null
           created_at: string
           empresa_id: string
           endereco: string
+          estado: string | null
           id: string
           latitude: number | null
           longitude: number | null
           nome_obra: string
+          numero: string | null
+          responsavel: string | null
         }
         Insert: {
+          bairro?: string | null
+          cargo_responsavel?: string | null
           cep?: string | null
           cidade: string
+          cno?: string | null
           created_at?: string
           empresa_id: string
           endereco: string
+          estado?: string | null
           id?: string
           latitude?: number | null
           longitude?: number | null
           nome_obra: string
+          numero?: string | null
+          responsavel?: string | null
         }
         Update: {
+          bairro?: string | null
+          cargo_responsavel?: string | null
           cep?: string | null
           cidade?: string
+          cno?: string | null
           created_at?: string
           empresa_id?: string
           endereco?: string
+          estado?: string | null
           id?: string
           latitude?: number | null
           longitude?: number | null
           nome_obra?: string
+          numero?: string | null
+          responsavel?: string | null
         }
         Relationships: [
           {
@@ -428,7 +463,69 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      servicos_catalogo_pub: {
+        Row: {
+          ativo: boolean | null
+          categoria: string | null
+          created_at: string | null
+          id: string | null
+          nome_servico: string | null
+          sku: string | null
+          unidade: string | null
+          valor_venda_editavel: number | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          categoria?: string | null
+          created_at?: string | null
+          id?: string | null
+          nome_servico?: string | null
+          sku?: string | null
+          unidade?: string | null
+          valor_venda_editavel?: number | null
+        }
+        Update: {
+          ativo?: boolean | null
+          categoria?: string | null
+          created_at?: string | null
+          id?: string | null
+          nome_servico?: string | null
+          sku?: string | null
+          unidade?: string | null
+          valor_venda_editavel?: number | null
+        }
+        Relationships: []
+      }
+      tecnicos_pub: {
+        Row: {
+          certificacoes: string | null
+          created_at: string | null
+          foto_url: string | null
+          id: string | null
+          nome: string | null
+          ranking_score: number | null
+          status: Database["public"]["Enums"]["tecnico_status"] | null
+        }
+        Insert: {
+          certificacoes?: string | null
+          created_at?: string | null
+          foto_url?: string | null
+          id?: string | null
+          nome?: string | null
+          ranking_score?: number | null
+          status?: Database["public"]["Enums"]["tecnico_status"] | null
+        }
+        Update: {
+          certificacoes?: string | null
+          created_at?: string | null
+          foto_url?: string | null
+          id?: string | null
+          nome?: string | null
+          ranking_score?: number | null
+          status?: Database["public"]["Enums"]["tecnico_status"] | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
