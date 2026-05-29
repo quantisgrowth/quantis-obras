@@ -604,6 +604,7 @@ function NovoAgendamento() {
                           if (!error && newObra) {
                             setObraRascunhoId(newObra.id);
                             setObras((prev) => [...prev, { ...newObra, nome_obra: novaObraNome, cidade: novaObraCidade }]);
+                            setSelectedObraId(newObra.id);
                             toast.success("Obra salva! Você pode acessá-la em novos agendamentos.");
                           }
                         }
