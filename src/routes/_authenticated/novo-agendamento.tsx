@@ -87,6 +87,7 @@ function NovoAgendamento() {
 
   // Step 1 — Obra
   const [selectedObraId, setSelectedObraId] = useState<string>("nova");
+  const [obraRascunhoId, setObraRascunhoId] = useState<string | null>(null); // ID da obra salva ao avançar Step 1
   const [novaObraNome, setNovaObraNome] = useState("");
   const [novaObraEndereco, setNovaObraEndereco] = useState("");
   const [novaObraCidade, setNovaObraCidade] = useState("");
@@ -468,7 +469,44 @@ function NovoAgendamento() {
               )}
 
               <div className="flex justify-end">
-                <Button onClick={() => setStep(2)} disabled={!step1Valid}>
+                <Button
+                  onClick={async () => {
+                    // Salvar obra imediatamente ao avançar (se for nova)
+                    if (selectedObraId === "nova" && userProfile?.empresa_id) {
+                      try {
+                        // Verifica se já salvou antes nesta sessão
+                        if (!obraRascunhoId) {
+                          const { data: newObra, error } = await supabase
+                            .from("obras")
+                            .insert({
+                              empresa_id: userProfile.empresa_id,
+                              nome_obra: novaObraNome,
+                              cno: cnoObra,
+                              responsavel: responsavelObra,
+                              cargo_responsavel: cargoResponsavel,
+                              endereco: novaObraEndereco,
+                              numero: novaObraNumero,
+                              bairro: novaObraBairro,
+                              estado: novaObraEstado,
+                              cidade: novaObraCidade,
+                              cep: novaObraCEP || null,
+                              latitude: novaObraLat,
+                              longitude: novaObraLng,
+                            })
+                            .select("id")
+                            .single();
+                          if (!error && newObra) {
+                            setObraRascunhoId(newObra.id);
+                            setObras((prev) => [...prev, { ...newObra, nome_obra: novaObraNome, cidade: novaObraCidade }]);
+                            toast.success("Obra salva! Você pode acessá-la em novos agendamentos.");
+                          }
+                        }
+                      } catch (_) {}
+                    }
+                    setStep(2);
+                  }}
+                  disabled={!step1Valid}
+                >
                   Próximo Passo <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -742,3 +780,4 @@ function NovoAgendamento() {
     </div>
   );
 }
+
