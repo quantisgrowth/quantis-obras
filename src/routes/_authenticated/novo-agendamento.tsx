@@ -155,7 +155,7 @@ function NovoAgendamento() {
   const custoExtra = horasExtras * valorHoraExtra;
 
   // Step 4 — Pagamento
-  const [formaPagamento, setFormaPagamento] = useState("Pix");
+  const [formaPagamento, setFormaPagamento] = useState<"Pix" | "Cartao" | "Boleto_14" | "Boleto_28">("Pix");
 
   // ── Derived values ────────────────────────────────────────────────────
   // Total de CPs = soma de (qtd por idade) × nº de caminhões
