@@ -540,7 +540,7 @@ function NovoAgendamento() {
                   <Input id="vol-m3" type="number" min={1} value={volumeM3} onChange={(e) => setVolumeM3(Number(e.target.value))} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="qtd-caminhoes">Qtd de Caminhões (Betonadas)</Label>
+                  <Label htmlFor="qtd-caminhoes">Quantidade de Betoneiras</Label>
                   <Input id="qtd-caminhoes" type="number" min={1} value={qtdCaminhoes} onChange={(e) => setQtdCaminhoes(Number(e.target.value))} />
                 </div>
               </div>
@@ -573,7 +573,7 @@ function NovoAgendamento() {
                         {/* Qtd input */}
                         {selected && (
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">CPs por betonada</Label>
+                            <Label className="text-xs text-muted-foreground">CPs por betoneira</Label>
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
@@ -605,12 +605,12 @@ function NovoAgendamento() {
                   <div className="flex flex-wrap gap-3">
                     {idadesCP.map((i) => (
                       <span key={i.idade} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                        {i.idade} dias × {i.qtd} CPs/betonada
+                        {i.idade} dias × {i.qtd} CPs/betoneira
                       </span>
                     ))}
                   </div>
                   <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
-                    <span className="text-sm text-muted-foreground">Total de CPs ({qtdCaminhoes} betonada{qtdCaminhoes > 1 ? "s" : ""})</span>
+                    <span className="text-sm text-muted-foreground">Total de CPs ({qtdCaminhoes} betoneira{qtdCaminhoes > 1 ? "s" : ""})</span>
                     <span className="text-lg font-extrabold text-primary">{cpsContratados} CPs</span>
                   </div>
                 </div>
@@ -694,7 +694,7 @@ function NovoAgendamento() {
                 <div className="flex flex-wrap gap-2">
                   {idadesCP.map((i) => (
                     <span key={i.idade} className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                      {i.idade} dias — {i.qtd} CPs/betonada × {qtdCaminhoes} betonada{qtdCaminhoes > 1 ? "s" : ""} = {i.qtd * qtdCaminhoes} CPs
+                      {i.idade} dias — {i.qtd} CPs/betoneira × {qtdCaminhoes} betoneira{qtdCaminhoes > 1 ? "s" : ""} = {i.qtd * qtdCaminhoes} CPs
                     </span>
                   ))}
                 </div>
