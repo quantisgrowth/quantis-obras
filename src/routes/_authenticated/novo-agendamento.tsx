@@ -22,6 +22,10 @@ import {
   HardHat,
   AlertTriangle,
   Loader2,
+  MessageCircle,
+  Clock3,
+  UserCheck,
+  XCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/novo-agendamento")({
@@ -117,6 +121,39 @@ function NovoAgendamento() {
   const [horarioNaObra, setHorarioNaObra] = useState("08:00");
   const [observacoes, setObservacoes] = useState("");
 
+  // Disponibilidade de técnicos
+  const [datasDisponiveis, setDatasDisponiveis] = useState<string[]>([]);
+  const [loadingDatas, setLoadingDatas] = useState(false);
+  const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<any[]>([]);
+
+  // Jornada calculada
+  const JORNADA_PADRAO_H = 8;
+  const ALMOCO_H = 1;
+  const JORNADA_TOTAL_H = JORNADA_PADRAO_H + ALMOCO_H; // 9h
+
+  const calcularHorarioFim = (inicio: string): string => {
+    if (!inicio) return "";
+    const [h, m] = inicio.split(":").map(Number);
+    const fimMin = h * 60 + m + JORNADA_TOTAL_H * 60;
+    const fimH = Math.floor(fimMin / 60) % 24;
+    const fimM = fimMin % 60;
+    return \`\${String(fimH).padStart(2, "0")}:\${String(fimM).padStart(2, "0")}\`;
+  };
+
+  const horarioFim = calcularHorarioFim(horarioNaObra);
+
+  // Horas extras — começa após 17:00
+  const calcularHorasExtras = (inicio: string): number => {
+    if (!inicio) return 0;
+    const [h] = inicio.split(":").map(Number);
+    const fimH = h + JORNADA_TOTAL_H;
+    return Math.max(0, fimH - 17);
+  };
+
+  const horasExtras = calcularHorasExtras(horarioNaObra);
+  const valorHoraExtra = 150; // R$ por hora extra (configurável futuramente)
+  const custoExtra = horasExtras * valorHoraExtra;
+
   // Step 4 — Pagamento
   const [formaPagamento, setFormaPagamento] = useState("Pix");
 
@@ -211,6 +248,74 @@ function NovoAgendamento() {
     setIdadesCP((prev) => prev.map((i) => (i.idade === idade ? { ...i, qtd: valid } : i)));
   };
 
+  // ── Buscar técnicos disponíveis ao selecionar serviço ────────────────
+  useEffect(() => {
+    if (!selectedServicoId) return;
+    async function fetchTecnicosDisponiveis() {
+      setLoadingDatas(true);
+      try {
+        const servico = servicos.find((s) => s.id === selectedServicoId);
+        const categoriaServico = servico?.categoria || "";
+
+        // Buscar técnicos cujas certificações contêm a categoria do serviço
+        const { data: tecnicos } = await supabase
+          .from("tecnicos")
+          .select("id, nome, status, certificacoes, ranking_score")
+          .eq("status", "Disponivel");
+
+        const compativeis = (tecnicos || []).filter((t) => {
+          if (!t.certificacoes || !categoriaServico) return true;
+          return t.certificacoes.toLowerCase().includes(categoriaServico.toLowerCase()) ||
+                 categoriaServico.toLowerCase().includes("concreto");
+        });
+
+        setTecnicosDisponiveis(compativeis);
+
+        // Buscar datas já ocupadas nos próximos 60 dias
+        const hoje = new Date();
+        const limite = new Date();
+        limite.setDate(limite.getDate() + 60);
+
+        const { data: agendados } = await supabase
+          .from("agendamentos_medicoes")
+          .select("data_servico, tecnico_id")
+          .gte("data_servico", hoje.toISOString().split("T")[0])
+          .lte("data_servico", limite.toISOString().split("T")[0])
+          .in("status_agendamento", ["Confirmado", "Em_Execucao", "Pendente_Tecnico"])
+          .in("tecnico_id", compativeis.map((t) => t.id));
+
+        // Datas onde TODOS os técnicos estão ocupados
+        const datasOcupadas = new Set<string>();
+        const contagem: Record<string, number> = {};
+        (agendados || []).forEach((a) => {
+          contagem[a.data_servico] = (contagem[a.data_servico] || 0) + 1;
+        });
+        Object.entries(contagem).forEach(([data, count]) => {
+          if (count >= compativeis.length) datasOcupadas.add(data);
+        });
+
+        // Gerar array de datas disponíveis (próximos 60 dias, sem finais de semana e datas lotadas)
+        const disponíveis: string[] = [];
+        const cursor = new Date(hoje);
+        cursor.setDate(cursor.getDate() + 1); // começa amanhã
+        while (cursor <= limite) {
+          const dow = cursor.getDay();
+          const iso = cursor.toISOString().split("T")[0];
+          if (dow !== 0 && dow !== 6 && !datasOcupadas.has(iso)) {
+            disponíveis.push(iso);
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        setDatasDisponiveis(disponíveis);
+      } catch (err) {
+        console.error("Erro ao buscar disponibilidade:", err);
+      } finally {
+        setLoadingDatas(false);
+      }
+    }
+    fetchTecnicosDisponiveis();
+  }, [selectedServicoId, servicos]);
+
   // ── Financials ────────────────────────────────────────────────────────
   const getSelectedService = () => servicos.find((s) => s.id === selectedServicoId) || FALLBACK_SERVICES[0];
 
@@ -234,7 +339,7 @@ function NovoAgendamento() {
   const descontoPct = formaPagamento === "Pix" || formaPagamento === "Cartao" ? 0.05 : 0;
   const imposto = subtotal * impostoPct;
   const desconto = subtotal * descontoPct;
-  const total = subtotal + imposto - desconto;
+  const total = subtotal + imposto - desconto + custoExtra;
 
   // ── Validation ────────────────────────────────────────────────────────
   const step1Valid =
@@ -628,8 +733,37 @@ function NovoAgendamento() {
           {/* ── STEP 3: AGENDA ───────────────────────────────────── */}
           {step === 3 && (
             <div className="space-y-6">
+
+              {/* Status de técnicos disponíveis */}
+              {loadingDatas ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 rounded-lg p-3">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Verificando disponibilidade de técnicos especializados...
+                </div>
+              ) : tecnicosDisponiveis.length === 0 ? (
+                <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                  <XCircle className="h-5 w-5 text-red-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-600">Nenhum técnico disponível para este serviço</p>
+                    <p className="text-xs text-red-500 mt-0.5">Entre em contato com nossa equipe para verificar alternativas.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+                  <UserCheck className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-700">
+                      {tecnicosDisponiveis.length} técnico{tecnicosDisponiveis.length > 1 ? "s" : ""} especializado{tecnicosDisponiveis.length > 1 ? "s" : ""} disponível{tecnicosDisponiveis.length > 1 ? "s" : ""}
+                    </p>
+                    <p className="text-xs text-emerald-600 mt-0.5">
+                      {tecnicosDisponiveis.map((t) => t.nome).join(", ")}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-6 md:grid-cols-2">
-                {/* Data — input nativo maior */}
+                {/* Data com calendário filtrado */}
                 <div className="space-y-2">
                   <Label htmlFor="data-servico" className="text-base font-bold">Data do Serviço</Label>
                   <input
@@ -637,14 +771,29 @@ function NovoAgendamento() {
                     type="date"
                     required
                     value={dataServico}
-                    onChange={(e) => setDataServico(e.target.value)}
+                    min={new Date(Date.now() + 86400000).toISOString().split("T")[0]}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (datasDisponiveis.length > 0 && !datasDisponiveis.includes(val)) {
+                        toast.warning("Esta data não tem técnicos disponíveis. Escolha uma data disponível.");
+                        return;
+                      }
+                      setDataServico(val);
+                    }}
                     style={{ fontSize: "1.1rem", padding: "0.6rem 0.75rem", minHeight: "3rem" }}
-                    className="flex w-full rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full rounded-md border border-input bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   />
-                  <p className="text-xs text-muted-foreground">Selecione a data em que o técnico deve estar na obra.</p>
+                  {datasDisponiveis.length > 0 && (
+                    <p className="text-xs text-emerald-600 font-medium">
+                      ✅ {datasDisponiveis.length} datas disponíveis nos próximos 60 dias
+                    </p>
+                  )}
+                  {dataServico && !datasDisponiveis.includes(dataServico) && datasDisponiveis.length > 0 && (
+                    <p className="text-xs text-red-500">⚠️ Data sem técnico disponível — escolha outra.</p>
+                  )}
                 </div>
 
-                {/* Horário */}
+                {/* Horário com cálculo automático */}
                 <div className="space-y-2">
                   <Label htmlFor="hora-servico" className="text-base font-bold">Horário de Chegada na Obra</Label>
                   <input
@@ -654,8 +803,37 @@ function NovoAgendamento() {
                     value={horarioNaObra}
                     onChange={(e) => setHorarioNaObra(e.target.value)}
                     style={{ fontSize: "1.1rem", padding: "0.6rem 0.75rem", minHeight: "3rem" }}
-                    className="flex w-full rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full rounded-md border border-input bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   />
+
+                  {/* Jornada calculada */}
+                  {horarioNaObra && (
+                    <div className="rounded-lg bg-muted/40 border border-border p-3 space-y-1.5 mt-1">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock3 className="h-3.5 w-3.5 text-primary" />
+                        <span>Entrada: <strong className="text-foreground">{horarioNaObra}</strong></span>
+                        <span className="text-border">|</span>
+                        <span>Almoço: <strong className="text-foreground">1h</strong></span>
+                        <span className="text-border">|</span>
+                        <span>Saída estimada: <strong className="text-foreground">{horarioFim}</strong></span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Jornada padrão: 8h trabalho + 1h almoço = 9h total</p>
+
+                      {/* Horas extras */}
+                      {horasExtras > 0 && (
+                        <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5 mt-2">
+                          <p className="text-xs font-semibold text-amber-700">
+                            ⚠️ {horasExtras}h extra{horasExtras > 1 ? "s" : ""} após 17:00
+                          </p>
+                          <p className="text-xs text-amber-600 mt-0.5">
+                            Custo adicional: <strong>R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                            {" "}(R$ {valorHoraExtra.toFixed(2)}/h)
+                          </p>
+                          <p className="text-[10px] text-amber-500 mt-0.5">Este valor será adicionado ao total do pedido.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -716,6 +894,12 @@ function NovoAgendamento() {
                     <span className="font-semibold">R$ {pedagios.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
+                {custoExtra > 0 && (
+                  <div className="flex justify-between text-sm text-amber-600">
+                    <span>Horas Extras ({horasExtras}h após 17:00 × R$ {valorHoraExtra}/h)</span>
+                    <span className="font-semibold">+ R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
                 <div className="border-t border-border pt-3 flex justify-between text-sm font-semibold">
                   <span>Subtotal Bruto</span>
                   <span>R$ {subtotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
@@ -766,11 +950,24 @@ function NovoAgendamento() {
                 </div>
               </div>
 
-              <div className="flex justify-between">
+              <div className="flex flex-col sm:flex-row justify-between gap-3">
                 <Button variant="ghost" onClick={() => setStep(3)}><ChevronLeft className="mr-2 h-4 w-4" /> Voltar</Button>
-                <Button onClick={handleConfirmBooking} disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 font-bold">
-                  {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirmando...</> : "Confirmar Agendamento"}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {/* Botão Falar com Vendedor */}
+                  <a
+                    href="https://wa.me/5515981103345?text=Olá%2C%20preciso%20de%20ajuda%20com%20um%20agendamento%20na%20Geraltest%20Brasil!"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-500 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 font-semibold px-4 py-2 text-sm transition-all"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Falar com Vendedor
+                  </a>
+                  {/* Botão Confirmar */}
+                  <Button onClick={handleConfirmBooking} disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 font-bold">
+                    {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirmando...</> : "Confirmar Agendamento"}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
