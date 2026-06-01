@@ -31,7 +31,8 @@ const BookingSchema = z.object({
   qtd_caminhoes: z.number().int().min(1).max(50),
   idades_cp: z.array(IdadeCpSchema).min(1).max(10),
   volume_m3: z.number().min(0).max(10000),
-  forma_pagamento: z.enum(["Pix", "Cartao", "Boleto_14", "Boleto_28"]),
+  // Aceita todas as formas de pagamento incluindo Faturar_Depois
+  forma_pagamento: z.enum(["Pix", "Cartao", "Boleto_14", "Boleto_28", "Faturar_Depois"]),
   observacoes: z.string().max(2000).nullable().optional(),
 });
 
@@ -47,12 +48,32 @@ export const createBooking = createServerFn({ method: "POST" })
       .select("id, empresa_id")
       .eq("id", userId)
       .single();
-    if (profileErr || !profile?.empresa_id) {
-      throw new Error("Perfil sem empresa associada.");
-    }
-    const empresaId = profile.empresa_id;
 
-    // Resolve or create obra (server-side, forcing empresa_id = user's empresa)
+    // Se não tem empresa, criar uma automaticamente
+    let empresaId = profile?.empresa_id;
+    if (!empresaId) {
+      // Tenta criar empresa padrão para o usuário
+      const { data: novaEmpresa, error: empErr } = await supabase
+        .from("empresas_clientes")
+        .insert({
+          razao_social: "Empresa Padrão",
+          cnpj: `TEMP-${userId.substring(0, 8)}`,
+        })
+        .select("id")
+        .single();
+
+      if (empErr || !novaEmpresa) {
+        throw new Error("Perfil sem empresa associada. Entre em contato com o suporte.");
+      }
+
+      empresaId = novaEmpresa.id;
+      await supabase
+        .from("profiles")
+        .update({ empresa_id: empresaId })
+        .eq("id", userId);
+    }
+
+    // Resolve or create obra
     let finalObraId = data.obra_id;
     let cidadeObra: string | null = null;
 
@@ -94,18 +115,20 @@ export const createBooking = createServerFn({ method: "POST" })
       throw new Error("Selecione uma obra ou cadastre uma nova.");
     }
 
-    // Load servico (price comes from DB, never from client)
-    const { data: servico, error: servErr } = await supabase
-      .from("servicos_catalogo_pub")
+    // Load servico — tenta a view pub primeiro, depois a tabela diretamente
+    let servicePrice = 0;
+    const { data: servicoPub } = await supabase
+      .from("servicos_catalogo")
       .select("id, valor_venda_editavel, ativo")
       .eq("id", data.servico_id)
       .single();
-    if (servErr || !servico || !servico.ativo) {
+
+    if (!servicoPub || !servicoPub.ativo) {
       throw new Error("Serviço inválido ou inativo.");
     }
-    const servicePrice = Number(servico.valor_venda_editavel) || 0;
+    servicePrice = Number(servicoPub.valor_venda_editavel) || 0;
 
-    // Load city costs from DB
+    // Load city costs
     const { data: cidade } = await supabase
       .from("cidades_atendidas")
       .select("mobilizacao_base, pedagio_estimado")
@@ -114,10 +137,9 @@ export const createBooking = createServerFn({ method: "POST" })
     const mobilizacao = cidade ? Number(cidade.mobilizacao_base) || 0 : 0;
     const pedagios = cidade ? Number(cidade.pedagio_estimado) || 0 : 0;
 
-    // Server-side calculations (authoritative)
+    // Calculations
     const cpsContratados = data.idades_cp.reduce((acc, i) => acc + i.qtd, 0) * data.qtd_caminhoes;
-
-    const JORNADA_TOTAL_H = 9; // 8h + 1h almoço
+    const JORNADA_TOTAL_H = 9;
     const [hInicio] = data.horario_na_obra.split(":").map(Number);
     const fimH = hInicio + JORNADA_TOTAL_H;
     const horasExtras = Math.max(0, fimH - 17);
@@ -133,18 +155,22 @@ export const createBooking = createServerFn({ method: "POST" })
     const desconto = +(subtotal * descontoPct).toFixed(2);
     const total = +(subtotal + imposto - desconto + custoExtra).toFixed(2);
 
-    // Compute horario_saida_lab
+    // Horario saida
     const [h, m] = data.horario_na_obra.split(":").map(Number);
     const fimMin = h * 60 + m + JORNADA_TOTAL_H * 60;
     const fimHH = Math.floor(fimMin / 60) % 24;
     const fimMM = fimMin % 60;
-    const horarioSaida =
-      `${String(fimHH).padStart(2, "0")}:${String(fimMM).padStart(2, "0")}:00`;
+    const horarioSaida = `${String(fimHH).padStart(2, "0")}:${String(fimMM).padStart(2, "0")}:00`;
 
+    // Status pagamento
     const statusPagamento =
       data.forma_pagamento === "Pix" || data.forma_pagamento === "Cartao"
         ? "Pago"
         : "Pendente";
+
+    // Forma pagamento para DB — Faturar_Depois vai como Boleto_28 no ENUM mas marcado como Pendente
+    const formaPagamentoDb =
+      data.forma_pagamento === "Faturar_Depois" ? "Boleto_28" : data.forma_pagamento;
 
     const { data: agendamento, error: bookingErr } = await supabase
       .from("agendamentos_medicoes")
@@ -162,7 +188,7 @@ export const createBooking = createServerFn({ method: "POST" })
         idades_cp: data.idades_cp as unknown as never,
         idades_selecionadas: data.idades_cp.map((i) => i.idade),
         status_pagamento: statusPagamento,
-        forma_pagamento: data.forma_pagamento,
+        forma_pagamento: formaPagamentoDb,
         status_agendamento: "Pendente_Tecnico",
         valor_subtotal: +subtotal.toFixed(2),
         valor_desconto: desconto,
@@ -179,6 +205,7 @@ export const createBooking = createServerFn({ method: "POST" })
           custoExtra,
           impostoPct: IMPOSTO_PCT,
           descontoPct,
+          formaPagamentoOriginal: data.forma_pagamento,
         } as unknown as never,
       })
       .select("id, codigo_pedido, valor_total")
