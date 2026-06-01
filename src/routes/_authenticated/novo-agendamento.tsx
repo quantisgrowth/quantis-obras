@@ -63,6 +63,31 @@ const BR_STATES = [
 ];
 
 // Idades de cura disponíveis (NBR 5738)
+const CARGOS_OBRA = [
+  "Almoxarife",
+  "Analista de Planejamento e Controle de Produção (PCP)",
+  "Arquiteto Residente / Visitante",
+  "Encarregado (de carpintaria, armação, instalações, etc.)",
+  "Engenheiro Ambiental",
+  "Engenheiro Chefe",
+  "Engenheiro Civil Residente / Visitante",
+  "Engenheiro de Campo / Setor",
+  "Engenheiro de Controle de Qualidade (CQ)",
+  "Engenheiro de Planejamento / Orçamento",
+  "Engenheiro de Produção",
+  "Engenheiro de Segurança do Trabalho",
+  "Gerente de Contrato",
+  "Gerente de Operações",
+  "Gerente de Produção",
+  "Gestor de Suprimentos / Compras de Campo",
+  "Mestre de Obras",
+  "Mestre Geral",
+  "Técnico de Controle de Qualidade (CQ)",
+  "Técnico de Planejamento",
+  "Técnico de Segurança do Trabalho (TST)",
+  "Técnico em Edificações",
+];
+
 const IDADES_CURA = [
   { value: 7, label: "7 dias" },
   { value: 14, label: "14 dias" },
@@ -560,7 +585,16 @@ function NovoAgendamento() {
                     {/* Cargo */}
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="obra-cargo">Cargo do Responsável</Label>
-                      <Input id="obra-cargo" placeholder="Ex: Engenheiro Civil" value={cargoResponsavel} onChange={(e) => setCargoResponsavel(e.target.value)} />
+                      <Select value={cargoResponsavel} onValueChange={setCargoResponsavel}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o cargo do responsável" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CARGOS_OBRA.map((cargo) => (
+                            <SelectItem key={cargo} value={cargo}>{cargo}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
