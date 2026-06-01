@@ -378,14 +378,17 @@ function NovoAgendamento() {
 
   // ── Submit ────────────────────────────────────────────────────────────
   const handleConfirmBooking = async () => {
-    if (!user || !userProfile) return;
+    if (!user) {
+      toast.error("Você precisa estar logado para continuar.");
+      return;
+    }
     setLoading(true);
     try {
       const agendamento = await createBooking({
         data: {
-          obra_id: selectedObraId === "nova" ? null : selectedObraId,
+          obra_id: selectedObraId === "nova" ? (obraRascunhoId ?? null) : selectedObraId,
           nova_obra:
-            selectedObraId === "nova"
+            selectedObraId === "nova" && !obraRascunhoId
               ? {
                   nome_obra: novaObraNome,
                   endereco: novaObraEndereco,
@@ -436,7 +439,10 @@ function NovoAgendamento() {
 
       navigate({ to: "/dashboard" });
     } catch (err: any) {
-      toast.error("Erro ao criar agendamento", { description: err.message });
+      console.error("Booking error:", err);
+      toast.error("Erro ao criar agendamento", { 
+        description: err?.message || err?.toString() || "Erro desconhecido. Tente novamente."
+      });
     } finally {
       setLoading(false);
     }
