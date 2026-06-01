@@ -927,12 +927,13 @@ function NovoAgendamento() {
                   <CreditCard className="h-5 w-5 text-primary" />
                   Escolha a Forma de Pagamento
                 </Label>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                   {[
                     { val: "Pix", label: "Pix (5% desc)", desc: "Imediato" },
                     { val: "Cartao", label: "Cartão (5% desc)", desc: "1x sem juros" },
                     { val: "Boleto_14", label: "Boleto 14 dias", desc: "Sujeito a crédito" },
                     { val: "Boleto_28", label: "Boleto 28 dias", desc: "Sujeito a crédito" },
+                    { val: "Faturar_Depois", label: "Faturar Depois", desc: "Financeiro entrará em contato" },
                   ].map((p) => (
                     <button key={p.val} type="button" onClick={() => setFormaPagamento(p.val as typeof formaPagamento)}
                       className={`flex flex-col items-center justify-center p-3 rounded-lg border text-center transition-all ${formaPagamento === p.val ? "border-primary bg-primary/5 text-primary shadow-sm" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>
@@ -943,13 +944,23 @@ function NovoAgendamento() {
                 </div>
               </div>
 
-              <div className="rounded-lg bg-amber-500/10 p-4 border border-amber-500/20 text-xs text-amber-600 flex gap-3">
-                <AlertTriangle className="h-5 w-5 shrink-0" />
-                <div>
-                  <span className="font-bold block">Modo Validação Rápida</span>
-                  O pagamento real foi postergado. Clicar em "Confirmar" registra o agendamento no Supabase e envia notificação no WhatsApp.
+              {formaPagamento === "Faturar_Depois" ? (
+                <div className="rounded-lg bg-blue-500/10 p-4 border border-blue-500/20 text-xs text-blue-700 flex gap-3">
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-blue-500" />
+                  <div>
+                    <span className="font-bold block">Faturamento Posterior</span>
+                    O agendamento será registrado e nosso time financeiro entrará em contato para emitir o boleto. O valor total permanece o mesmo.
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-lg bg-amber-500/10 p-4 border border-amber-500/20 text-xs text-amber-600 flex gap-3">
+                  <AlertTriangle className="h-5 w-5 shrink-0" />
+                  <div>
+                    <span className="font-bold block">Modo Validação Rápida</span>
+                    O pagamento real foi postergado. Clicar em "Confirmar" registra o agendamento no Supabase e envia notificação no WhatsApp.
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row justify-between gap-3">
                 <Button variant="ghost" onClick={() => setStep(3)}><ChevronLeft className="mr-2 h-4 w-4" /> Voltar</Button>
