@@ -108,6 +108,12 @@ function NovoAgendamento() {
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [agendamentoCriado, setAgendamentoCriado] = useState<{
+    codigo_pedido: string;
+    valor_total: number;
+    data_servico: string;
+    horario: string;
+  } | null>(null);
 
   // DB data
   const [obras, setObras] = useState<any[]>([]);
@@ -416,6 +422,12 @@ function NovoAgendamento() {
       });
 
       toast.success("Agendamento criado com sucesso!");
+      setAgendamentoCriado({
+        codigo_pedido: agendamento.codigo_pedido,
+        valor_total: agendamento.valor_total,
+        data_servico: dataServico,
+        horario: horarioNaObra,
+      });
 
       const phoneToNotify = userProfile.telefone || "5515999999999";
       await sendWhatsappMessage({
@@ -437,7 +449,8 @@ function NovoAgendamento() {
         },
       });
 
-      navigate({ to: "/dashboard" });
+      // Redireciona após 3s ou o usuário clica
+      // navigate({ to: "/dashboard" });
     } catch (err: any) {
       console.error("Booking error:", err);
       toast.error("Erro ao criar agendamento", { 
@@ -449,6 +462,102 @@ function NovoAgendamento() {
   };
 
   // ── Render ────────────────────────────────────────────────────────────
+  // ── Tela de Sucesso ──────────────────────────────────────────────────
+  if (agendamentoCriado) {
+    return (
+      <div className="mx-auto max-w-2xl py-16 px-4 text-center space-y-6 animate-in fade-in-50 duration-300">
+        {/* Ícone de sucesso */}
+        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-500/10 border-2 border-emerald-500/30">
+          <Check className="h-10 w-10 text-emerald-500" />
+        </div>
+
+        <div className="space-y-2">
+          <h1 className="text-3xl font-extrabold text-foreground">Agendamento Confirmado!</h1>
+          <p className="text-muted-foreground">Seu pedido foi registrado com sucesso. Um técnico será alocado em breve.</p>
+        </div>
+
+        {/* Card resumo */}
+        <div className="rounded-xl border border-border bg-card p-6 text-left space-y-4 shadow-sm">
+          <div className="flex justify-between items-center border-b border-border pb-3">
+            <span className="text-sm text-muted-foreground">Código do Pedido</span>
+            <span className="font-bold text-primary text-lg">{agendamentoCriado.codigo_pedido}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">Data do Serviço</span>
+            <span className="font-semibold text-foreground">
+              {new Date(agendamentoCriado.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {agendamentoCriado.horario}
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">Valor Total</span>
+            <span className="font-extrabold text-foreground text-xl">
+              R$ {agendamentoCriado.valor_total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">Status</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-600 border border-amber-500/20">
+              ⏳ Aguardando alocação de técnico
+            </span>
+          </div>
+        </div>
+
+        {/* Próximos passos */}
+        <div className="rounded-xl border border-border bg-muted/20 p-5 text-left space-y-3">
+          <p className="text-sm font-bold text-foreground">O que acontece agora?</p>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <div className="flex gap-2"><span className="text-primary font-bold">1.</span> Um técnico especializado receberá o convite de serviço</div>
+            <div className="flex gap-2"><span className="text-primary font-bold">2.</span> Após aceite, você receberá uma confirmação por WhatsApp</div>
+            <div className="flex gap-2"><span className="text-primary font-bold">3.</span> Nossa equipe de expedição preparará os equipamentos</div>
+            <div className="flex gap-2"><span className="text-primary font-bold">4.</span> No dia, o técnico fará check-in ao chegar na obra</div>
+          </div>
+        </div>
+
+        {/* Botões de ação */}
+        <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+          <Button
+            onClick={() => navigate({ to: "/dashboard" })}
+            className="bg-primary hover:bg-primary/90 font-bold gap-2"
+            size="lg"
+          >
+            <ClipboardList className="h-5 w-5" />
+            Ver Meus Agendamentos
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => {
+              setAgendamentoCriado(null);
+              setStep(1);
+              setSelectedObraId("nova");
+              setNovaObraNome("");
+              setNovaObraEndereco("");
+              setNovaObraCidade("");
+              setNovaObraCEP("");
+              setNovaObraNumero("");
+              setNovaObraBairro("");
+              setNovaObraEstado("");
+              setCnoObra("");
+              setResponsavelObra("");
+              setCargoResponsavel("");
+              setObraRascunhoId(null);
+              setDataServico("");
+              setHorarioNaObra("08:00");
+              setObservacoes("");
+              setIdadesCP([{ idade: 7, qtd: 2 }, { idade: 28, qtd: 2 }]);
+              setQtdCaminhoes(1);
+              setVolumeM3(10);
+            }}
+            className="gap-2"
+          >
+            <CalendarPlus className="h-5 w-5" />
+            Novo Agendamento
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 pb-12">
       {/* Header */}
