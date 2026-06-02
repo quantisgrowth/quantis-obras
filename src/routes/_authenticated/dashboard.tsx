@@ -178,7 +178,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
     if (!confirm("Deseja confirmar a conclusão e validar as medições deste serviço?")) return;
     try {
       const { validateBooking } = await import("@/lib/booking.functions");
-      const res = await validateBooking({ bookingId });
+      const res = await validateBooking({ data: { bookingId } });
       if (res.success) {
         toast.success("Medições validadas e serviço concluído com sucesso!");
         fetchBookings();
@@ -700,7 +700,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
     setActionLoading(bookingId);
     try {
       const { acceptInvite: dynamicAcceptInvite } = await import("@/lib/booking.functions");
-      await dynamicAcceptInvite({ bookingId });
+      await dynamicAcceptInvite({ data: { bookingId } });
       toast.success("Agendamento aceito com sucesso!");
       await fetchTecnicoData();
     } catch (err: any) {
@@ -714,7 +714,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
     setActionLoading(bookingId);
     try {
       const { rejectInvite: dynamicRejectInvite } = await import("@/lib/booking.functions");
-      await dynamicRejectInvite({ bookingId });
+      await dynamicRejectInvite({ data: { bookingId } });
       toast.info("Convite recusado.");
       await fetchTecnicoData();
     } catch (err: any) {
@@ -728,7 +728,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
     setActionLoading(bookingId);
     try {
       const { startExecution: dynamicStart } = await import("@/lib/booking.functions");
-      await dynamicStart({ bookingId });
+      await dynamicStart({ data: { bookingId } });
       toast.success("Execução iniciada! Registre os ensaios e check-in.");
       await fetchTecnicoData();
     } catch (err: any) {
@@ -760,10 +760,12 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
       const url = await uploadPhotoOrBase64(file);
       const { recordCheckin: dynamicCheckin } = await import("@/lib/booking.functions");
       await dynamicCheckin({
-        bookingId: activeExec.id,
-        urlFoto: url,
-        lat,
-        lng,
+        data: {
+          bookingId: activeExec.id,
+          urlFoto: url,
+          lat,
+          lng,
+        }
       });
 
       toast.success("Check-in registrado com sucesso!");
@@ -787,13 +789,15 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
       const url = await uploadPhotoOrBase64(cyclePhoto);
       const { addMoldingCycle: dynamicAddCycle } = await import("@/lib/booking.functions");
       await dynamicAddCycle({
-        bookingId: activeExec.id,
-        urlFoto: url,
-        slump,
-        numeroCaminhao: numCaminhao,
-        notaFiscal,
-        pecaConcretada,
-        cpsMoldados,
+        data: {
+          bookingId: activeExec.id,
+          urlFoto: url,
+          slump,
+          numeroCaminhao: numCaminhao,
+          notaFiscal,
+          pecaConcretada,
+          cpsMoldados,
+        }
       });
 
       toast.success("Ciclo de moldagem registrado!");
@@ -837,10 +841,12 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
 
       const { finalizeExecution: dynamicFinalize } = await import("@/lib/booking.functions");
       await dynamicFinalize({
-        bookingId: activeExec.id,
-        cpsMoldadosReal: totalCps,
-        urlFotoFinal: finalUrl,
-        urlFotoRetorno: retornoUrl,
+        data: {
+          bookingId: activeExec.id,
+          cpsMoldadosReal: totalCps,
+          urlFotoFinal: finalUrl,
+          urlFotoRetorno: retornoUrl,
+        }
       });
 
       toast.success("Serviço concluído e enviado para validação!");
@@ -1248,13 +1254,15 @@ function AdminDash() {
     try {
       const { registerTechnician } = await import("@/lib/booking.functions");
       const res = await registerTechnician({
-        nome,
-        email,
-        password,
-        telefone,
-        cpf,
-        rg,
-        certificacoes,
+        data: {
+          nome,
+          email,
+          password,
+          telefone,
+          cpf,
+          rg,
+          certificacoes,
+        }
       });
       if (res.success) {
         toast.success("Técnico cadastrado com sucesso!");

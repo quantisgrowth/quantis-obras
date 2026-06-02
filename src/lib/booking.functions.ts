@@ -22,18 +22,31 @@ const NovaObraSchema = z.object({
   longitude: z.number().nullable().optional(),
 });
 
+const SelectedServiceSchema = z.object({
+  servico_id: z.string().uuid(),
+  
+  // Concrete specific fields
+  volume_m3: z.number().min(0).max(10000).optional().nullable(),
+  tamanho_betoneira: z.number().int().optional().nullable(),
+  qtd_caminhoes: z.number().int().min(1).max(50).optional().nullable(),
+  idades_cp: z.array(IdadeCpSchema).min(1).max(10).optional().nullable(),
+  
+  // Pull-off specific fields
+  qtd_ensaios: z.number().int().min(1).optional().nullable(),
+  pontos_por_ensaio: z.number().int().min(1).max(16).optional().nullable(),
+  
+  // General quantity
+  quantidade: z.number().min(1).optional().nullable(),
+});
+
 const BookingSchema = z.object({
   obra_id: z.string().uuid().nullable(),
   nova_obra: NovaObraSchema.nullable(),
-  servico_id: z.string().uuid(),
   data_servico: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   horario_na_obra: z.string().regex(/^\d{2}:\d{2}$/),
-  qtd_caminhoes: z.number().int().min(1).max(50),
-  idades_cp: z.array(IdadeCpSchema).min(1).max(10),
-  volume_m3: z.number().min(0).max(10000),
-  // Aceita todas as formas de pagamento incluindo Faturar_Depois
   forma_pagamento: z.enum(["Pix", "Cartao", "Boleto_14", "Boleto_28", "Faturar_Depois"]),
   observacoes: z.string().max(2000).nullable().optional(),
+  servicos: z.array(SelectedServiceSchema).min(1),
 });
 
 export const createBooking = createServerFn({ method: "POST" })
@@ -145,22 +158,7 @@ export const createBooking = createServerFn({ method: "POST" })
       }
     }
 
-    // Load servico — tenta a view pub primeiro, depois a tabela diretamente
-    let servicePrice = 0;
-    let serviceCategory = "";
-    const { data: servicoPub } = await supabase
-      .from("servicos_catalogo_pub")
-      .select("id, valor_venda_editavel, ativo, categoria")
-      .eq("id", data.servico_id)
-      .single();
-
-    if (!servicoPub || !servicoPub.ativo) {
-      throw new Error("Serviço inválido ou inativo.");
-    }
-    servicePrice = Number(servicoPub.valor_venda_editavel) || 0;
-    serviceCategory = servicoPub.categoria || "";
-
-    // Load city costs
+    // Load city costs (only once)
     const { data: cidade } = await supabase
       .from("cidades_atendidas")
       .select("mobilizacao_base, pedagio_estimado")
@@ -169,8 +167,7 @@ export const createBooking = createServerFn({ method: "POST" })
     const mobilizacao = cidade ? Number(cidade.mobilizacao_base) || 0 : 0;
     const pedagios = cidade ? Number(cidade.pedagio_estimado) || 0 : 0;
 
-    // Calculations
-    const cpsContratados = data.idades_cp.reduce((acc, i) => acc + i.qtd, 0) * data.qtd_caminhoes;
+    // Overtime cost (calculated once for the entire visit)
     const JORNADA_TOTAL_H = 9;
     const [hInicio] = data.horario_na_obra.split(":").map(Number);
     const fimH = hInicio + JORNADA_TOTAL_H;
@@ -179,54 +176,131 @@ export const createBooking = createServerFn({ method: "POST" })
     let VALOR_HORA_EXTRA = 150;
     if (dow === 6) { // Saturday
       horasExtras = Math.max(0, fimH - 12);
-      VALOR_HORA_EXTRA = 200; // Saturday overtime rate
+      VALOR_HORA_EXTRA = 200;
     } else { // Weekdays
       horasExtras = Math.max(0, fimH - 17);
       VALOR_HORA_EXTRA = 150;
     }
     const custoExtra = horasExtras * VALOR_HORA_EXTRA;
 
-    const rawServiceCost = cpsContratados * servicePrice;
-    const subtotal = rawServiceCost + mobilizacao + pedagios;
-    const IMPOSTO_PCT = 0.12;
-    const descontoPct =
-      data.forma_pagamento === "Pix" || data.forma_pagamento === "Cartao" ? 0.05 : 0;
-    const imposto = +(subtotal * IMPOSTO_PCT).toFixed(2);
-    const desconto = +(subtotal * descontoPct).toFixed(2);
-    const total = +(subtotal + imposto - desconto + custoExtra).toFixed(2);
+    // Dynamic import for supabaseAdmin to insert default services if missing
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Horario saida
-    const [h, m] = data.horario_na_obra.split(":").map(Number);
-    const fimMin = h * 60 + m + JORNADA_TOTAL_H * 60;
-    const fimHH = Math.floor(fimMin / 60) % 24;
-    const fimMM = fimMin % 60;
-    const horarioSaida = `${String(fimHH).padStart(2, "0")}:${String(fimMM).padStart(2, "0")}:00`;
+    const bookingsToInsert: any[] = [];
+    let groupTotalValue = 0;
 
-    // Status pagamento
-    const statusPagamento =
-      data.forma_pagamento === "Pix" || data.forma_pagamento === "Cartao"
-        ? "Pago"
-        : "Pendente";
+    for (let index = 0; index < data.servicos.length; index++) {
+      const selectedSvc = data.servicos[index];
 
-    // Forma pagamento para DB — Faturar_Depois vai como Boleto_28 no ENUM mas marcado como Pendente
-    const formaPagamentoDb =
-      data.forma_pagamento === "Faturar_Depois" ? "Boleto_28" : data.forma_pagamento;
+      // Self-healing: if the service is GTB-ARRANCAMENTO and doesn't exist, insert it!
+      if (selectedSvc.servico_id === "e2b4f9b8-67a1-432d-94c0-0f04df5156a0") {
+        const { data: existing } = await supabaseAdmin
+          .from("servicos_catalogo")
+          .select("id")
+          .eq("id", selectedSvc.servico_id)
+          .maybeSingle();
+        if (!existing) {
+          await supabaseAdmin.from("servicos_catalogo").insert({
+            id: "e2b4f9b8-67a1-432d-94c0-0f04df5156a0",
+            sku: "GTB-ARRANCAMENTO",
+            nome_servico: "Ensaio de Arrancamento",
+            unidade: "Ponto",
+            valor_custo_base: 150.00,
+            valor_venda_editavel: 250.00,
+            equipamentos_inclusos: [],
+            categoria: "Arrancamento",
+            ativo: true
+          });
+        }
+      }
 
-    const { data: agendamento, error: bookingErr } = await supabase
-      .from("agendamentos_medicoes")
-      .insert({
+      // Load service details
+      const { data: servicoPub } = await supabase
+        .from("servicos_catalogo_pub")
+        .select("id, valor_venda_editavel, ativo, categoria, nome_servico")
+        .eq("id", selectedSvc.servico_id)
+        .single();
+
+      if (!servicoPub || !servicoPub.ativo) {
+        throw new Error("Serviço inválido ou inativo: " + selectedSvc.servico_id);
+      }
+
+      const servicePrice = Number(servicoPub.valor_venda_editavel) || 0;
+      const serviceCategory = servicoPub.categoria || "";
+      const nomeServico = servicoPub.nome_servico || "";
+
+      // Determine service type and calculate quantity/cost
+      let cpsContratados = 0;
+      let rawServiceCost = 0;
+      
+      const isConcrete = 
+        nomeServico.toLowerCase().includes("concreto") ||
+        nomeServico.toLowerCase().includes("graute") ||
+        nomeServico.toLowerCase().includes("argamassa") ||
+        nomeServico.toLowerCase().includes("cp") ||
+        serviceCategory.toLowerCase().includes("concreto");
+
+      const isArrancamento = 
+        nomeServico.toLowerCase().includes("arrancamento") ||
+        serviceCategory.toLowerCase().includes("arrancamento");
+
+      if (isConcrete && selectedSvc.idades_cp && selectedSvc.qtd_caminhoes) {
+        cpsContratados = selectedSvc.idades_cp.reduce((acc, i) => acc + i.qtd, 0) * selectedSvc.qtd_caminhoes;
+        rawServiceCost = cpsContratados * servicePrice;
+      } else if (isArrancamento && selectedSvc.qtd_ensaios && selectedSvc.pontos_por_ensaio) {
+        const totalPoints = selectedSvc.qtd_ensaios * selectedSvc.pontos_por_ensaio;
+        cpsContratados = totalPoints;
+        rawServiceCost = totalPoints * servicePrice;
+      } else {
+        const qty = selectedSvc.quantidade || 1;
+        cpsContratados = qty;
+        rawServiceCost = qty * servicePrice;
+      }
+
+      // Mobilization, tolls, and overtime are charged ONLY on the first service in the list
+      const currentMob = index === 0 ? mobilizacao : 0;
+      const currentPed = index === 0 ? pedagios : 0;
+      const currentOvertime = index === 0 ? custoExtra : 0;
+
+      const subtotal = rawServiceCost + currentMob + currentPed;
+      const IMPOSTO_PCT = 0.12;
+      const descontoPct =
+        data.forma_pagamento === "Pix" || data.forma_pagamento === "Cartao" ? 0.05 : 0;
+      const imposto = +(subtotal * IMPOSTO_PCT).toFixed(2);
+      const desconto = +(subtotal * descontoPct).toFixed(2);
+      const total = +(subtotal + imposto - desconto + currentOvertime).toFixed(2);
+
+      groupTotalValue += total;
+
+      // Calculate departure time
+      const [h, m] = data.horario_na_obra.split(":").map(Number);
+      const fimMin = h * 60 + m + JORNADA_TOTAL_H * 60;
+      const fimHH = Math.floor(fimMin / 60) % 24;
+      const fimMM = fimMin % 60;
+      const horarioSaida = `${String(fimHH).padStart(2, "0")}:${String(fimMM).padStart(2, "0")}:00`;
+
+      // Payment status
+      const statusPagamento =
+        data.forma_pagamento === "Pix" || data.forma_pagamento === "Cartao"
+          ? "Pago"
+          : "Pendente";
+
+      const formaPagamentoDb =
+        data.forma_pagamento === "Faturar_Depois" ? "Boleto_28" : data.forma_pagamento;
+
+      bookingsToInsert.push({
         obra_id: finalObraId,
         empresa_id: empresaId,
-        servico_id: data.servico_id,
+        servico_id: selectedSvc.servico_id,
         criado_por: userId,
         data_servico: data.data_servico,
         horario_na_obra: data.horario_na_obra + ":00",
         horario_saida_lab: horarioSaida,
-        volume_m3: data.volume_m3,
-        qtd_caminhoes: data.qtd_caminhoes,
+        volume_m3: selectedSvc.volume_m3 || 0,
+        qtd_caminhoes: selectedSvc.qtd_caminhoes || 1,
         cps_contratados: cpsContratados,
-        idades_cp: data.idades_cp as unknown as never,
-        idades_selecionadas: data.idades_cp.map((i) => i.idade),
+        idades_cp: selectedSvc.idades_cp ? (selectedSvc.idades_cp as unknown as never) : null,
+        idades_selecionadas: selectedSvc.idades_cp ? selectedSvc.idades_cp.map((i) => i.idade) : [],
         status_pagamento: statusPagamento,
         forma_pagamento: formaPagamentoDb,
         status_agendamento: "Pendente_Tecnico",
@@ -239,39 +313,51 @@ export const createBooking = createServerFn({ method: "POST" })
           servicePrice,
           cpsContratados,
           rawServiceCost,
-          mobilizacao,
-          pedagios,
-          horasExtras,
-          custoExtra,
+          mobilizacao: currentMob,
+          pedagios: currentPed,
+          horasExtras: index === 0 ? horasExtras : 0,
+          custoExtra: currentOvertime,
           impostoPct: IMPOSTO_PCT,
           descontoPct,
           formaPagamentoOriginal: data.forma_pagamento,
+          tamanho_betoneira: selectedSvc.tamanho_betoneira || null,
+          qtd_ensaios: selectedSvc.qtd_ensaios || null,
+          pontos_por_ensaio: selectedSvc.pontos_por_ensaio || null,
         } as unknown as never,
-      })
-      .select("id, codigo_pedido, valor_total")
-      .single();
+      });
+    }
 
-    if (bookingErr || !agendamento) {
+    // Insert all bookings
+    const { data: agendamentos, error: bookingErr } = await supabase
+      .from("agendamentos_medicoes")
+      .insert(bookingsToInsert)
+      .select("id, codigo_pedido, valor_total, servico:servicos_catalogo(categoria)");
+
+    if (bookingErr || !agendamentos || agendamentos.length === 0) {
       throw new Error(bookingErr?.message || "Erro ao criar agendamento.");
     }
 
-    // Run technician matching
-    try {
-      await selectAndInviteTechnician(
-        supabase,
-        agendamento.id,
-        data.data_servico,
-        serviceCategory,
-        []
-      );
-    } catch (matchErr) {
-      console.error("Erro ao alocar técnico automático:", matchErr);
+    // Run technician matching for each booking
+    for (const ag of agendamentos) {
+      try {
+        await selectAndInviteTechnician(
+          supabase,
+          ag.id,
+          data.data_servico,
+          ag.servico?.categoria || "",
+          []
+        );
+      } catch (matchErr) {
+        console.error(`Erro ao alocar técnico automático para agendamento ${ag.id}:`, matchErr);
+      }
     }
 
+    // Return the first booking details but with the combined group total value
+    const firstAgendamento = agendamentos[0];
     return {
-      id: agendamento.id,
-      codigo_pedido: agendamento.codigo_pedido,
-      valor_total: Number(agendamento.valor_total),
+      id: firstAgendamento.id,
+      codigo_pedido: firstAgendamento.codigo_pedido,
+      valor_total: +groupTotalValue.toFixed(2),
       obra_id: finalObraId,
     };
   });
@@ -371,8 +457,8 @@ async function selectAndInviteTechnician(
 
 export const acceptInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(z.object({ bookingId: z.string().uuid() }))
-  .handler(async ({ input, context }) => {
+  .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
 
     const { data: tecnico } = await supabase
@@ -414,8 +500,8 @@ export const acceptInvite = createServerFn({ method: "POST" })
 
 export const rejectInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(z.object({ bookingId: z.string().uuid() }))
-  .handler(async ({ input, context }) => {
+  .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
 
     const { data: tecnico } = await supabase
@@ -508,7 +594,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
 
 export const registerTechnician = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(z.object({
+  .inputValidator((input: unknown) => z.object({
     nome: z.string().min(2),
     email: z.string().email(),
     password: z.string().min(6),
@@ -516,8 +602,8 @@ export const registerTechnician = createServerFn({ method: "POST" })
     cpf: z.string().nullable().optional(),
     rg: z.string().nullable().optional(),
     certificacoes: z.string().nullable().optional(),
-  }))
-  .handler(async ({ input, context }) => {
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
 
     // Check if the current user is an admin
@@ -595,8 +681,8 @@ export const registerTechnician = createServerFn({ method: "POST" })
 
 export const startExecution = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(z.object({ bookingId: z.string().uuid() }))
-  .handler(async ({ input, context }) => {
+  .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
 
     // Get technician profile
@@ -637,13 +723,13 @@ export const startExecution = createServerFn({ method: "POST" })
 
 export const recordCheckin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(z.object({
+  .inputValidator((input: unknown) => z.object({
     bookingId: z.string().uuid(),
     urlFoto: z.string(),
     lat: z.number().nullable().optional(),
     lng: z.number().nullable().optional(),
-  }))
-  .handler(async ({ input, context }) => {
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
 
     // Check technician
@@ -677,7 +763,7 @@ export const recordCheckin = createServerFn({ method: "POST" })
 
 export const addMoldingCycle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(z.object({
+  .inputValidator((input: unknown) => z.object({
     bookingId: z.string().uuid(),
     urlFoto: z.string(),
     slump: z.number(),
@@ -685,8 +771,8 @@ export const addMoldingCycle = createServerFn({ method: "POST" })
     notaFiscal: z.string(),
     pecaConcretada: z.string(),
     cpsMoldados: z.number(),
-  }))
-  .handler(async ({ input, context }) => {
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
 
     // Check technician
@@ -722,13 +808,13 @@ export const addMoldingCycle = createServerFn({ method: "POST" })
 
 export const finalizeExecution = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(z.object({
+  .inputValidator((input: unknown) => z.object({
     bookingId: z.string().uuid(),
     cpsMoldadosReal: z.number(),
     urlFotoFinal: z.string().nullable().optional(),
     urlFotoRetorno: z.string().nullable().optional(),
-  }))
-  .handler(async ({ input, context }) => {
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
 
     // Check technician
@@ -781,8 +867,8 @@ export const finalizeExecution = createServerFn({ method: "POST" })
 
 export const validateBooking = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(z.object({ bookingId: z.string().uuid() }))
-  .handler(async ({ input, context }) => {
+  .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
 
     // Allow validation by either admin or the client who created the booking
@@ -801,7 +887,7 @@ export const validateBooking = createServerFn({ method: "POST" })
       .select("role")
       .eq("user_id", userId);
 
-    const userRoles = (roles || []).map((r) => r.role);
+    const userRoles = (roles || []).map((r: any) => r.role);
     const isAdmin = userRoles.includes("admin");
     const isOwner = booking.criado_por === userId;
 

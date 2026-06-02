@@ -25,6 +25,8 @@ import {
   Clock3,
   UserCheck,
   XCircle,
+  ClipboardList,
+  CalendarPlus,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/novo-agendamento")({
@@ -88,10 +90,25 @@ const IDADES_CURA = [
   { value: 63, label: "63 dias" },
 ];
 
-// ── Types ──────────────────────────────────────────────────────────────────
 interface IdadeCPConfig {
   idade: number;
-  qtd: number; // mínimo 2, múltiplo de 2
+  qtd: number;
+}
+
+interface ConfiguredService {
+  client_id: string;
+  servico_id: string;
+  nome_servico: string;
+  sku: string;
+  categoria: string;
+  valor_venda_editavel: number;
+  volume_m3?: number;
+  tamanho_betoneira?: number;
+  qtd_caminhoes?: number;
+  idades_cp?: IdadeCPConfig[];
+  qtd_ensaios?: number;
+  pontos_por_ensaio?: number;
+  quantidade?: number;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -131,15 +148,20 @@ function NovoAgendamento() {
   const [cargoResponsavel, setCargoResponsavel] = useState("");
   const [cepLoading, setCepLoading] = useState(false);
 
-  // Step 2 — Serviço
-  const [selectedServicoId, setSelectedServicoId] = useState("");
-  const [volumeM3, setVolumeM3] = useState(10);
-  const [qtdCaminhoes, setQtdCaminhoes] = useState(1);
-  // Idades configuradas com qtd de CPs por idade (NBR 5738)
-  const [idadesCP, setIdadesCP] = useState<IdadeCPConfig[]>([
+  // Step 2 — Serviços Selecionados
+  const [selectedServices, setSelectedServices] = useState<ConfiguredService[]>([]);
+
+  // Step 2 Form States (para configurar o serviço que está sendo adicionado)
+  const [currentServiceId, setCurrentServiceId] = useState("");
+  const [currentVolume, setCurrentVolume] = useState(10);
+  const [currentBetoneiraSize, setCurrentBetoneiraSize] = useState(8); // 6, 8, 10, 12
+  const [currentIdadesCP, setCurrentIdadesCP] = useState<IdadeCPConfig[]>([
     { idade: 7, qtd: 2 },
     { idade: 28, qtd: 2 },
   ]);
+  const [currentQtdEnsaios, setCurrentQtdEnsaios] = useState(1);
+  const [currentPontosPorEnsaio, setCurrentPontosPorEnsaio] = useState(16);
+  const [currentQuantidade, setCurrentQuantidade] = useState(1);
 
   // Step 3 — Agenda
   const [dataServico, setDataServico] = useState("");
@@ -209,12 +231,26 @@ function NovoAgendamento() {
   };
 
   // Step 4 — Pagamento
-  type FormaPagamento = "Pix" | "Cartao" | "Boleto_14" | "Boleto_28";
+  type FormaPagamento = "Pix" | "Cartao" | "Boleto_14" | "Boleto_28" | "Faturar_Depois";
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>("Pix");
 
   // ── Derived values ────────────────────────────────────────────────────
-  // Total de CPs = soma de (qtd por idade) × nº de caminhões
-  const cpsContratados = idadesCP.reduce((acc, i) => acc + i.qtd, 0) * qtdCaminhoes;
+  // Encontra serviço atualmente selecionado no seletor
+  const getCurrentService = () => servicos.find((s) => s.id === currentServiceId) || servicos[0];
+
+  const checkIsConcrete = (service: any) => {
+    if (!service) return false;
+    const name = (service.nome_servico || "").toLowerCase();
+    const cat = (service.categoria || "").toLowerCase();
+    return name.includes("concreto") || name.includes("graute") || name.includes("argamassa") || name.includes("cp") || cat.includes("concreto");
+  };
+
+  const checkIsArrancamento = (service: any) => {
+    if (!service) return false;
+    const name = (service.nome_servico || "").toLowerCase();
+    const cat = (service.categoria || "").toLowerCase();
+    return name.includes("arrancamento") || cat.includes("arrancamento");
+  };
 
   // ── Load data ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -268,12 +304,24 @@ function NovoAgendamento() {
         toast.error(`Erro ao carregar serviços: ${servicosErr.message}`);
       }
 
-      if (listServicos && listServicos.length > 0) {
-        setServicos(listServicos);
-        setSelectedServicoId(listServicos[0].id);
-      } else {
-        setServicos([]);
-        setSelectedServicoId("");
+      const hasArrancamento = listServicos?.some(s => s.sku === "GTB-ARRANCAMENTO");
+      const completeList = listServicos ? [...listServicos] : [];
+      if (!hasArrancamento) {
+        completeList.push({
+          id: "e2b4f9b8-67a1-432d-94c0-0f04df5156a0",
+          sku: "GTB-ARRANCAMENTO",
+          nome_servico: "Ensaio de Arrancamento",
+          unidade: "Ponto",
+          valor_venda_editavel: 250,
+          categoria: "Arrancamento",
+          ativo: true,
+          created_at: null,
+        });
+      }
+
+      setServicos(completeList);
+      if (completeList.length > 0) {
+        setCurrentServiceId(completeList[0].id || "");
       }
 
       const { data: listCidades } = await supabase.from("cidades_atendidas").select("*");
@@ -344,7 +392,7 @@ function NovoAgendamento() {
 
   // ── Idade CP helpers ──────────────────────────────────────────────────
   const toggleIdade = (idade: number) => {
-    setIdadesCP((prev) => {
+    setCurrentIdadesCP((prev) => {
       const exists = prev.find((i) => i.idade === idade);
       if (exists) {
         if (prev.length === 1) { toast.error("Selecione ao menos uma idade de cura."); return prev; }
@@ -357,28 +405,29 @@ function NovoAgendamento() {
   const setQtdIdade = (idade: number, qtd: number) => {
     // Must be >= 2 and even
     const valid = Math.max(2, Math.round(qtd / 2) * 2);
-    setIdadesCP((prev) => prev.map((i) => (i.idade === idade ? { ...i, qtd: valid } : i)));
+    setCurrentIdadesCP((prev) => prev.map((i) => (i.idade === idade ? { ...i, qtd: valid } : i)));
   };
 
-  // ── Buscar técnicos disponíveis ao selecionar serviço ────────────────
+  // ── Buscar técnicos disponíveis ao selecionar serviço(s) ───────────────
   useEffect(() => {
-    if (!selectedServicoId) return;
+    if (selectedServices.length === 0) return;
     async function fetchTecnicosDisponiveis() {
       setLoadingDatas(true);
       try {
-        const servico = servicos.find((s) => s.id === selectedServicoId);
-        const categoriaServico = servico?.categoria || "";
+        const categories = selectedServices.map(s => s.categoria.toLowerCase());
 
-        // Buscar técnicos cujas certificações contêm a categoria do serviço
+        // Buscar técnicos
         const { data: tecnicos } = await supabase
           .from("tecnicos")
           .select("id, nome, status, certificacoes, ranking_score")
           .eq("status", "Disponivel");
 
         const compativeis = (tecnicos || []).filter((t) => {
-          if (!t.certificacoes || !categoriaServico) return true;
-          return t.certificacoes.toLowerCase().includes(categoriaServico.toLowerCase()) ||
-                 categoriaServico.toLowerCase().includes("concreto");
+          if (!t.certificacoes) return true;
+          return categories.every(cat => {
+            if (!cat) return true;
+            return (t.certificacoes || "").toLowerCase().includes(cat) || cat.includes("concreto");
+          });
         });
 
         setTecnicosDisponiveis(compativeis);
@@ -426,11 +475,9 @@ function NovoAgendamento() {
       }
     }
     fetchTecnicosDisponiveis();
-  }, [selectedServicoId, servicos]);
+  }, [selectedServices, servicos]);
 
   // ── Financials ────────────────────────────────────────────────────────
-  const getSelectedService = () => servicos.find((s) => s.id === selectedServicoId) || servicos[0] || { nome_servico: "Serviço", valor_venda_editavel: 0 };
-
   const getSelectedObraCity = () => {
     if (selectedObraId === "nova") return novaObraCidade;
     return obras.find((o) => o.id === selectedObraId)?.cidade || "Sorocaba";
@@ -443,8 +490,36 @@ function NovoAgendamento() {
     return { mobilizacao: isNaN(mobBase) ? 0 : mobBase, pedagios: isNaN(toll) ? 0 : toll };
   };
 
-  const servicePrice = getSelectedService()?.valor_venda_editavel || 0;
-  const rawServiceCost = cpsContratados * servicePrice;
+  const getServiceCost = (svc: ConfiguredService) => {
+    const isConcrete = checkIsConcrete(svc);
+    const isArrancamento = checkIsArrancamento(svc);
+
+    if (isConcrete && svc.idades_cp && svc.qtd_caminhoes) {
+      const cps = svc.idades_cp.reduce((acc, i) => acc + i.qtd, 0) * svc.qtd_caminhoes;
+      return cps * svc.valor_venda_editavel;
+    } else if (isArrancamento && svc.qtd_ensaios && svc.pontos_por_ensaio) {
+      return svc.qtd_ensaios * svc.pontos_por_ensaio * svc.valor_venda_editavel;
+    } else {
+      return (svc.quantidade || 1) * svc.valor_venda_editavel;
+    }
+  };
+
+  const getServiceQuantityText = (svc: ConfiguredService) => {
+    const isConcrete = checkIsConcrete(svc);
+    const isArrancamento = checkIsArrancamento(svc);
+
+    if (isConcrete && svc.idades_cp && svc.qtd_caminhoes) {
+      const cps = svc.idades_cp.reduce((acc, i) => acc + i.qtd, 0) * svc.qtd_caminhoes;
+      return `${cps} CPs (${svc.qtd_caminhoes} betoneira(s) de ${svc.tamanho_betoneira} m³, idades: ${svc.idades_cp.map(i => `${i.idade}d`).join(", ")})`;
+    } else if (isArrancamento && svc.qtd_ensaios && svc.pontos_por_ensaio) {
+      const totalPoints = svc.qtd_ensaios * svc.pontos_por_ensaio;
+      return `${totalPoints} pontos (${svc.qtd_ensaios} ensaio(s) de arrancamento × ${svc.pontos_por_ensaio} pontos/ensaio)`;
+    } else {
+      return `${svc.quantidade || 1} ${svc.sku === "GTB-DIARIA" ? "diária(s)" : "unidade(s)"}`;
+    }
+  };
+
+  const rawServiceCost = selectedServices.reduce((sum, svc) => sum + getServiceCost(svc), 0);
   const { mobilizacao, pedagios } = getMobilizationCosts();
   const subtotal = rawServiceCost + mobilizacao + pedagios;
   const impostoPct = 0.12;
@@ -452,6 +527,68 @@ function NovoAgendamento() {
   const imposto = subtotal * impostoPct;
   const desconto = subtotal * descontoPct;
   const total = subtotal + imposto - desconto + custoExtra;
+
+  const currentService = getCurrentService();
+  const isConcrete = checkIsConcrete(currentService);
+  const isArrancamento = checkIsArrancamento(currentService);
+
+  const currentQtdCaminhoes = isConcrete ? Math.ceil(currentVolume / currentBetoneiraSize) : 1;
+  const currentCpsCount = isConcrete ? currentIdadesCP.reduce((acc, i) => acc + i.qtd, 0) * currentQtdCaminhoes : 0;
+
+  const handleAddService = () => {
+    if (!currentService) return;
+    
+    // Check if service already added
+    if (selectedServices.some(s => s.servico_id === currentService.id)) {
+      toast.error("Este serviço já foi adicionado ao agendamento.");
+      return;
+    }
+
+    const newSvc: ConfiguredService = {
+      client_id: Math.random().toString(36).substring(2, 9),
+      servico_id: currentService.id,
+      nome_servico: currentService.nome_servico,
+      sku: currentService.sku,
+      categoria: currentService.categoria,
+      valor_venda_editavel: currentService.valor_venda_editavel,
+    };
+
+    if (isConcrete) {
+      if (currentIdadesCP.length === 0) {
+        toast.error("Selecione ao menos uma idade de cura.");
+        return;
+      }
+      newSvc.volume_m3 = currentVolume;
+      newSvc.tamanho_betoneira = currentBetoneiraSize;
+      newSvc.qtd_caminhoes = currentQtdCaminhoes;
+      newSvc.idades_cp = [...currentIdadesCP];
+    } else if (isArrancamento) {
+      if (currentQtdEnsaios < 1 || currentPontosPorEnsaio < 1) {
+        toast.error("Valores de ensaios e pontos inválidos.");
+        return;
+      }
+      if (currentPontosPorEnsaio > 16) {
+        toast.error("O número máximo de pontos por ensaio é 16.");
+        return;
+      }
+      newSvc.qtd_ensaios = currentQtdEnsaios;
+      newSvc.pontos_por_ensaio = currentPontosPorEnsaio;
+    } else {
+      if (currentQuantidade < 1) {
+        toast.error("Quantidade inválida.");
+        return;
+      }
+      newSvc.quantidade = currentQuantidade;
+    }
+
+    setSelectedServices((prev) => [...prev, newSvc]);
+    toast.success("Serviço adicionado ao agendamento!");
+  };
+
+  const handleRemoveService = (client_id: string) => {
+    setSelectedServices((prev) => prev.filter(s => s.client_id !== client_id));
+    toast.info("Serviço removido.");
+  };
 
   // ── Validation ────────────────────────────────────────────────────────
   const step1Valid =
@@ -463,6 +600,10 @@ function NovoAgendamento() {
   const handleConfirmBooking = async () => {
     if (!user) {
       toast.error("Você precisa estar logado para continuar.");
+      return;
+    }
+    if (selectedServices.length === 0) {
+      toast.error("Adicione ao menos um serviço para agendar.");
       return;
     }
     setLoading(true);
@@ -488,23 +629,33 @@ function NovoAgendamento() {
                   longitude: novaObraLng ?? null,
                 }
               : null,
-          servico_id: selectedServicoId,
           data_servico: dataServico,
           horario_na_obra: horarioNaObra,
-          qtd_caminhoes: qtdCaminhoes,
-          idades_cp: idadesCP,
-          volume_m3: volumeM3,
           forma_pagamento: formaPagamento,
           observacoes: observacoes || null,
+          servicos: selectedServices.map(s => ({
+            servico_id: s.servico_id,
+            volume_m3: s.volume_m3 || null,
+            tamanho_betoneira: s.tamanho_betoneira || null,
+            qtd_caminhoes: s.qtd_caminhoes || null,
+            idades_cp: s.idades_cp || null,
+            qtd_ensaios: s.qtd_ensaios || null,
+            pontos_por_ensaio: s.pontos_por_ensaio || null,
+            quantidade: s.quantidade || null,
+          })),
         },
       });
 
-      toast.success("Agendamento criado com sucesso!");
+      toast.success("Agendamentos criados com sucesso!");
 
       // Envia notificação por WhatsApp em segundo plano
       try {
         const phoneToNotify = userProfile?.telefone || "5515999999999";
         const { sendWhatsappMessage } = await import("@/lib/whatsapp.functions");
+        const servicesSummary = selectedServices.map(s => {
+          return `- *${s.nome_servico}*: ${getServiceQuantityText(s)}`;
+        }).join("\n");
+
         sendWhatsappMessage({
           data: {
             number: phoneToNotify,
@@ -513,11 +664,9 @@ function NovoAgendamento() {
             `Olá, *${userProfile?.nome_completo || user?.email}*!\n` +
             `Seu pedido de controle tecnológico foi criado com sucesso.\n\n` +
             `📝 *Código do Pedido:* ${agendamento.codigo_pedido}\n` +
-            `📅 *Data:* ${new Date(dataServico).toLocaleDateString("pt-BR")}\n` +
+            `📅 *Data:* ${new Date(dataServico + "T00:00:00").toLocaleDateString("pt-BR")}\n` +
             `⏰ *Horário na Obra:* ${horarioNaObra}\n` +
-            `📋 *Serviço:* ${getSelectedService().nome_servico}\n` +
-            `🏗️ *CPs Contratados:* ${cpsContratados} unidades\n` +
-            `🧪 *Idades:* ${idadesCP.map((i) => `${i.idade}d(${i.qtd}CPs)`).join(", ")}\n` +
+            `📋 *Serviços Contratados:*\n${servicesSummary}\n\n` +
             `💰 *Valor Total:* R$ ${agendamento.valor_total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n` +
             `💳 *Forma de Pagamento:* ${formaPagamento}\n\n` +
             `Um técnico certificado será alocado em breve. Obrigado pela preferência!`,
@@ -538,7 +687,6 @@ function NovoAgendamento() {
       setLoading(false);
     }
   };
-
   // ── Render ────────────────────────────────────────────────────────────
   // ── Tela de Sucesso ──────────────────────────────────────────────────
   if (agendamentoCriado) {
@@ -622,9 +770,13 @@ function NovoAgendamento() {
               setDataServico("");
               setHorarioNaObra("08:00");
               setObservacoes("");
-              setIdadesCP([{ idade: 7, qtd: 2 }, { idade: 28, qtd: 2 }]);
-              setQtdCaminhoes(1);
-              setVolumeM3(10);
+              setSelectedServices([]);
+              setCurrentVolume(10);
+              setCurrentBetoneiraSize(8);
+              setCurrentIdadesCP([{ idade: 7, qtd: 2 }, { idade: 28, qtd: 2 }]);
+              setCurrentQtdEnsaios(1);
+              setCurrentPontosPorEnsaio(16);
+              setCurrentQuantidade(1);
             }}
             className="gap-2"
           >
@@ -854,109 +1006,288 @@ function NovoAgendamento() {
           {/* ── STEP 2: SERVIÇO ──────────────────────────────────── */}
           {step === 2 && (
             <div className="space-y-6">
-              {/* Serviço */}
-              <div className="space-y-2">
-                <Label className="text-base font-bold">Selecione o Serviço de Controle</Label>
-                <Select value={selectedServicoId} onValueChange={setSelectedServicoId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione o ensaio tecnológico" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {servicos.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.nome_servico} — R$ {Number(s.valor_venda_editavel).toFixed(2)} / CP
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Form de Adicionar Serviço */}
+              <div className="rounded-xl border border-border bg-card p-6 space-y-6 shadow-sm">
+                <div className="flex items-center gap-2 text-primary font-bold text-lg border-b border-border pb-3">
+                  <HardHat className="h-5 w-5" />
+                  <span>Configurar Serviço</span>
+                </div>
 
-              {/* Volume e caminhões */}
-              <div className="grid gap-4 md:grid-cols-2">
+                {/* Seleção do Serviço */}
                 <div className="space-y-2">
-                  <Label htmlFor="vol-m3">Volume de Concreto (m³)</Label>
-                  <Input id="vol-m3" type="number" min={1} value={volumeM3} onChange={(e) => setVolumeM3(Number(e.target.value))} />
+                  <Label className="text-sm font-semibold">Escolha o Serviço de Controle</Label>
+                  <Select value={currentServiceId} onValueChange={setCurrentServiceId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione o ensaio tecnológico" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {servicos.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.nome_servico} — R$ {Number(s.valor_venda_editavel).toFixed(2)} / {s.unidade}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="qtd-caminhoes">Quantidade de Betoneiras</Label>
-                  <Input id="qtd-caminhoes" type="number" min={1} value={qtdCaminhoes} onChange={(e) => setQtdCaminhoes(Number(e.target.value))} />
-                </div>
-              </div>
 
-              {/* Idades de cura — NBR 5738 */}
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-base font-bold">Idades de Cura dos CPs (NBR 5738)</Label>
-                  <p className="text-xs text-muted-foreground mt-1">Selecione as idades e defina a quantidade por idade. Mínimo: 2 CPs por idade, sempre em número par.</p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {IDADES_CURA.map(({ value: idade, label }) => {
-                    const config = idadesCP.find((i) => i.idade === idade);
-                    const selected = !!config;
-                    return (
-                      <div key={idade} className={`rounded-xl border p-4 transition-all ${selected ? "border-primary bg-primary/5" : "border-border bg-muted/20 opacity-60"}`}>
-                        {/* Toggle */}
-                        <button
-                          type="button"
-                          onClick={() => toggleIdade(idade)}
-                          className={`w-full flex items-center justify-between mb-3 font-semibold text-sm ${selected ? "text-primary" : "text-muted-foreground"}`}
-                        >
-                          <span>{label}</span>
-                          <span className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}>
-                            {selected && <Check className="h-3 w-3 text-white" />}
-                          </span>
-                        </button>
-
-                        {/* Qtd input */}
-                        {selected && (
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">CPs por betoneira</Label>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setQtdIdade(idade, (config?.qtd ?? 2) - 2)}
-                                className="h-7 w-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
-                                disabled={(config?.qtd ?? 2) <= 2}
-                              >−</button>
-                              <span className="text-sm font-bold text-foreground w-6 text-center">{config?.qtd ?? 2}</span>
-                              <button
-                                type="button"
-                                onClick={() => setQtdIdade(idade, (config?.qtd ?? 2) + 2)}
-                                className="h-7 w-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
-                              >+</button>
-                            </div>
-                          </div>
-                        )}
-
-                        {!selected && (
-                          <p className="text-xs text-muted-foreground">Clique para incluir</p>
-                        )}
+                {/* Inputs Dinâmicos com base na categoria/tipo de serviço */}
+                {currentService && checkIsConcrete(currentService) && (
+                  <div className="space-y-6 animate-in fade-in-50 duration-200">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {/* Volume de Concreto */}
+                      <div className="space-y-2">
+                        <Label htmlFor="current-volume">Volume de Concreto (m³)</Label>
+                        <Input
+                          id="current-volume"
+                          type="number"
+                          min={1}
+                          value={currentVolume}
+                          onChange={(e) => setCurrentVolume(Math.max(1, Number(e.target.value)))}
+                        />
                       </div>
-                    );
-                  })}
-                </div>
 
-                {/* Resumo de CPs */}
-                <div className="rounded-lg bg-muted/40 border border-border p-4">
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">Resumo de Corpos de Prova</p>
-                  <div className="flex flex-wrap gap-3">
-                    {idadesCP.map((i) => (
-                      <span key={i.idade} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                        {i.idade} dias × {i.qtd} CPs/betoneira
-                      </span>
-                    ))}
+                      {/* Tamanho da Betoneira */}
+                      <div className="space-y-2">
+                        <Label htmlFor="betoneira-size">Capacidade da Betoneira (m³)</Label>
+                        <Select
+                          value={String(currentBetoneiraSize)}
+                          onValueChange={(val) => setCurrentBetoneiraSize(Number(val))}
+                        >
+                          <SelectTrigger id="betoneira-size">
+                            <SelectValue placeholder="Selecione o tamanho" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="6">6 m³</SelectItem>
+                            <SelectItem value="8">8 m³</SelectItem>
+                            <SelectItem value="10">10 m³</SelectItem>
+                            <SelectItem value="12">12 m³</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Quantidade de Betoneiras Calculada */}
+                      <div className="space-y-2">
+                        <Label>Quantidade de Betoneiras</Label>
+                        <div className="h-10 px-3 py-2 rounded-md border border-input bg-muted/50 text-foreground font-bold flex items-center justify-between">
+                          <span>{currentQtdCaminhoes} betoneira(s)</span>
+                          <span className="text-xs text-muted-foreground font-normal italic">(arredondado para cima)</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Idades de cura — NBR 5738 */}
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-sm font-semibold">Idades de Cura dos CPs (NBR 5738)</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">Selecione as idades e a quantidade por idade. Mínimo: 2 CPs por idade, sempre par.</p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {IDADES_CURA.map(({ value: idade, label }) => {
+                          const config = currentIdadesCP.find((i) => i.idade === idade);
+                          const selected = !!config;
+                          return (
+                            <div key={idade} className={`rounded-xl border p-4 transition-all ${selected ? "border-primary bg-primary/5" : "border-border bg-muted/20 opacity-60"}`}>
+                              {/* Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => toggleIdade(idade)}
+                                className={`w-full flex items-center justify-between mb-3 font-semibold text-sm ${selected ? "text-primary" : "text-muted-foreground"}`}
+                              >
+                                <span>{label}</span>
+                                <span className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}>
+                                  {selected && <Check className="h-3 w-3 text-white" />}
+                                </span>
+                              </button>
+
+                              {/* Qtd input */}
+                              {selected && (
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">CPs por betoneira</Label>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setQtdIdade(idade, (config?.qtd ?? 2) - 2)}
+                                      className="h-7 w-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+                                      disabled={(config?.qtd ?? 2) <= 2}
+                                    >−</button>
+                                    <span className="text-sm font-bold text-foreground w-6 text-center">{config?.qtd ?? 2}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setQtdIdade(idade, (config?.qtd ?? 2) + 2)}
+                                      className="h-7 w-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+                                    >+</button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {!selected && (
+                                <p className="text-xs text-muted-foreground">Clique para incluir</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Resumo de CPs */}
+                      <div className="rounded-lg bg-muted/40 border border-border p-4 flex items-center justify-between">
+                        <div className="text-xs space-y-1">
+                          <span className="font-semibold text-muted-foreground block">Resumo de Corpos de Prova</span>
+                          <span className="text-muted-foreground">
+                            {currentIdadesCP.map(i => `${i.idade}d (${i.qtd} CPs)`).join(" + ")}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs text-muted-foreground block">Total de CPs</span>
+                          <span className="text-lg font-extrabold text-primary">{currentCpsCount} CPs</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
-                    <span className="text-sm text-muted-foreground">Total de CPs ({qtdCaminhoes} betoneira{qtdCaminhoes > 1 ? "s" : ""})</span>
-                    <span className="text-lg font-extrabold text-primary">{cpsContratados} CPs</span>
+                )}
+
+                {currentService && checkIsArrancamento(currentService) && (
+                  <div className="space-y-4 animate-in fade-in-50 duration-200">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {/* Qtd Ensaios */}
+                      <div className="space-y-2">
+                        <Label htmlFor="arrancamento-ensaios">Quantidade de Ensaios (Pontos)</Label>
+                        <Input
+                          id="arrancamento-ensaios"
+                          type="number"
+                          min={1}
+                          value={currentQtdEnsaios}
+                          onChange={(e) => setCurrentQtdEnsaios(Math.max(1, Number(e.target.value)))}
+                        />
+                      </div>
+
+                      {/* Pontos por Ensaio */}
+                      <div className="space-y-2">
+                        <Label htmlFor="arrancamento-pontos">Pontos por Ensaio (máx 16)</Label>
+                        <Input
+                          id="arrancamento-pontos"
+                          type="number"
+                          min={1}
+                          max={16}
+                          value={currentPontosPorEnsaio}
+                          onChange={(e) => setCurrentPontosPorEnsaio(Math.min(16, Math.max(1, Number(e.target.value))))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Alerta informativo */}
+                    <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5 flex gap-2 items-start text-xs text-amber-700">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold">Importante sobre Ensaios de Arrancamento</p>
+                        <p className="mt-0.5">A cada ensaio de arrancamento (cada ponto), podem ser coletados/tracionados até 16 pontos de ensaio adicionais.</p>
+                      </div>
+                    </div>
                   </div>
+                )}
+
+                {currentService && !checkIsConcrete(currentService) && !checkIsArrancamento(currentService) && (
+                  <div className="space-y-2 animate-in fade-in-50 duration-200">
+                    <Label htmlFor="general-quantity">Quantidade</Label>
+                    <Input
+                      id="general-quantity"
+                      type="number"
+                      min={1}
+                      value={currentQuantidade}
+                      onChange={(e) => setCurrentQuantidade(Math.max(1, Number(e.target.value)))}
+                      className="w-full md:w-1/3"
+                    />
+                  </div>
+                )}
+
+                {/* Botão de Adicionar ao Agendamento */}
+                <div className="flex justify-end pt-2">
+                  <Button
+                    type="button"
+                    onClick={handleAddService}
+                    className="bg-emerald-600 hover:bg-emerald-700 font-bold gap-2 text-white"
+                  >
+                    + Adicionar Serviço ao Agendamento
+                  </Button>
                 </div>
               </div>
 
-              <div className="flex justify-between">
-                <Button variant="ghost" onClick={() => setStep(1)}><ChevronLeft className="mr-2 h-4 w-4" /> Voltar</Button>
-                <Button onClick={() => setStep(3)} disabled={!selectedServicoId || idadesCP.length === 0}>
+              {/* Lista de Serviços Adicionados */}
+              {selectedServices.length > 0 && (
+                <div className="space-y-4">
+                  <div className="text-sm font-bold text-foreground">Serviços Adicionados ({selectedServices.length})</div>
+                  <div className="grid gap-3">
+                    {selectedServices.map((svc) => (
+                      <div key={svc.client_id} className="rounded-xl border border-border bg-card p-4 flex items-center justify-between shadow-sm animate-in slide-in-from-bottom-2 duration-200">
+                        <div className="space-y-1">
+                          <span className="font-bold text-foreground text-sm block">{svc.nome_servico}</span>
+                          <span className="text-xs text-muted-foreground block">{getServiceQuantityText(svc)}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <span className="text-xs text-muted-foreground block">Valor do Ensaio</span>
+                            <span className="font-bold text-foreground text-sm">
+                              R$ {getServiceCost(svc).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveService(svc.client_id)}
+                            className="p-1 rounded-md text-red-500 hover:bg-red-50/10 transition-colors"
+                          >
+                            <XCircle className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Resumo Financeiro do Grupo */}
+                  <div className="rounded-xl border border-border bg-muted/20 p-5 space-y-3">
+                    <div className="text-xs font-bold text-foreground uppercase tracking-wide pb-1 border-b border-border">Resumo de Custos Previstos</div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Subtotal dos Serviços</span>
+                      <span>R$ {rawServiceCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {(mobilizacao > 0 || pedagios > 0) && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Deslocamento & Mobilização ({getSelectedObraCity()})</span>
+                        <span>R$ {(mobilizacao + pedagios).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {custoExtra > 0 && (
+                      <div className="flex justify-between text-xs text-muted-foreground text-amber-600 font-medium">
+                        <span>Custo Adicional (Horas Extras / Fora de Expediente)</span>
+                        <span>+ R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Imposto Retido (12%)</span>
+                      <span>+ R$ {imposto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {desconto > 0 && (
+                      <div className="flex justify-between text-xs text-emerald-600 font-semibold">
+                        <span>Desconto Forma de Pagamento (5%)</span>
+                        <span>- R$ {desconto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t border-border pt-2.5 text-base font-extrabold text-foreground">
+                      <span>Valor Total Prévio</span>
+                      <span className="text-primary text-lg">R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-between pt-4 border-t border-border">
+                <Button variant="ghost" onClick={() => setStep(1)}>
+                  <ChevronLeft className="mr-2 h-4 w-4" /> Voltar
+                </Button>
+                <Button
+                  onClick={() => setStep(3)}
+                  disabled={selectedServices.length === 0}
+                  className="bg-primary text-primary-foreground font-bold"
+                >
                   Próximo Passo <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -1104,32 +1435,34 @@ function NovoAgendamento() {
                 Resumo do Pedido e Memória de Cálculo
               </h2>
 
-              {/* CPs por idade */}
-              <div className="rounded-xl border border-border bg-muted/10 p-4">
-                <p className="text-xs font-semibold text-muted-foreground mb-2">CPs por Idade de Cura</p>
-                <div className="flex flex-wrap gap-2">
-                  {idadesCP.map((i) => (
-                    <span key={i.idade} className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                      {i.idade} dias — {i.qtd} CPs/betoneira × {qtdCaminhoes} betoneira{qtdCaminhoes > 1 ? "s" : ""} = {i.qtd * qtdCaminhoes} CPs
-                    </span>
+              {/* Lista de Serviços Contratados */}
+              <div className="rounded-xl border border-border bg-muted/10 p-5 space-y-4">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide border-b border-border pb-2">Serviços Contratados</p>
+                <div className="space-y-3">
+                  {selectedServices.map((svc) => (
+                    <div key={svc.client_id} className="flex justify-between items-start text-sm">
+                      <div className="space-y-0.5">
+                        <span className="font-semibold text-foreground">{svc.nome_servico}</span>
+                        <span className="text-xs text-muted-foreground block">{getServiceQuantityText(svc)}</span>
+                      </div>
+                      <span className="font-bold text-foreground">
+                        R$ {getServiceCost(svc).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
                   ))}
                 </div>
               </div>
 
               {/* Memória de cálculo */}
-              <div className="rounded-xl border border-border p-5 space-y-4 bg-muted/20">
+              <div className="rounded-xl border border-border p-5 space-y-4 bg-card shadow-sm">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{getSelectedService()?.nome_servico} ({cpsContratados} CPs × R$ {servicePrice.toFixed(2)})</span>
+                  <span className="text-muted-foreground">Subtotal dos Serviços</span>
                   <span className="font-semibold">R$ {rawServiceCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Deslocamento e Mobilização ({getSelectedObraCity() || "Sorocaba"})</span>
-                  <span className="font-semibold">R$ {mobilizacao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                </div>
-                {pedagios > 0 && (
+                {(mobilizacao > 0 || pedagios > 0) && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Custo Estimado de Pedágios</span>
-                    <span className="font-semibold">R$ {pedagios.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    <span className="text-muted-foreground">Deslocamento e Mobilização ({getSelectedObraCity() || "Sorocaba"})</span>
+                    <span className="font-semibold">R$ {(mobilizacao + pedagios).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 {custoExtra > 0 && (
