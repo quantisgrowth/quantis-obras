@@ -43,7 +43,8 @@ function SignupPage() {
       toast.error("Falha no cadastro", { description: error.message });
       return;
     }
-    toast.success("Conta criada!", { description: "Verifique seu e-mail se necessário." });
+    toast.success("Conta criada!", { description: "Verifique seu e-mail para confirmar o cadastro." });
+    navigate({ to: "/login" });
   }
 
   return (
