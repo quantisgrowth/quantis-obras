@@ -10,6 +10,7 @@
 --    (somente rows com ativo = true não é necessário em RLS,
 --     isso é filtrado na query do frontend)
 DROP POLICY IF EXISTS "catalogo_read_admin_only" ON public.servicos_catalogo;
+DROP POLICY IF EXISTS "catalogo_read_authenticated" ON public.servicos_catalogo;
 
 CREATE POLICY "catalogo_read_authenticated" ON public.servicos_catalogo
   FOR SELECT TO authenticated

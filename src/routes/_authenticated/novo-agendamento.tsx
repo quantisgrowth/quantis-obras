@@ -194,11 +194,16 @@ function NovoAgendamento() {
     if (!user) return;
     const currentUserId = user.id;
     async function loadData() {
-      let { data: profile } = await supabase
+      let { data: profile, error: profileErr } = await supabase
         .from("profiles")
-        .select("*, empresa:empresas_clientes(*)")
+        .select("*")
         .eq("id", currentUserId)
         .single();
+
+      if (profileErr) {
+        console.error("[Supabase Error - profiles]:", profileErr);
+        toast.error(`Erro ao carregar perfil: ${profileErr.message}`);
+      }
 
       if (profile) {
         if (!profile.empresa_id) {
@@ -218,13 +223,28 @@ function NovoAgendamento() {
       }
 
       if (profile?.empresa_id) {
-        const { data: listObras } = await supabase.from("obras").select("*").eq("empresa_id", profile.empresa_id);
+        const { data: listObras, error: obrasErr } = await supabase.from("obras").select("*").eq("empresa_id", profile.empresa_id);
+        if (obrasErr) {
+          console.error("[Supabase Error - obras]:", obrasErr);
+          toast.error(`Erro ao carregar obras: ${obrasErr.message}`);
+        }
         if (listObras && listObras.length > 0) { setObras(listObras); setSelectedObraId(listObras[0].id); }
       }
 
-      const { data: listServicos } = await supabase.from("servicos_catalogo").select("id, sku, nome_servico, unidade, valor_venda_editavel, equipamentos_inclusos, categoria, ativo, created_at").eq("ativo", true);
-      if (listServicos && listServicos.length > 0) { setServicos(listServicos); setSelectedServicoId(listServicos[0].id); }
-      else {
+      const { data: listServicos, error: servicosErr } = await supabase
+        .from("servicos_catalogo")
+        .select("id, sku, nome_servico, unidade, valor_venda_editavel, equipamentos_inclusos, categoria, ativo, created_at")
+        .eq("ativo", true);
+
+      if (servicosErr) {
+        console.error("[Supabase Error - servicos_catalogo]:", servicosErr);
+        toast.error(`Erro ao carregar serviços: ${servicosErr.message}`);
+      }
+
+      if (listServicos && listServicos.length > 0) {
+        setServicos(listServicos);
+        setSelectedServicoId(listServicos[0].id);
+      } else {
         setServicos([]);
         setSelectedServicoId("");
       }
