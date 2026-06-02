@@ -1068,9 +1068,8 @@ function NovoAgendamento() {
                       {/* Quantidade de Betoneiras Calculada */}
                       <div className="space-y-2">
                         <Label>Quantidade de Betoneiras</Label>
-                        <div className="h-10 px-3 py-2 rounded-md border border-input bg-muted/50 text-foreground font-bold flex items-center justify-between">
+                        <div className="h-10 px-3 py-2 rounded-md border border-input bg-muted/50 text-foreground font-bold flex items-center">
                           <span>{currentQtdCaminhoes} betoneira(s)</span>
-                          <span className="text-xs text-muted-foreground font-normal italic">(arredondado para cima)</span>
                         </div>
                       </div>
                     </div>
