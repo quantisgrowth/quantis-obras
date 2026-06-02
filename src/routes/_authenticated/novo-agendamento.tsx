@@ -480,13 +480,13 @@ function NovoAgendamento() {
         horario: horarioNaObra,
       });
 
-      const phoneToNotify = userProfile.telefone || "5515999999999";
+      const phoneToNotify = userProfile?.telefone || "5515999999999";
       await sendWhatsappMessage({
         data: {
           number: phoneToNotify,
           text:
           `🛠️ *Geraltest Brasil - Confirmação de Agendamento*\n\n` +
-          `Olá, *${userProfile.nome_completo || user.email}*!\n` +
+          `Olá, *${userProfile?.nome_completo || user?.email}*!\n` +
           `Seu pedido de controle tecnológico foi criado com sucesso.\n\n` +
           `📝 *Código do Pedido:* ${agendamento.codigo_pedido}\n` +
           `📅 *Data:* ${new Date(dataServico).toLocaleDateString("pt-BR")}\n` +
