@@ -241,7 +241,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-foreground">{ag.codigo_pedido}</span>
+                      <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra sem nome"}</span>
                       <Badge
                         variant="outline"
                         className={STATUS_COLORS[ag.status_agendamento] || "bg-muted text-muted-foreground"}
@@ -253,7 +253,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                       {ag.servico?.nome_servico || "Controle Tecnológico"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Obra: <span className="text-foreground font-medium">{ag.obra?.nome_obra || "Não identificada"}</span>
+                      Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span>
                       {ag.obra?.cidade && ` · ${ag.obra.cidade}`}
                     </p>
                     {ag.observacoes && (
