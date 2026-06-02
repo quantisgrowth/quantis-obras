@@ -286,7 +286,7 @@ function NovoAgendamento() {
   const handleCNOLookup = async (cnoValue: string) => {
     setCnoObra(cnoValue);
     const cleanCno = cnoValue.replace(/\D/g, "");
-    if (cleanCno.length >= 8) {
+    if (cleanCno.length >= 3) {
       try {
         const { data: existingObra, error } = await supabase
           .from("obras")
@@ -473,35 +473,34 @@ function NovoAgendamento() {
       });
 
       toast.success("Agendamento criado com sucesso!");
-      setAgendamentoCriado({
-        codigo_pedido: agendamento.codigo_pedido,
-        valor_total: agendamento.valor_total,
-        data_servico: dataServico,
-        horario: horarioNaObra,
-      });
 
-      const phoneToNotify = userProfile?.telefone || "5515999999999";
-      await sendWhatsappMessage({
-        data: {
-          number: phoneToNotify,
-          text:
-          `🛠️ *Geraltest Brasil - Confirmação de Agendamento*\n\n` +
-          `Olá, *${userProfile?.nome_completo || user?.email}*!\n` +
-          `Seu pedido de controle tecnológico foi criado com sucesso.\n\n` +
-          `📝 *Código do Pedido:* ${agendamento.codigo_pedido}\n` +
-          `📅 *Data:* ${new Date(dataServico).toLocaleDateString("pt-BR")}\n` +
-          `⏰ *Horário na Obra:* ${horarioNaObra}\n` +
-          `📋 *Serviço:* ${getSelectedService().nome_servico}\n` +
-          `🏗️ *CPs Contratados:* ${cpsContratados} unidades\n` +
-          `🧪 *Idades:* ${idadesCP.map((i) => `${i.idade}d(${i.qtd}CPs)`).join(", ")}\n` +
-          `💰 *Valor Total:* R$ ${agendamento.valor_total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n` +
-          `💳 *Forma de Pagamento:* ${formaPagamento}\n\n` +
-          `Um técnico certificado será alocado em breve. Obrigado pela preferência!`,
-        },
-      });
+      // Envia notificação por WhatsApp em segundo plano
+      try {
+        const phoneToNotify = userProfile?.telefone || "5515999999999";
+        sendWhatsappMessage({
+          data: {
+            number: phoneToNotify,
+            text:
+            `🛠️ *Geraltest Brasil - Confirmação de Agendamento*\n\n` +
+            `Olá, *${userProfile?.nome_completo || user?.email}*!\n` +
+            `Seu pedido de controle tecnológico foi criado com sucesso.\n\n` +
+            `📝 *Código do Pedido:* ${agendamento.codigo_pedido}\n` +
+            `📅 *Data:* ${new Date(dataServico).toLocaleDateString("pt-BR")}\n` +
+            `⏰ *Horário na Obra:* ${horarioNaObra}\n` +
+            `📋 *Serviço:* ${getSelectedService().nome_servico}\n` +
+            `🏗️ *CPs Contratados:* ${cpsContratados} unidades\n` +
+            `🧪 *Idades:* ${idadesCP.map((i) => `${i.idade}d(${i.qtd}CPs)`).join(", ")}\n` +
+            `💰 *Valor Total:* R$ ${agendamento.valor_total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n` +
+            `💳 *Forma de Pagamento:* ${formaPagamento}\n\n` +
+            `Um técnico certificado será alocado em breve. Obrigado pela preferência!`,
+          },
+        }).catch(err => console.error("Error sending WhatsApp message:", err));
+      } catch (waErr) {
+        console.error("Failed to prepare WhatsApp payload:", waErr);
+      }
 
-      // Redireciona após 3s ou o usuário clica
-      // navigate({ to: "/dashboard" });
+      // Redireciona imediatamente para o painel do cliente
+      navigate({ to: "/dashboard" });
     } catch (err: any) {
       console.error("Booking error:", err);
       toast.error("Erro ao criar agendamento", { 
