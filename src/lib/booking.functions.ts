@@ -63,7 +63,7 @@ export const createBooking = createServerFn({ method: "POST" })
         .single();
 
       if (empErr || !novaEmpresa) {
-        throw new Error("Perfil sem empresa associada. Entre em contato com o suporte.");
+        throw new Error("Perfil sem empresa associada: " + (empErr?.message || "Erro desconhecido ao criar empresa."));
       }
 
       empresaId = novaEmpresa.id;
