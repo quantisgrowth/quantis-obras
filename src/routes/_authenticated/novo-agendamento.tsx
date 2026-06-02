@@ -282,6 +282,39 @@ function NovoAgendamento() {
     if (place.numero) setNovaObraNumero(place.numero);
   };
 
+  // ── CNO lookup ────────────────────────────────────────────────────────
+  const handleCNOLookup = async (cnoValue: string) => {
+    setCnoObra(cnoValue);
+    const cleanCno = cnoValue.replace(/\D/g, "");
+    if (cleanCno.length >= 8) {
+      try {
+        const { data: existingObra, error } = await supabase
+          .from("obras")
+          .select("*")
+          .eq("cno", cleanCno)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingObra && !error) {
+          toast.success("Obra encontrada pelo CNO! Dados preenchidos automaticamente.");
+          setNovaObraNome(existingObra.nome_obra || "");
+          setNovaObraEndereco(existingObra.endereco || "");
+          setNovaObraNumero(existingObra.numero || "");
+          setNovaObraBairro(existingObra.bairro || "");
+          setNovaObraCidade(existingObra.cidade || "");
+          setNovaObraEstado(existingObra.estado || "");
+          setNovaObraCEP(existingObra.cep || "");
+          setResponsavelObra(existingObra.responsavel || "");
+          setCargoResponsavel(existingObra.cargo_responsavel || "");
+          if (existingObra.latitude) setNovaObraLat(Number(existingObra.latitude));
+          if (existingObra.longitude) setNovaObraLng(Number(existingObra.longitude));
+        }
+      } catch (err) {
+        console.error("Erro ao buscar CNO:", err);
+      }
+    }
+  };
+
   // ── Idade CP helpers ──────────────────────────────────────────────────
   const toggleIdade = (idade: number) => {
     setIdadesCP((prev) => {
@@ -635,6 +668,38 @@ function NovoAgendamento() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
+                    {/* CNO */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-cno">CNO</Label>
+                      <Input id="obra-cno" placeholder="Ex: 12345678" value={cnoObra} onChange={(e) => handleCNOLookup(e.target.value)} />
+                    </div>
+
+                    {/* Responsável */}
+                    <div className="space-y-2">
+                      <Label htmlFor="obra-responsavel">Responsável Pela Obra</Label>
+                      <Input id="obra-responsavel" placeholder="Nome completo" value={responsavelObra} onChange={(e) => setResponsavelObra(e.target.value)} />
+                    </div>
+
+                    {/* Cargo */}
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="obra-cargo">Cargo do Responsável</Label>
+                      <Select value={cargoResponsavel} onValueChange={setCargoResponsavel}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Selecione o cargo do responsável" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CARGOS_OBRA.map((cargo) => (
+                            <SelectItem key={cargo} value={cargo}>{cargo}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Divisor Visual para Endereço */}
+                    <div className="md:col-span-2 border-t border-border pt-4 my-2">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Endereço e Localização da Obra</span>
+                    </div>
+
                     {/* Nome */}
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="obra-nome">Identificação / Nome da Obra</Label>
@@ -701,33 +766,6 @@ function NovoAgendamento() {
                     <div className="space-y-2">
                       <Label htmlFor="obra-cidade">Cidade</Label>
                       <Input id="obra-cidade" disabled value={novaObraCidade} className="bg-muted text-muted-foreground" placeholder="Preenchido automaticamente" />
-                    </div>
-
-                    {/* CNO */}
-                    <div className="space-y-2">
-                      <Label htmlFor="obra-cno">CNO</Label>
-                      <Input id="obra-cno" placeholder="Ex: 12345678" value={cnoObra} onChange={(e) => setCnoObra(e.target.value)} />
-                    </div>
-
-                    {/* Responsável */}
-                    <div className="space-y-2">
-                      <Label htmlFor="obra-responsavel">Responsável Pela Obra</Label>
-                      <Input id="obra-responsavel" placeholder="Nome completo" value={responsavelObra} onChange={(e) => setResponsavelObra(e.target.value)} />
-                    </div>
-
-                    {/* Cargo */}
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="obra-cargo">Cargo do Responsável</Label>
-                      <Select value={cargoResponsavel} onValueChange={setCargoResponsavel}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o cargo do responsável" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CARGOS_OBRA.map((cargo) => (
-                            <SelectItem key={cargo} value={cargo}>{cargo}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                     </div>
                   </div>
 
