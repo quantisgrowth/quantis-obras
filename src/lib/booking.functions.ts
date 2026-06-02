@@ -505,3 +505,318 @@ export const processTimeouts = createServerFn({ method: "POST" })
 
     return { processed: timedOutBookings.length };
   });
+
+export const registerTechnician = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .input(z.object({
+    nome: z.string().min(2),
+    email: z.string().email(),
+    password: z.string().min(6),
+    telefone: z.string().nullable().optional(),
+    cpf: z.string().nullable().optional(),
+    rg: z.string().nullable().optional(),
+    certificacoes: z.string().nullable().optional(),
+  }))
+  .handler(async ({ input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check if the current user is an admin
+    const { data: adminRole, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (roleErr || !adminRole) {
+      throw new Error("Acesso negado: Apenas administradores podem cadastrar técnicos.");
+    }
+
+    // Import supabaseAdmin dynamically to avoid any client bundle leakage
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Create user in Auth
+    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: {
+        nome_completo: input.nome,
+        telefone: input.telefone || "",
+      },
+    });
+
+    if (authErr || !authData.user) {
+      throw new Error("Erro ao criar usuário técnico: " + (authErr?.message || "Erro desconhecido"));
+    }
+
+    const newUserId = authData.user.id;
+
+    // Update user_roles to 'tecnico' (since trigger defaults to 'cliente')
+    const { error: roleUpdateErr } = await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: newUserId, role: "tecnico" }, { onConflict: "user_id" });
+
+    if (roleUpdateErr) {
+      console.error("Error setting technician role:", roleUpdateErr);
+    }
+
+    // Insert into 'tecnicos' table
+    const { data: newTecnico, error: tecErr } = await supabaseAdmin
+      .from("tecnicos")
+      .insert({
+        nome: input.nome,
+        cpf: input.cpf || null,
+        rg: input.rg || null,
+        certificacoes: input.certificacoes || null,
+        status: "Disponivel",
+        ranking_score: 5.0,
+        user_id: newUserId,
+      })
+      .select("id")
+      .single();
+
+    if (tecErr || !newTecnico) {
+      throw new Error("Erro ao cadastrar perfil técnico: " + (tecErr?.message || "Erro desconhecido"));
+    }
+
+    // Update profiles table to associate tecnico_id
+    const { error: profileUpdateErr } = await supabaseAdmin
+      .from("profiles")
+      .update({ tecnico_id: newTecnico.id })
+      .eq("id", newUserId);
+
+    if (profileUpdateErr) {
+      console.error("Error updating profile with tecnico_id:", profileUpdateErr);
+    }
+
+    return { success: true, tecnicoId: newTecnico.id };
+  });
+
+export const startExecution = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .input(z.object({ bookingId: z.string().uuid() }))
+  .handler(async ({ input, context }) => {
+    const { supabase, userId } = context;
+
+    // Get technician profile
+    const { data: tecnico } = await supabase
+      .from("tecnicos")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
+
+    if (!tecnico) {
+      throw new Error("Acesso negado: Perfil de técnico não encontrado.");
+    }
+
+    // Fetch and check booking
+    const { data: booking } = await supabase
+      .from("agendamentos_medicoes")
+      .select("id, tecnico_id, status_agendamento")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (!booking) {
+      throw new Error("Agendamento não encontrado.");
+    }
+    if (booking.tecnico_id !== tecnico.id) {
+      throw new Error("Acesso negado: Você não é o técnico alocado para este serviço.");
+    }
+
+    const { error } = await supabase
+      .from("agendamentos_medicoes")
+      .update({
+        status_agendamento: "Em_Execucao",
+      })
+      .eq("id", input.bookingId);
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const recordCheckin = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .input(z.object({
+    bookingId: z.string().uuid(),
+    urlFoto: z.string(),
+    lat: z.number().nullable().optional(),
+    lng: z.number().nullable().optional(),
+  }))
+  .handler(async ({ input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check technician
+    const { data: tecnico } = await supabase
+      .from("tecnicos")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
+
+    if (!tecnico) {
+      throw new Error("Acesso negado: Perfil de técnico não encontrado.");
+    }
+
+    // Insert history record
+    const { error } = await supabase
+      .from("historico_fotos")
+      .insert({
+        agendamento_id: input.bookingId,
+        tipo_foto: "Checkin_QR",
+        url_foto: input.urlFoto,
+        metadata: {
+          latitude: input.lat,
+          longitude: input.lng,
+          horario_checkin: new Date().toISOString(),
+        },
+      });
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const addMoldingCycle = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .input(z.object({
+    bookingId: z.string().uuid(),
+    urlFoto: z.string(),
+    slump: z.number(),
+    numeroCaminhao: z.string(),
+    notaFiscal: z.string(),
+    pecaConcretada: z.string(),
+    cpsMoldados: z.number(),
+  }))
+  .handler(async ({ input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check technician
+    const { data: tecnico } = await supabase
+      .from("tecnicos")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
+
+    if (!tecnico) {
+      throw new Error("Acesso negado: Perfil de técnico não encontrado.");
+    }
+
+    const { error } = await supabase
+      .from("historico_fotos")
+      .insert({
+        agendamento_id: input.bookingId,
+        tipo_foto: "Ciclo_CP",
+        url_foto: input.urlFoto,
+        metadata: {
+          slump: input.slump,
+          numero_caminhao: input.numeroCaminhao,
+          nota_fiscal: input.notaFiscal,
+          peca_concretada: input.pecaConcretada,
+          cps_moldados: input.cpsMoldados,
+          horario_registro: new Date().toISOString(),
+        },
+      });
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const finalizeExecution = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .input(z.object({
+    bookingId: z.string().uuid(),
+    cpsMoldadosReal: z.number(),
+    urlFotoFinal: z.string().nullable().optional(),
+    urlFotoRetorno: z.string().nullable().optional(),
+  }))
+  .handler(async ({ input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check technician
+    const { data: tecnico } = await supabase
+      .from("tecnicos")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
+
+    if (!tecnico) {
+      throw new Error("Acesso negado: Perfil de técnico não encontrado.");
+    }
+
+    // Insert final overview photo if provided
+    if (input.urlFotoFinal) {
+      await supabase
+        .from("historico_fotos")
+        .insert({
+          agendamento_id: input.bookingId,
+          tipo_foto: "Final_Panoramica",
+          url_foto: input.urlFotoFinal,
+          metadata: { horario_registro: new Date().toISOString() },
+        });
+    }
+
+    // Insert return load photo if provided
+    if (input.urlFotoRetorno) {
+      await supabase
+        .from("historico_fotos")
+        .insert({
+          agendamento_id: input.bookingId,
+          tipo_foto: "Retorno_Carga",
+          url_foto: input.urlFotoRetorno,
+          metadata: { horario_registro: new Date().toISOString() },
+        });
+    }
+
+    // Update booking status and actual molded CPs count
+    const { error } = await supabase
+      .from("agendamentos_medicoes")
+      .update({
+        status_agendamento: "Aguardando_Medicao",
+        cps_moldados_real: input.cpsMoldadosReal,
+      })
+      .eq("id", input.bookingId);
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const validateBooking = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .input(z.object({ bookingId: z.string().uuid() }))
+  .handler(async ({ input, context }) => {
+    const { supabase, userId } = context;
+
+    // Allow validation by either admin or the client who created the booking
+    const { data: booking, error: getErr } = await supabase
+      .from("agendamentos_medicoes")
+      .select("id, criado_por")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (getErr || !booking) {
+      throw new Error("Agendamento não encontrado.");
+    }
+
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    const userRoles = (roles || []).map((r) => r.role);
+    const isAdmin = userRoles.includes("admin");
+    const isOwner = booking.criado_por === userId;
+
+    if (!isAdmin && !isOwner) {
+      throw new Error("Acesso negado: Você não tem permissão para validar este agendamento.");
+    }
+
+    // Update status to Validado
+    const { error } = await supabase
+      .from("agendamentos_medicoes")
+      .update({
+        status_agendamento: "Validado",
+      })
+      .eq("id", input.bookingId);
+
+    if (error) throw error;
+    return { success: true };
+  });

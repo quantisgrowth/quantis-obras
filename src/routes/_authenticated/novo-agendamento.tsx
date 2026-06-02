@@ -8,8 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AddressAutocomplete, lookupCEP, PlaceResult } from "@/components/address-autocomplete";
-import { sendWhatsappMessage } from "@/lib/whatsapp.functions";
-import { createBooking } from "@/lib/booking.functions";
 import { toast } from "sonner";
 import {
   Building,
@@ -262,7 +260,7 @@ function NovoAgendamento() {
 
       const { data: listServicos, error: servicosErr } = await supabase
         .from("servicos_catalogo_pub")
-        .select("id, sku, nome_servico, unidade, valor_venda_editavel, equipamentos_inclusos, categoria, ativo, created_at")
+        .select("id, sku, nome_servico, unidade, valor_venda_editavel, categoria, ativo, created_at")
         .eq("ativo", true);
 
       if (servicosErr) {
@@ -462,7 +460,6 @@ function NovoAgendamento() {
       !!novaObraNumero.trim() && !!novaObraBairro.trim() && !!novaObraEstado &&
       !!cnoObra.trim() && !!responsavelObra.trim() && !!cargoResponsavel.trim());
 
-  // ── Submit ────────────────────────────────────────────────────────────
   const handleConfirmBooking = async () => {
     if (!user) {
       toast.error("Você precisa estar logado para continuar.");
@@ -470,6 +467,7 @@ function NovoAgendamento() {
     }
     setLoading(true);
     try {
+      const { createBooking } = await import("@/lib/booking.functions");
       const agendamento = await createBooking({
         data: {
           obra_id: selectedObraId === "nova" ? (obraRascunhoId ?? null) : selectedObraId,
@@ -506,6 +504,7 @@ function NovoAgendamento() {
       // Envia notificação por WhatsApp em segundo plano
       try {
         const phoneToNotify = userProfile?.telefone || "5515999999999";
+        const { sendWhatsappMessage } = await import("@/lib/whatsapp.functions");
         sendWhatsappMessage({
           data: {
             number: phoneToNotify,
