@@ -35,7 +35,7 @@ ALTER TABLE public.empresas_clientes ENABLE ROW LEVEL SECURITY;
 -- --- 2.2 Tecnicos ---
 CREATE TABLE public.tecnicos (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_id uuid,
   nome text NOT NULL,
   rg text,
   cpf text UNIQUE,
