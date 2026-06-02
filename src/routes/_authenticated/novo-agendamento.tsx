@@ -35,12 +35,7 @@ export const Route = createFileRoute("/_authenticated/novo-agendamento")({
 });
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const FALLBACK_SERVICES = [
-  { id: "s1", sku: "GTB-CP-25", nome_servico: "Moldagem e Ensaio de Compressão (fck 25 MPa)", valor_venda_editavel: 120.0, categoria: "Concreto" },
-  { id: "s2", sku: "GTB-CP-30", nome_servico: "Moldagem e Ensaio de Compressão (fck 30 MPa)", valor_venda_editavel: 130.0, categoria: "Concreto" },
-  { id: "s3", sku: "GTB-CP-40", nome_servico: "Moldagem e Ensaio de Compressão (fck 40 MPa)", valor_venda_editavel: 150.0, categoria: "Concreto" },
-  { id: "s4", sku: "GTB-SLUMP", nome_servico: "Ensaio de Abatimento (Slump Test)", valor_venda_editavel: 80.0, categoria: "Concreto" },
-];
+// Serviços carregados exclusivamente do banco de dados (sem fallback com IDs falsos)
 
 const FALLBACK_CIDADES = [
   { id: "c1", nome_cidade: "Sorocaba", mobilizacao_base: 0.0, pedagio_estimado: 0.0 },
@@ -229,7 +224,10 @@ function NovoAgendamento() {
 
       const { data: listServicos } = await supabase.from("servicos_catalogo").select("*").eq("ativo", true);
       if (listServicos && listServicos.length > 0) { setServicos(listServicos); setSelectedServicoId(listServicos[0].id); }
-      else { setServicos(FALLBACK_SERVICES); setSelectedServicoId(FALLBACK_SERVICES[0].id); }
+      else {
+        setServicos([]);
+        setSelectedServicoId("");
+      }
 
       const { data: listCidades } = await supabase.from("cidades_atendidas").select("*");
       setCidades(listCidades && listCidades.length > 0 ? listCidades : FALLBACK_CIDADES);
@@ -351,7 +349,7 @@ function NovoAgendamento() {
   }, [selectedServicoId, servicos]);
 
   // ── Financials ────────────────────────────────────────────────────────
-  const getSelectedService = () => servicos.find((s) => s.id === selectedServicoId) || FALLBACK_SERVICES[0];
+  const getSelectedService = () => servicos.find((s) => s.id === selectedServicoId) || servicos[0] || { nome_servico: "Serviço", valor_venda_editavel: 0 };
 
   const getSelectedObraCity = () => {
     if (selectedObraId === "nova") return novaObraCidade;
