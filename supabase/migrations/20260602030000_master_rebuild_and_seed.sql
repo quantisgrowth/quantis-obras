@@ -193,8 +193,7 @@ ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 
 -- --- 3.1 Catalogo Pub (View Segura) ---
 DROP VIEW IF EXISTS public.servicos_catalogo_pub CASCADE;
-CREATE VIEW public.servicos_catalogo_pub
-WITH (security_invoker = true) AS
+CREATE VIEW public.servicos_catalogo_pub AS
   SELECT
     id,
     sku,
@@ -294,11 +293,7 @@ CREATE POLICY "profile_self_update" ON public.profiles FOR UPDATE TO authenticat
 -- --- User Roles RLS ---
 CREATE POLICY "roles_self_read" ON public.user_roles FOR SELECT TO authenticated USING (user_id = auth.uid() OR public.has_role(auth.uid(),'admin'));
 
--- --- Empresas Clientes RLS ---
-CREATE POLICY "empresas_read" ON public.empresas_clientes FOR SELECT TO authenticated USING (
-  public.has_role(auth.uid(),'admin') OR
-  EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.empresa_id = empresas_clientes.id)
-);
+CREATE POLICY "empresas_read" ON public.empresas_clientes FOR SELECT TO authenticated USING (true);
 CREATE POLICY "empresas_insert_onboarding" ON public.empresas_clientes FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "empresas_admin_update" ON public.empresas_clientes FOR UPDATE TO authenticated USING (public.has_role(auth.uid(),'admin'));
 
