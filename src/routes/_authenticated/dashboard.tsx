@@ -15,6 +15,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import {
+  validateBooking,
+  acceptInvite,
+  rejectInvite,
+  startExecution,
+  recordCheckin,
+  addMoldingCycle,
+  finalizeExecution,
+  registerTechnician
+} from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Painel — Geraltest Brasil" }] }),
@@ -177,7 +187,6 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
     e.stopPropagation(); // Prevent opening detail modal
     if (!confirm("Deseja confirmar a conclusão e validar as medições deste serviço?")) return;
     try {
-      const { validateBooking } = await import("@/lib/booking.functions");
       const res = await validateBooking({ data: { bookingId } });
       if (res.success) {
         toast.success("Medições validadas e serviço concluído com sucesso!");
@@ -699,8 +708,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const handleAccept = async (bookingId: string) => {
     setActionLoading(bookingId);
     try {
-      const { acceptInvite: dynamicAcceptInvite } = await import("@/lib/booking.functions");
-      await dynamicAcceptInvite({ data: { bookingId } });
+      await acceptInvite({ data: { bookingId } });
       toast.success("Agendamento aceito com sucesso!");
       await fetchTecnicoData();
     } catch (err: any) {
@@ -713,8 +721,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const handleReject = async (bookingId: string) => {
     setActionLoading(bookingId);
     try {
-      const { rejectInvite: dynamicRejectInvite } = await import("@/lib/booking.functions");
-      await dynamicRejectInvite({ data: { bookingId } });
+      await rejectInvite({ data: { bookingId } });
       toast.info("Convite recusado.");
       await fetchTecnicoData();
     } catch (err: any) {
@@ -727,8 +734,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const handleStartExecution = async (bookingId: string) => {
     setActionLoading(bookingId);
     try {
-      const { startExecution: dynamicStart } = await import("@/lib/booking.functions");
-      await dynamicStart({ data: { bookingId } });
+      await startExecution({ data: { bookingId } });
       toast.success("Execução iniciada! Registre os ensaios e check-in.");
       await fetchTecnicoData();
     } catch (err: any) {
@@ -758,8 +764,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
       }
 
       const url = await uploadPhotoOrBase64(file);
-      const { recordCheckin: dynamicCheckin } = await import("@/lib/booking.functions");
-      await dynamicCheckin({
+      await recordCheckin({
         data: {
           bookingId: activeExec.id,
           urlFoto: url,
@@ -787,8 +792,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
     setSavingCycle(true);
     try {
       const url = await uploadPhotoOrBase64(cyclePhoto);
-      const { addMoldingCycle: dynamicAddCycle } = await import("@/lib/booking.functions");
-      await dynamicAddCycle({
+      await addMoldingCycle({
         data: {
           bookingId: activeExec.id,
           urlFoto: url,
@@ -839,8 +843,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
         .filter(p => p.tipo_foto === "Ciclo_CP")
         .reduce((sum, p) => sum + (Number(p.metadata?.cps_moldados) || 0), 0);
 
-      const { finalizeExecution: dynamicFinalize } = await import("@/lib/booking.functions");
-      await dynamicFinalize({
+      await finalizeExecution({
         data: {
           bookingId: activeExec.id,
           cpsMoldadosReal: totalCps,
@@ -1252,7 +1255,6 @@ function AdminDash() {
     e.preventDefault();
     setSubmitLoading(true);
     try {
-      const { registerTechnician } = await import("@/lib/booking.functions");
       const res = await registerTechnician({
         data: {
           nome,

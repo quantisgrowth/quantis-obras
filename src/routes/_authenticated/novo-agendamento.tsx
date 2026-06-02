@@ -9,6 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AddressAutocomplete, lookupCEP, PlaceResult } from "@/components/address-autocomplete";
 import { toast } from "sonner";
+import { createBooking } from "@/lib/booking.functions";
+import { sendWhatsappMessage } from "@/lib/whatsapp.functions";
 import {
   Building,
   ChevronLeft,
@@ -608,7 +610,6 @@ function NovoAgendamento() {
     }
     setLoading(true);
     try {
-      const { createBooking } = await import("@/lib/booking.functions");
       const agendamento = await createBooking({
         data: {
           obra_id: selectedObraId === "nova" ? (obraRascunhoId ?? null) : selectedObraId,
@@ -651,7 +652,6 @@ function NovoAgendamento() {
       // Envia notificação por WhatsApp em segundo plano
       try {
         const phoneToNotify = userProfile?.telefone || "5515999999999";
-        const { sendWhatsappMessage } = await import("@/lib/whatsapp.functions");
         const servicesSummary = selectedServices.map(s => {
           return `- *${s.nome_servico}*: ${getServiceQuantityText(s)}`;
         }).join("\n");
