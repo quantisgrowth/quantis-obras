@@ -90,7 +90,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
       try {
         const { data, error } = await supabase
           .from("agendamentos_medicoes")
-          .select("*, obra:obras(*), servico:servicos_catalogo(*)")
+          .select("*, obra:obras(*), servico:servicos_catalogo_pub(*)")
           .eq("criado_por", userId)
           .order("created_at", { ascending: false });
         if (error) throw error;

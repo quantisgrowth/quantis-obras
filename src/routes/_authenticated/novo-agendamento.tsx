@@ -232,7 +232,7 @@ function NovoAgendamento() {
       }
 
       const { data: listServicos, error: servicosErr } = await supabase
-        .from("servicos_catalogo")
+        .from("servicos_catalogo_pub")
         .select("id, sku, nome_servico, unidade, valor_venda_editavel, equipamentos_inclusos, categoria, ativo, created_at")
         .eq("ativo", true);
 

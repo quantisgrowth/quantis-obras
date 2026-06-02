@@ -118,7 +118,7 @@ export const createBooking = createServerFn({ method: "POST" })
     // Load servico — tenta a view pub primeiro, depois a tabela diretamente
     let servicePrice = 0;
     const { data: servicoPub } = await supabase
-      .from("servicos_catalogo")
+      .from("servicos_catalogo_pub")
       .select("id, valor_venda_editavel, ativo")
       .eq("id", data.servico_id)
       .single();
