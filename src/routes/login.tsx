@@ -25,6 +25,25 @@ function LoginPage() {
     if (user) navigate({ to: "/dashboard", replace: true });
   }, [user, navigate]);
 
+  async function handleForgotPassword() {
+    if (!email) {
+      toast.error("Por favor, preencha o e-mail no campo acima antes de clicar em recuperar.");
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + "/reset-password",
+    });
+    setLoading(false);
+    if (error) {
+      toast.error("Erro ao enviar recuperação", { description: error.message });
+      return;
+    }
+    toast.success("E-mail de recuperação enviado!", {
+      description: "Verifique sua caixa de entrada e spam para redefinir sua senha.",
+    });
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -54,7 +73,17 @@ function LoginPage() {
               <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Senha</Label>
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-xs font-semibold text-primary hover:underline cursor-pointer"
+                  disabled={loading}
+                >
+                  Esqueceu a senha?
+                </button>
+              </div>
               <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
