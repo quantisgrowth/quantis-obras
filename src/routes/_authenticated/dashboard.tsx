@@ -5,11 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera,
-  Bell, BarChart3, Clock, FlaskConical, ChevronRight, X,
+  Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { acceptInvite, rejectInvite, processTimeouts } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Painel — Geraltest Brasil" }] }),
@@ -21,7 +23,7 @@ function Dashboard() {
   const { roles, user } = useAuth();
   const role = primaryRole(roles);
   if (role === "admin") return <AdminDash />;
-  if (role === "tecnico") return <TecnicoDash />;
+  if (role === "tecnico") return <TecnicoDash email={user?.email ?? ""} userId={user?.id ?? ""} />;
   return <ClienteDash email={user?.email ?? ""} userId={user?.id ?? ""} />;
 }
 
@@ -292,16 +294,294 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 }
 
 // ── TÉCNICO DASHBOARD ──────────────────────────────────────────────────────
-function TecnicoDash() {
+// ── INVITATION COUNTDOWN ───────────────────────────────────────────────────
+function InvitationCountdown({ convidadoEm, onTimeout }: { convidadoEm: string; onTimeout: () => void }) {
+  const [timeLeftStr, setTimeLeftStr] = useState<string>("");
+
+  useEffect(() => {
+    const targetTime = new Date(convidadoEm).getTime() + 3 * 60 * 60 * 1000;
+
+    const updateTimer = () => {
+      const diff = targetTime - Date.now();
+      if (diff <= 0) {
+        setTimeLeftStr("Expirado");
+        onTimeout();
+        return;
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setTimeLeftStr(
+        `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`
+      );
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [convidadoEm, onTimeout]);
+
   return (
-    <>
-      <SectionTitle title="Painel do Técnico" subtitle="Convites, check-ins e ciclos de moldagem." />
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <PlaceholderCard icon={Bell} title="Convites de serviço" desc="Cronômetro regressivo de aceite configurável." badge="Fase 2" />
+    <span className="font-mono text-xs font-bold text-red-600 bg-red-50 dark:bg-red-950/30 px-2.5 py-1 rounded border border-red-200 dark:border-red-900/50 flex items-center gap-1.5 animate-pulse">
+      <Clock className="h-3.5 w-3.5" />
+      {timeLeftStr}
+    </span>
+  );
+}
+
+// ── TÉCNICO DASHBOARD ──────────────────────────────────────────────────────
+function TecnicoDash({ email, userId }: { email: string; userId: string }) {
+  const [tecnico, setTecnico] = useState<any>(null);
+  const [convites, setConvites] = useState<any[]>([]);
+  const [agenda, setAgenda] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const fetchTecnicoData = async () => {
+    try {
+      // First process timeouts in background
+      await processTimeouts();
+
+      // Get technician profile
+      const { data: tec, error: tecErr } = await supabase
+        .from("tecnicos")
+        .select("*")
+        .eq("user_id", userId)
+        .single();
+
+      if (tecErr || !tec) {
+        console.error("Technician profile not found:", tecErr);
+        setLoading(false);
+        return;
+      }
+      setTecnico(tec);
+
+      // Get invitations
+      const { data: invList, error: invErr } = await supabase
+        .from("agendamentos_medicoes")
+        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*)")
+        .eq("tecnico_id", tec.id)
+        .eq("status_agendamento", "Pendente_Tecnico")
+        .order("created_at", { ascending: false });
+
+      if (!invErr && invList) {
+        setConvites(invList);
+      }
+
+      // Get confirmed schedule
+      const { data: scheduleList, error: schErr } = await supabase
+        .from("agendamentos_medicoes")
+        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*)")
+        .eq("tecnico_id", tec.id)
+        .neq("status_agendamento", "Pendente_Tecnico")
+        .neq("status_agendamento", "Cancelado")
+        .order("data_servico", { ascending: true })
+        .order("horario_na_obra", { ascending: true });
+
+      if (!schErr && scheduleList) {
+        setAgenda(scheduleList);
+      }
+    } catch (err) {
+      console.error("Error fetching technician dashboard data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userId) {
+      fetchTecnicoData();
+    }
+  }, [userId]);
+
+  const handleAccept = async (bookingId: string) => {
+    setActionLoading(bookingId);
+    try {
+      await acceptInvite({ bookingId });
+      toast.success("Agendamento aceito com sucesso!");
+      await fetchTecnicoData();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao aceitar o convite.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReject = async (bookingId: string) => {
+    setActionLoading(bookingId);
+    try {
+      await rejectInvite({ bookingId });
+      toast.info("Convite recusado.");
+      await fetchTecnicoData();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao recusar o convite.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-sm text-muted-foreground py-8 text-center">Carregando painel do técnico…</div>;
+  }
+
+  if (!tecnico) {
+    return (
+      <Card className="border border-dashed border-red-500/30 p-8 text-center bg-red-500/5 max-w-xl mx-auto mt-12">
+        <CardContent className="space-y-4">
+          <AlertTriangle className="h-10 w-10 text-red-500 mx-auto" />
+          <h2 className="text-lg font-bold text-foreground">Perfil Técnico Não Localizado</h2>
+          <p className="text-sm text-muted-foreground">
+            Sua conta está associada ao cargo de técnico, mas não encontramos um cadastro correspondente na tabela de técnicos. Por favor, contate o administrador do sistema.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-8 animate-in fade-in-50 duration-200">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <SectionTitle 
+          title={`Painel do Técnico — ${tecnico.nome}`} 
+          subtitle={`Bem-vindo, ${email}. Gerencie seus convites de serviço e sua escala.`} 
+        />
+        <div className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-emerald-700 dark:text-emerald-500 text-sm font-semibold self-start sm:self-center">
+          ⭐ Score de Avaliação: {tecnico.ranking_score ? Number(tecnico.ranking_score).toFixed(1) : "0.0"}
+        </div>
+      </div>
+
+      {/* ── SEÇÃO: CONVITES PENDENTES ── */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <Bell className="h-5 w-5 text-amber-500" />
+          Convites Pendentes ({convites.length})
+        </h2>
+
+        {convites.length === 0 ? (
+          <Card className="border border-dashed border-border py-10 text-center bg-muted/10">
+            <CardContent className="space-y-2">
+              <Clock className="h-8 w-8 text-muted-foreground/30 mx-auto" />
+              <p className="text-sm text-muted-foreground">Você não possui convites pendentes no momento.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {convites.map((ag) => (
+              <Card key={ag.id} className="border-2 border-amber-500/40 bg-amber-500/5 hover:shadow-md transition-all">
+                <CardHeader className="pb-3 flex flex-row items-start justify-between space-y-0 gap-4">
+                  <div>
+                    <CardTitle className="text-lg font-bold text-foreground">
+                      {ag.obra?.nome_obra || "Obra sem nome"}
+                    </CardTitle>
+                    <CardDescription className="text-xs font-semibold text-amber-600 mt-1">
+                      {ag.servico?.nome_servico || "Controle Tecnológico"}
+                    </CardDescription>
+                  </div>
+                  <InvitationCountdown convidadoEm={ag.convidado_em} onTimeout={fetchTecnicoData} />
+                </CardHeader>
+                <CardContent className="space-y-3 pb-4">
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>
+                      📍 <strong className="text-foreground">Endereço:</strong> {ag.obra?.endereco}, {ag.obra?.numero} - {ag.obra?.bairro}, {ag.obra?.cidade}/{ag.obra?.estado}
+                    </p>
+                    <p>
+                      📅 <strong className="text-foreground">Data/Hora:</strong> {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
+                    </p>
+                    <p>
+                      🧪 <strong className="text-foreground">Quantidade CPs:</strong> {ag.cps_contratados} unidades ({ag.qtd_caminhoes} caminhão/ões)
+                    </p>
+                    {ag.observacoes && (
+                      <p className="italic bg-card p-2 rounded border border-border mt-2">
+                        "{ag.observacoes}"
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <Button 
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                      onClick={() => handleAccept(ag.id)}
+                      disabled={actionLoading !== null}
+                    >
+                      {actionLoading === ag.id ? "Processando..." : "Aceitar Convite"}
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      className="flex-1 border-red-500/30 text-red-600 hover:bg-red-500/10"
+                      onClick={() => handleReject(ag.id)}
+                      disabled={actionLoading !== null}
+                    >
+                      {actionLoading === ag.id ? "Processando..." : "Recusar"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── SEÇÃO: MINHA ESCALA / AGENDA ── */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <CalendarPlus className="h-5 w-5 text-primary" />
+          Minha Escala / Próximos Serviços ({agenda.length})
+        </h2>
+
+        {agenda.length === 0 ? (
+          <Card className="border border-dashed border-border py-12 text-center bg-muted/10">
+            <CardContent className="space-y-2">
+              <ClipboardList className="h-8 w-8 text-muted-foreground/30 mx-auto" />
+              <p className="text-sm text-muted-foreground">Nenhum serviço confirmado na sua agenda por enquanto.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3">
+            {agenda.map((ag) => (
+              <Card key={ag.id} className="border border-border bg-card p-4 hover:shadow-sm transition-all">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra sem nome"}</span>
+                      <Badge variant="outline" className={STATUS_COLORS[ag.status_agendamento] || "bg-muted text-muted-foreground"}>
+                        {STATUS_LABELS[ag.status_agendamento] || ag.status_agendamento}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground font-medium">
+                      {ag.servico?.nome_servico || "Controle Tecnológico"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      📍 {ag.obra?.endereco}, {ag.obra?.numero} - {ag.obra?.bairro}, {ag.obra?.cidade}/{ag.obra?.estado}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span> · CPs: <span className="text-foreground font-medium">{ag.cps_contratados}</span>
+                    </p>
+                    {ag.observacoes && (
+                      <p className="text-xs text-muted-foreground italic">"{ag.observacoes}"</p>
+                    )}
+                  </div>
+
+                  <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-border min-w-[150px]">
+                    <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-muted px-2.5 py-1 rounded">
+                      <Clock className="h-3.5 w-3.5 text-primary" />
+                      {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── CARDS DE SUPORTE DO TÉCNICO ── */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 border-t border-border pt-8">
         <PlaceholderCard icon={MapPin} title="Check-in obra (GPS)" desc="Liberado quando o GPS bater com o raio do endereço." badge="Fase 2" />
         <PlaceholderCard icon={Camera} title="Foto por ciclo" desc="Anexo a cada betonada, em tempo real." badge="Fase 2" />
       </div>
-    </>
+    </div>
   );
 }
 

@@ -38,6 +38,8 @@ export type Database = {
           status_agendamento: Database["public"]["Enums"]["agendamento_status"]
           status_pagamento: Database["public"]["Enums"]["pagamento_status"]
           tecnico_id: string | null
+          convidado_em: string | null
+          tecnicos_rejeitados: string[]
           updated_at: string
           valor_desconto: number
           valor_imposto_12: number
@@ -70,6 +72,8 @@ export type Database = {
           status_agendamento?: Database["public"]["Enums"]["agendamento_status"]
           status_pagamento?: Database["public"]["Enums"]["pagamento_status"]
           tecnico_id?: string | null
+          convidado_em?: string | null
+          tecnicos_rejeitados?: string[]
           updated_at?: string
           valor_desconto?: number
           valor_imposto_12?: number
@@ -102,6 +106,8 @@ export type Database = {
           status_agendamento?: Database["public"]["Enums"]["agendamento_status"]
           status_pagamento?: Database["public"]["Enums"]["pagamento_status"]
           tecnico_id?: string | null
+          convidado_em?: string | null
+          tecnicos_rejeitados?: string[]
           updated_at?: string
           valor_desconto?: number
           valor_imposto_12?: number

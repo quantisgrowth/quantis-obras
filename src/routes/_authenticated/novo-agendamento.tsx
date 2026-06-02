@@ -169,17 +169,46 @@ function NovoAgendamento() {
 
   const horarioFim = calcularHorarioFim(horarioNaObra);
 
-  // Horas extras — começa após 17:00
-  const calcularHorasExtras = (inicio: string): number => {
-    if (!inicio) return 0;
+  // Horas extras — depende se é sábado (após 12h) ou dia de semana (após 17h)
+  const calcularHorasExtras = (inicio: string, data: string): number => {
+    if (!inicio || !data) return 0;
+    const dateObj = new Date(data + "T00:00:00");
+    const dow = dateObj.getDay();
     const [h] = inicio.split(":").map(Number);
     const fimH = h + JORNADA_TOTAL_H;
+
+    if (dow === 6) { // Saturday
+      return Math.max(0, fimH - 12);
+    }
+    // Weekdays
     return Math.max(0, fimH - 17);
   };
 
-  const horasExtras = calcularHorasExtras(horarioNaObra);
-  const valorHoraExtra = 150; // R$ por hora extra (configurável futuramente)
+  const getValorHoraExtra = (data: string): number => {
+    if (!data) return 150;
+    const dateObj = new Date(data + "T00:00:00");
+    const dow = dateObj.getDay();
+    return dow === 6 ? 200 : 150;
+  };
+
+  const horasExtras = calcularHorasExtras(horarioNaObra, dataServico);
+  const valorHoraExtra = getValorHoraExtra(dataServico);
   const custoExtra = horasExtras * valorHoraExtra;
+
+  const isHorarioValido = (data: string, hora: string): boolean => {
+    if (!data || !hora) return true;
+    const dateObj = new Date(data + "T00:00:00");
+    const dow = dateObj.getDay();
+    const [h, m] = hora.split(":").map(Number);
+    const totalMinutes = h * 60 + m;
+
+    if (dow === 0) return false; // Sunday
+    if (dow === 6) { // Saturday
+      return totalMinutes >= 7 * 60 && totalMinutes <= 12 * 60;
+    }
+    // Monday to Friday
+    return totalMinutes >= 7 * 60 && totalMinutes <= 17 * 60;
+  };
 
   // Step 4 — Pagamento
   type FormaPagamento = "Pix" | "Cartao" | "Boleto_14" | "Boleto_28";
@@ -379,14 +408,14 @@ function NovoAgendamento() {
           if (count >= compativeis.length) datasOcupadas.add(data);
         });
 
-        // Gerar array de datas disponíveis (próximos 60 dias, sem finais de semana e datas lotadas)
+        // Gerar array de datas disponíveis (próximos 60 dias, sem domingos e datas lotadas, respeitando 48h)
         const datasOk: string[] = [];
         const cursor = new Date(hoje);
-        cursor.setDate(cursor.getDate() + 1); // começa amanhã
+        cursor.setDate(cursor.getDate() + 2); // respeita antecedência mínima de 48h
         while (cursor <= limite) {
           const dow = cursor.getDay();
           const iso = cursor.toISOString().split("T")[0];
-          if (dow !== 0 && dow !== 6 && !datasOcupadas.has(iso)) {
+          if (dow !== 0 && !datasOcupadas.has(iso)) {
             datasOk.push(iso);
           }
           cursor.setDate(cursor.getDate() + 1);
@@ -976,7 +1005,7 @@ function NovoAgendamento() {
                     type="date"
                     required
                     value={dataServico}
-                    min={new Date(Date.now() + 86400000).toISOString().split("T")[0]}
+                    min={new Date(Date.now() + 2 * 86400000).toISOString().split("T")[0]}
                     onChange={(e) => {
                       const val = e.target.value;
                       if (datasDisponiveis.length > 0 && !datasDisponiveis.includes(val)) {
@@ -1010,9 +1039,14 @@ function NovoAgendamento() {
                     style={{ fontSize: "1.1rem", padding: "0.6rem 0.75rem", minHeight: "3rem" }}
                     className="flex w-full rounded-md border border-input bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   />
+                  {horarioNaObra && !isHorarioValido(dataServico, horarioNaObra) && (
+                    <p className="text-xs text-red-500 font-semibold mt-1">
+                      ⚠️ Horário de chegada inválido. Permitido das 07:00 às 17:00 (Seg-Sex) e das 07:00 às 12:00 (Sáb).
+                    </p>
+                  )}
 
                   {/* Jornada calculada */}
-                  {horarioNaObra && (
+                  {horarioNaObra && isHorarioValido(dataServico, horarioNaObra) && (
                     <div className="rounded-lg bg-muted/40 border border-border p-3 space-y-1.5 mt-1">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Clock3 className="h-3.5 w-3.5 text-primary" />
@@ -1028,7 +1062,7 @@ function NovoAgendamento() {
                       {horasExtras > 0 && (
                         <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5 mt-2">
                           <p className="text-xs font-semibold text-amber-700">
-                            ⚠️ {horasExtras}h extra{horasExtras > 1 ? "s" : ""} após 17:00
+                            ⚠️ {horasExtras}h extra{horasExtras > 1 ? "s" : ""} após {dataServico && new Date(dataServico + "T00:00:00").getDay() === 6 ? "12:00" : "17:00"}
                           </p>
                           <p className="text-xs text-amber-600 mt-0.5">
                             Custo adicional: <strong>R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
@@ -1056,7 +1090,7 @@ function NovoAgendamento() {
 
               <div className="flex justify-between">
                 <Button variant="ghost" onClick={() => setStep(2)}><ChevronLeft className="mr-2 h-4 w-4" /> Voltar</Button>
-                <Button onClick={() => setStep(4)} disabled={!dataServico || !horarioNaObra}>
+                <Button onClick={() => setStep(4)} disabled={!dataServico || !horarioNaObra || !isHorarioValido(dataServico, horarioNaObra)}>
                   Próximo Passo <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -1101,7 +1135,7 @@ function NovoAgendamento() {
                 )}
                 {custoExtra > 0 && (
                   <div className="flex justify-between text-sm text-amber-600">
-                    <span>Horas Extras ({horasExtras}h após 17:00 × R$ {valorHoraExtra}/h)</span>
+                    <span>Horas Extras ({horasExtras}h após {dataServico && new Date(dataServico + "T00:00:00").getDay() === 6 ? "12:00" : "17:00"} × R$ {valorHoraExtra}/h)</span>
                     <span className="font-semibold">+ R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
