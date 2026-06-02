@@ -222,7 +222,7 @@ function NovoAgendamento() {
         if (listObras && listObras.length > 0) { setObras(listObras); setSelectedObraId(listObras[0].id); }
       }
 
-      const { data: listServicos } = await supabase.from("servicos_catalogo_pub").select("*").eq("ativo", true);
+      const { data: listServicos } = await supabase.from("servicos_catalogo").select("id, sku, nome_servico, unidade, valor_venda_editavel, equipamentos_inclusos, categoria, ativo, created_at").eq("ativo", true);
       if (listServicos && listServicos.length > 0) { setServicos(listServicos); setSelectedServicoId(listServicos[0].id); }
       else {
         setServicos([]);
