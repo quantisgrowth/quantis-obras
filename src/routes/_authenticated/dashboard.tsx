@@ -11,7 +11,6 @@ import {
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { acceptInvite, rejectInvite, processTimeouts } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Painel — Geraltest Brasil" }] }),
@@ -295,16 +294,20 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 
 // ── TÉCNICO DASHBOARD ──────────────────────────────────────────────────────
 // ── INVITATION COUNTDOWN ───────────────────────────────────────────────────
-function InvitationCountdown({ convidadoEm, onTimeout }: { convidadoEm: string; onTimeout: () => void }) {
+function InvitationCountdown({ convidadoEm, onTimeout }: { convidadoEm: string | null; onTimeout: () => void }) {
   const [timeLeftStr, setTimeLeftStr] = useState<string>("");
+  const [hasTimedOut, setHasTimedOut] = useState(false);
 
   useEffect(() => {
+    if (!convidadoEm || hasTimedOut) return;
+
     const targetTime = new Date(convidadoEm).getTime() + 3 * 60 * 60 * 1000;
 
     const updateTimer = () => {
       const diff = targetTime - Date.now();
       if (diff <= 0) {
         setTimeLeftStr("Expirado");
+        setHasTimedOut(true);
         onTimeout();
         return;
       }
@@ -321,7 +324,15 @@ function InvitationCountdown({ convidadoEm, onTimeout }: { convidadoEm: string; 
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [convidadoEm, onTimeout]);
+  }, [convidadoEm, onTimeout, hasTimedOut]);
+
+  if (!convidadoEm) {
+    return (
+      <span className="font-mono text-xs font-bold text-muted-foreground bg-muted px-2.5 py-1 rounded border border-border">
+        Sem convite ativo
+      </span>
+    );
+  }
 
   return (
     <span className="font-mono text-xs font-bold text-red-600 bg-red-50 dark:bg-red-950/30 px-2.5 py-1 rounded border border-red-200 dark:border-red-900/50 flex items-center gap-1.5 animate-pulse">
@@ -341,8 +352,9 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
 
   const fetchTecnicoData = async () => {
     try {
-      // First process timeouts in background
-      await processTimeouts();
+      // Dynamic import to avoid client-side bundling of server functions middleware
+      const { processTimeouts: dynamicProcessTimeouts } = await import("@/lib/booking.functions");
+      await dynamicProcessTimeouts();
 
       // Get technician profile
       const { data: tec, error: tecErr } = await supabase
@@ -399,7 +411,8 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const handleAccept = async (bookingId: string) => {
     setActionLoading(bookingId);
     try {
-      await acceptInvite({ bookingId });
+      const { acceptInvite: dynamicAcceptInvite } = await import("@/lib/booking.functions");
+      await dynamicAcceptInvite({ bookingId });
       toast.success("Agendamento aceito com sucesso!");
       await fetchTecnicoData();
     } catch (err: any) {
@@ -412,7 +425,8 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const handleReject = async (bookingId: string) => {
     setActionLoading(bookingId);
     try {
-      await rejectInvite({ bookingId });
+      const { rejectInvite: dynamicRejectInvite } = await import("@/lib/booking.functions");
+      await dynamicRejectInvite({ bookingId });
       toast.info("Convite recusado.");
       await fetchTecnicoData();
     } catch (err: any) {
