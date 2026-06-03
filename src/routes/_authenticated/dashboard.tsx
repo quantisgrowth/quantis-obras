@@ -1737,7 +1737,11 @@ function AdminDash() {
         }
       });
       if (res.success) {
-        toast.success("Administrador cadastrado com sucesso!");
+        if (res.isNewUser === false) {
+          toast.success("Usuário existente promovido a administrador com sucesso!");
+        } else {
+          toast.success("Administrador cadastrado com sucesso!");
+        }
         setAdminDialogOpen(false);
         // Reset form
         setAdminNome("");
@@ -2013,7 +2017,7 @@ function AdminDash() {
 
               {/* Aba Cadastro e Habilidades */}
               <TabsContent value="cadastro" className="space-y-4">
-                <div className="space-y-4">
+                <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label htmlFor="edit-nome">Nome Completo</Label>
@@ -2135,7 +2139,7 @@ function AdminDash() {
                       </>
                     )}
                   </div>
-                </div>
+                </form>
               </TabsContent>
 
               {/* Aba Documentos do Técnico */}

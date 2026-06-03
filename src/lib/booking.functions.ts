@@ -875,34 +875,68 @@ export const registerAdmin = createServerFn({ method: "POST" })
     // Import supabaseAdmin dynamically
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Create user in Auth
-    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-      email: input.email,
-      password: input.password,
-      email_confirm: true,
-      user_metadata: {
-        nome_completo: input.nome,
-        telefone: input.telefone || "",
-      },
+    // Check if user already exists
+    let userIdToUse: string | null = null;
+    let isNewUser = false;
+
+    const { data: listData, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000
     });
 
-    if (authErr || !authData.user) {
-      throw new Error("Erro ao criar usuário administrativo: " + (authErr?.message || "Erro desconhecido"));
+    if (listErr) {
+      console.error("Error listing users to check existence:", listErr);
     }
 
-    const newUserId = authData.user.id;
+    const existingUser = listData?.users?.find(
+      (u) => u.email?.toLowerCase() === input.email.toLowerCase()
+    );
+
+    if (existingUser) {
+      userIdToUse = existingUser.id;
+    } else {
+      // Create user in Auth
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: input.email,
+        password: input.password,
+        email_confirm: true,
+        user_metadata: {
+          nome_completo: input.nome,
+          telefone: input.telefone || "",
+        },
+      });
+
+      if (authErr || !authData.user) {
+        throw new Error("Erro ao criar usuário administrativo: " + (authErr?.message || "Erro desconhecido"));
+      }
+      userIdToUse = authData.user.id;
+      isNewUser = true;
+    }
 
     // Update user_roles to 'admin'
     const { error: roleUpdateErr } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: newUserId, role: "admin" }, { onConflict: "user_id" });
+      .upsert({ user_id: userIdToUse, role: "admin" }, { onConflict: "user_id,role" });
 
     if (roleUpdateErr) {
       console.error("Error setting admin role:", roleUpdateErr);
       throw new Error("Erro ao associar permissão administrativa.");
     }
 
-    return { success: true, adminId: newUserId };
+    // Upsert profile info
+    const { error: profileErr } = await supabaseAdmin
+      .from("profiles")
+      .upsert({
+        id: userIdToUse,
+        nome_completo: input.nome,
+        telefone: input.telefone || ""
+      }, { onConflict: "id" });
+
+    if (profileErr) {
+      console.error("Error updating profile:", profileErr);
+    }
+
+    return { success: true, adminId: userIdToUse, isNewUser };
   });
 
 export const startExecution = createServerFn({ method: "POST" })
