@@ -24,44 +24,49 @@ $$;
 DO $$
 DECLARE
   new_uid uuid := gen_random_uuid();
+  user_exists boolean;
 BEGIN
-  INSERT INTO auth.users (
-    instance_id,
-    id,
-    aud,
-    role,
-    email,
-    encrypted_password,
-    email_confirmed_at,
-    last_sign_in_at,
-    raw_app_meta_data,
-    raw_user_meta_data,
-    created_at,
-    updated_at,
-    confirmation_token,
-    email_change,
-    email_change_token_new,
-    recovery_token
-  )
-  VALUES (
-    '00000000-0000-0000-0000-000000000000',
-    new_uid,
-    'authenticated',
-    'authenticated',
-    'felipe@quantisgrowth.com.br',
-    crypt('Guiarados140315@', gen_salt('bf')),
-    now(),
-    now(),
-    '{"provider":"email","providers":["email"]}',
-    '{"nome_completo":"Felipe Medeiros","telefone":""}',
-    now(),
-    now(),
-    '',
-    '',
-    '',
-    ''
-  )
-  ON CONFLICT (email) DO NOTHING;
+  -- Check if user already exists
+  SELECT EXISTS (SELECT 1 FROM auth.users WHERE email = 'felipe@quantisgrowth.com.br') INTO user_exists;
+
+  IF NOT user_exists THEN
+    INSERT INTO auth.users (
+      instance_id,
+      id,
+      aud,
+      role,
+      email,
+      encrypted_password,
+      email_confirmed_at,
+      last_sign_in_at,
+      raw_app_meta_data,
+      raw_user_meta_data,
+      created_at,
+      updated_at,
+      confirmation_token,
+      email_change,
+      email_change_token_new,
+      recovery_token
+    )
+    VALUES (
+      '00000000-0000-0000-0000-000000000000',
+      new_uid,
+      'authenticated',
+      'authenticated',
+      'felipe@quantisgrowth.com.br',
+      crypt('Guiarados140315@', gen_salt('bf')),
+      now(),
+      now(),
+      '{"provider":"email","providers":["email"]}',
+      '{"nome_completo":"Felipe Medeiros","telefone":""}',
+      now(),
+      now(),
+      '',
+      '',
+      '',
+      ''
+    );
+  END IF;
 
   -- Ensure that if user already exists or was just created, they have the admin role in user_roles
   INSERT INTO public.user_roles (user_id, role)
