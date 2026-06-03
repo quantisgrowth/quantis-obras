@@ -276,6 +276,77 @@ export type Database = {
           },
         ]
       }
+      documentos_tecnicos: {
+        Row: {
+          id: string
+          tecnico_id: string
+          nome_documento: string
+          url_documento: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tecnico_id: string
+          nome_documento: string
+          url_documento: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tecnico_id?: string
+          nome_documento?: string
+          url_documento?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documentos_tecnicos_tecnico_id_fkey"
+            columns: ["tecnico_id"]
+            isOneToOne: false
+            referencedRelation: "tecnicos"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      habilidades_tecnicos: {
+        Row: {
+          id: string
+          tecnico_id: string
+          servico_id: string
+          nivel_conhecimento: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tecnico_id: string
+          servico_id: string
+          nivel_conhecimento: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tecnico_id?: string
+          servico_id?: string
+          nivel_conhecimento?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habilidades_tecnicos_tecnico_id_fkey"
+            columns: ["tecnico_id"]
+            isOneToOne: false
+            referencedRelation: "tecnicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "habilidades_tecnicos_servico_id_fkey"
+            columns: ["servico_id"]
+            isOneToOne: false
+            referencedRelation: "servicos_catalogo"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       obras: {
         Row: {
           bairro: string | null

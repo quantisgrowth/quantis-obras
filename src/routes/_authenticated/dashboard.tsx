@@ -24,7 +24,10 @@ import {
   addMoldingCycle,
   finalizeExecution,
   registerTechnician,
-  registerAdmin
+  registerAdmin,
+  updateTechnician,
+  addTechnicianDocument,
+  deleteTechnicianDocument
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -136,11 +139,19 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const [bookingPhotos, setBookingPhotos] = useState<any[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
 
+  // Client view technician profile state
+  const [clientViewTecnico, setClientViewTecnico] = useState<any | null>(null);
+  const [clientTecDocs, setClientTecDocs] = useState<any[]>([]);
+  const [clientTecSkills, setClientTecSkills] = useState<any[]>([]);
+  const [loadingClientTec, setLoadingClientTec] = useState(false);
+  const [clientPreviewUrl, setClientPreviewUrl] = useState<string | null>(null);
+  const [clientPreviewType, setClientPreviewType] = useState<string | null>(null);
+
   const fetchBookings = async () => {
     try {
       const { data, error } = await supabase
         .from("agendamentos_medicoes")
-        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*)")
+        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos(*)")
         .eq("criado_por", userId)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -149,6 +160,48 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
       console.error("Error fetching bookings:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!clientViewTecnico) {
+      setClientTecDocs([]);
+      setClientTecSkills([]);
+      setClientPreviewUrl(null);
+      setClientPreviewType(null);
+      return;
+    }
+    async function fetchDocsAndSkills() {
+      setLoadingClientTec(true);
+      try {
+        const [docsRes, skillsRes] = await Promise.all([
+          supabase.from("documentos_tecnicos").select("*").eq("tecnico_id", clientViewTecnico.id),
+          supabase.from("habilidades_tecnicos").select("*, servico:servicos_catalogo_pub(*)").eq("tecnico_id", clientViewTecnico.id)
+        ]);
+        if (!docsRes.error && docsRes.data) setClientTecDocs(docsRes.data);
+        if (!skillsRes.error && skillsRes.data) setClientTecSkills(skillsRes.data);
+      } catch (err) {
+        console.error("Error loading technician docs/skills for client:", err);
+      } finally {
+        setLoadingClientTec(false);
+      }
+    }
+    fetchDocsAndSkills();
+  }, [clientViewTecnico]);
+
+  const handleSelectClientPreview = (url: string, name: string) => {
+    setClientPreviewUrl(url);
+    const lowerUrl = url.toLowerCase();
+    const lowerName = name.toLowerCase();
+    if (lowerUrl.includes(".pdf") || lowerName.includes(".pdf") || url.startsWith("data:application/pdf")) {
+      setClientPreviewType("pdf");
+    } else if (
+      lowerUrl.includes(".png") || lowerUrl.includes(".jpg") || lowerUrl.includes(".jpeg") || lowerUrl.includes(".webp") ||
+      lowerUrl.startsWith("data:image/") || lowerName.includes(".png") || lowerName.includes(".jpg") || lowerName.includes(".jpeg") || lowerName.includes(".webp")
+    ) {
+      setClientPreviewType("image");
+    } else {
+      setClientPreviewType("other");
     }
   };
 
@@ -445,6 +498,27 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                 </div>
               </div>
 
+              {selectedBooking.tecnico && (
+                <div className="bg-indigo-500/5 border border-indigo-500/10 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-in fade-in duration-200">
+                  <div>
+                    <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider block">Técnico Alocado</span>
+                    <h5 className="font-bold text-foreground text-sm">{selectedBooking.tecnico.nome}</h5>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Avaliação: <span className="font-bold text-amber-500">{selectedBooking.tecnico.ranking_score ? Number(selectedBooking.tecnico.ranking_score).toFixed(1) : "5.0"} ⭐</span>
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                    className="border-indigo-500/30 text-indigo-600 hover:bg-indigo-500/10 font-bold gap-1.5"
+                    onClick={() => setClientViewTecnico(selectedBooking.tecnico)}
+                  >
+                    <Eye className="h-4 w-4" /> Perfil e Documentos
+                  </Button>
+                </div>
+              )}
+
               {/* Histórico/Timeline */}
               <div className="space-y-4">
                 <h4 className="text-sm font-bold text-foreground flex items-center gap-2 border-b pb-2 border-border">
@@ -535,6 +609,138 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                     })}
                   </div>
                 )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Visualizador de Técnico para o Cliente */}
+      {clientViewTecnico && (
+        <Dialog open={!!clientViewTecnico} onOpenChange={(open) => { if (!open) setClientViewTecnico(null); }}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto border border-border bg-card">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                <Users className="h-5 w-5 text-indigo-500" />
+                Perfil do Técnico: {clientViewTecnico.nome}
+              </DialogTitle>
+              <DialogDescription>
+                Credenciais, habilidades catalogadas e certificados do profissional alocado.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              {/* Informações e Habilidades */}
+              <div className="space-y-4">
+                <div className="bg-muted/30 border border-border p-4 rounded-lg space-y-2">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Dados Profissionais</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground block font-medium">Avaliação Geral</span>
+                      <span className="font-bold text-amber-500 flex items-center gap-1">
+                        {clientViewTecnico.ranking_score ? Number(clientViewTecnico.ranking_score).toFixed(1) : "5.0"} ⭐
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block font-medium">CPF</span>
+                      <span className="font-mono font-semibold text-foreground">
+                        {clientViewTecnico.cpf ? `${clientViewTecnico.cpf.substring(0, 3)}.***.***-**` : "Não informado"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-sm font-bold text-foreground border-b pb-2">Matriz de Habilidades</h4>
+                  {loadingClientTec ? (
+                    <p className="text-xs text-muted-foreground">Carregando qualificações...</p>
+                  ) : clientTecSkills.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">Nenhuma habilidade cadastrada para este técnico.</p>
+                  ) : (
+                    <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                      {clientTecSkills.map(sk => (
+                        <div key={sk.id} className="space-y-1 bg-muted/10 p-2 rounded border border-border/50">
+                          <div className="flex justify-between text-xs">
+                            <span className="font-semibold text-foreground">{sk.servico?.nome_servico || "Serviço"}</span>
+                            <span className="font-bold text-indigo-500">{sk.nivel_conhecimento}/10</span>
+                          </div>
+                          {/* Knowledge bar visual representation */}
+                          <div className="w-full bg-muted-foreground/20 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className="bg-indigo-500 h-1.5 rounded-full" 
+                              style={{ width: `${sk.nivel_conhecimento * 10}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Documentos e Visualizador */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-foreground border-b pb-2">Documentos e Certificados (Visualização Apenas)</h4>
+                {loadingClientTec ? (
+                  <p className="text-xs text-muted-foreground">Carregando documentos...</p>
+                ) : clientTecDocs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-4">Nenhum certificado ou documento disponível.</p>
+                ) : (
+                  <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                    {clientTecDocs.map(doc => (
+                      <button
+                        key={doc.id}
+                        type="button"
+                        onClick={() => handleSelectClientPreview(doc.url_documento, doc.nome_documento)}
+                        className="w-full flex items-center gap-2 p-2.5 rounded-lg border bg-card hover:bg-muted/10 transition-colors text-left text-xs font-semibold text-foreground"
+                      >
+                        <FileText className="h-4 w-4 text-indigo-500 shrink-0" />
+                        <span className="truncate flex-1">{doc.nome_documento}</span>
+                        <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Secure Preview Container */}
+                <div className="space-y-2">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Visualizador Seguro</span>
+                  {clientPreviewUrl ? (
+                    <div 
+                      className="relative border border-border rounded-lg bg-zinc-950 overflow-hidden w-full h-[220px] flex items-center justify-center select-none"
+                      onContextMenu={(e) => e.preventDefault()}
+                      onDragStart={(e) => e.preventDefault()}
+                    >
+                      {clientPreviewType === "image" && (
+                        <img
+                          src={clientPreviewUrl}
+                          alt="Documento"
+                          className="max-w-full max-h-full object-contain pointer-events-none"
+                        />
+                      )}
+                      {clientPreviewType === "pdf" && (
+                        <iframe
+                          src={`${clientPreviewUrl}#toolbar=0&navpanes=0&statusbar=0&view=FitH`}
+                          className="w-full h-full border-none pointer-events-none"
+                          title="PDF Preview"
+                        />
+                      )}
+                      {clientPreviewType === "other" && (
+                        <div className="text-center p-4">
+                          <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                          <p className="text-xs text-foreground font-semibold">Visualização indisponível</p>
+                        </div>
+                      )}
+                      {/* Interaction Blocker Overlay */}
+                      <div className="absolute inset-0 bg-transparent z-10" />
+                    </div>
+                  ) : (
+                    <div className="border border-dashed border-border rounded-lg h-[220px] flex flex-col items-center justify-center text-center p-4 bg-muted/5">
+                      <Eye className="h-7 w-7 text-muted-foreground/30 mb-2" />
+                      <p className="text-xs text-muted-foreground">Selecione um documento da lista para abrir a pré-visualização.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </DialogContent>
@@ -1230,7 +1436,8 @@ function AdminDash() {
   const [telefone, setTelefone] = useState("");
   const [cpf, setCpf] = useState("");
   const [rg, setRg] = useState("");
-  const [certificacoes, setCertificacoes] = useState("Moldagem de CPs, Ensaio de Concreto");
+  const [availableServices, setAvailableServices] = useState<any[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<{ servico_id: string; nivel: number }[]>([]);
   const [submitLoading, setSubmitLoading] = useState(false);
 
   // Form states for admin creation
@@ -1240,6 +1447,28 @@ function AdminDash() {
   const [adminPassword, setAdminPassword] = useState("");
   const [adminTelefone, setAdminTelefone] = useState("");
   const [adminSubmitLoading, setAdminSubmitLoading] = useState(false);
+
+  // Selected technician details / edit states
+  const [selectedTecnico, setSelectedTecnico] = useState<any | null>(null);
+  const [tecnicoDocs, setTecnicoDocs] = useState<any[]>([]);
+  const [tecnicoSkills, setTecnicoSkills] = useState<any[]>([]);
+  const [loadingDocsAndSkills, setLoadingDocsAndSkills] = useState(false);
+
+  const [editNome, setEditNome] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+  const [editRankingScore, setEditRankingScore] = useState(5);
+  const [editCpf, setEditCpf] = useState("");
+  const [editRg, setEditRg] = useState("");
+  const [editSkills, setEditSkills] = useState<{ servico_id: string; nivel: number }[]>([]);
+  const [editSubmitLoading, setEditSubmitLoading] = useState(false);
+
+  // Document upload states
+  const [documentName, setDocumentName] = useState("");
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+
+  // Preview state
+  const [adminPreviewUrl, setAdminPreviewUrl] = useState<string | null>(null);
+  const [adminPreviewType, setAdminPreviewType] = useState<string | null>(null);
 
   const fetchTecnicos = async () => {
     try {
@@ -1256,9 +1485,110 @@ function AdminDash() {
     }
   };
 
+  const fetchServices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("servicos_catalogo_pub")
+        .select("*")
+        .eq("ativo", true)
+        .order("nome_servico", { ascending: true });
+      if (error) throw error;
+      if (data) setAvailableServices(data);
+    } catch (err) {
+      console.error("Error fetching services:", err);
+    }
+  };
+
+  const fetchTecnicoDocsAndSkills = async (tecId: string) => {
+    setLoadingDocsAndSkills(true);
+    try {
+      const [docsRes, skillsRes] = await Promise.all([
+        supabase.from("documentos_tecnicos").select("*").eq("tecnico_id", tecId),
+        supabase.from("habilidades_tecnicos").select("*, servico:servicos_catalogo_pub(*)").eq("tecnico_id", tecId)
+      ]);
+      if (docsRes.error) throw docsRes.error;
+      if (skillsRes.error) throw skillsRes.error;
+      setTecnicoDocs(docsRes.data || []);
+      setTecnicoSkills(skillsRes.data || []);
+      setEditSkills((skillsRes.data || []).map((s: any) => ({
+        servico_id: s.servico_id,
+        nivel: s.nivel_conhecimento
+      })));
+    } catch (err) {
+      console.error("Error fetching docs/skills:", err);
+      toast.error("Erro ao carregar documentos e habilidades.");
+    } finally {
+      setLoadingDocsAndSkills(false);
+    }
+  };
+
   useEffect(() => {
     fetchTecnicos();
+    fetchServices();
   }, []);
+
+  useEffect(() => {
+    if (selectedTecnico) {
+      fetchTecnicoDocsAndSkills(selectedTecnico.id);
+      setEditNome(selectedTecnico.nome);
+      setEditStatus(selectedTecnico.status);
+      setEditRankingScore(selectedTecnico.ranking_score || 5);
+      setEditCpf(selectedTecnico.cpf || "");
+      setEditRg(selectedTecnico.rg || "");
+      setAdminPreviewUrl(null);
+      setAdminPreviewType(null);
+    } else {
+      setTecnicoDocs([]);
+      setTecnicoSkills([]);
+      setEditSkills([]);
+      setAdminPreviewUrl(null);
+      setAdminPreviewType(null);
+    }
+  }, [selectedTecnico]);
+
+  const toggleSkill = (serviceId: string) => {
+    setSelectedSkills(prev => {
+      const exists = prev.find(s => s.servico_id === serviceId);
+      if (exists) return prev.filter(s => s.servico_id !== serviceId);
+      return [...prev, { servico_id: serviceId, nivel: 5 }];
+    });
+  };
+
+  const updateSkillLevel = (serviceId: string, level: number) => {
+    setSelectedSkills(prev =>
+      prev.map(s => s.servico_id === serviceId ? { ...s, nivel: level } : s)
+    );
+  };
+
+  const toggleEditSkill = (serviceId: string) => {
+    setEditSkills(prev => {
+      const exists = prev.find(s => s.servico_id === serviceId);
+      if (exists) return prev.filter(s => s.servico_id !== serviceId);
+      return [...prev, { servico_id: serviceId, nivel: 5 }];
+    });
+  };
+
+  const updateEditSkillLevel = (serviceId: string, level: number) => {
+    setEditSkills(prev =>
+      prev.map(s => s.servico_id === serviceId ? { ...s, nivel: level } : s)
+    );
+  };
+
+  const handleSelectAdminPreview = (url: string, name: string) => {
+    setAdminPreviewUrl(url);
+    const lowerUrl = url.toLowerCase();
+    const lowerName = name.toLowerCase();
+    if (lowerUrl.includes(".pdf") || lowerName.includes(".pdf") || url.startsWith("data:application/pdf")) {
+      setAdminPreviewType("pdf");
+    } else if (
+      lowerUrl.includes(".png") || lowerUrl.includes(".jpg") || lowerUrl.includes(".jpeg") || lowerUrl.includes(".webp") ||
+      lowerUrl.startsWith("data:image/") || lowerName.includes(".png") || lowerName.includes(".jpg") || lowerName.includes(".jpeg") || lowerName.includes(".webp")
+    ) {
+      setAdminPreviewType("image");
+    } else {
+      setAdminPreviewType("other");
+    }
+  };
 
   const handleCreateTechnician = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1272,7 +1602,7 @@ function AdminDash() {
           telefone,
           cpf,
           rg,
-          certificacoes,
+          habilidades: selectedSkills,
         }
       });
       if (res.success) {
@@ -1285,7 +1615,7 @@ function AdminDash() {
         setTelefone("");
         setCpf("");
         setRg("");
-        setCertificacoes("Moldagem de CPs, Ensaio de Concreto");
+        setSelectedSkills([]);
         // Refetch list
         fetchTecnicos();
       }
@@ -1295,6 +1625,90 @@ function AdminDash() {
       setSubmitLoading(false);
     }
   };
+
+  const handleUpdateTechnician = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTecnico) return;
+    setEditSubmitLoading(true);
+    try {
+      const res = await updateTechnician({
+        data: {
+          id: selectedTecnico.id,
+          nome: editNome,
+          status: editStatus,
+          ranking_score: Number(editRankingScore),
+          cpf: editCpf || null,
+          rg: editRg || null,
+          habilidades: editSkills
+        }
+      });
+      if (res.success) {
+        toast.success("Técnico atualizado com sucesso!");
+        fetchTecnicos();
+        const updated = {
+          ...selectedTecnico,
+          nome: editNome,
+          status: editStatus,
+          ranking_score: Number(editRankingScore),
+          cpf: editCpf || null,
+          rg: editRg || null
+        };
+        setSelectedTecnico(updated);
+        fetchTecnicoDocsAndSkills(selectedTecnico.id);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao atualizar técnico.");
+    } finally {
+      setEditSubmitLoading(false);
+    }
+  };
+
+  const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedTecnico) return;
+
+    const docName = documentName.trim() || file.name.split(".")[0];
+    setUploadingDoc(true);
+    try {
+      const fileUrl = await uploadPhotoOrBase64(file);
+      const res = await addTechnicianDocument({
+        data: {
+          tecnicoId: selectedTecnico.id,
+          nomeDocumento: docName,
+          urlDocumento: fileUrl
+        }
+      });
+      if (res.success) {
+        toast.success("Documento adicionado com sucesso!");
+        setDocumentName("");
+        fetchTecnicoDocsAndSkills(selectedTecnico.id);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao fazer upload do documento.");
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId: string) => {
+    if (!confirm("Deseja realmente excluir este documento?")) return;
+    try {
+      const res = await deleteTechnicianDocument({
+        data: {
+          documentId: docId
+        }
+      });
+      if (res.success) {
+        toast.success("Documento excluído com sucesso!");
+        if (selectedTecnico) {
+          fetchTecnicoDocsAndSkills(selectedTecnico.id);
+        }
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao excluir documento.");
+    }
+  };
+
   const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminSubmitLoading(true);
@@ -1364,14 +1778,52 @@ function AdminDash() {
                     <Input id="cpf" value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="123.456.789-00" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="rg">RG</Label>
-                    <Input id="rg" value={rg} onChange={(e) => setRg(e.target.value)} placeholder="12.345.678-9" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="certificacoes">Certificações</Label>
-                    <Input id="certificacoes" value={certificacoes} onChange={(e) => setCertificacoes(e.target.value)} placeholder="Ex: Moldagem de CPs, NBR 5738" />
+                <div className="space-y-1">
+                  <Label htmlFor="rg">RG</Label>
+                  <Input id="rg" value={rg} onChange={(e) => setRg(e.target.value)} placeholder="12.345.678-9" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Habilidades e Serviços (Nível de Conhecimento 1 a 10)</Label>
+                  <div className="border border-border rounded-lg p-3 space-y-3 max-h-48 overflow-y-auto bg-muted/20">
+                    {availableServices.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Carregando serviços disponíveis...</p>
+                    ) : (
+                      availableServices.map(svc => {
+                        const skill = selectedSkills.find(s => s.servico_id === svc.id);
+                        const isChecked = !!skill;
+                        return (
+                          <div key={svc.id} className="space-y-2 border-b border-border/50 pb-2 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id={`svc-reg-${svc.id}`}
+                                checked={isChecked}
+                                onChange={() => toggleSkill(svc.id)}
+                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-background"
+                              />
+                              <Label htmlFor={`svc-reg-${svc.id}`} className="text-xs font-semibold cursor-pointer text-foreground">
+                                {svc.nome_servico}
+                              </Label>
+                            </div>
+                            {isChecked && (
+                              <div className="flex items-center gap-3 pl-6">
+                                <span className="text-[10px] font-medium text-muted-foreground w-20">
+                                  Nível: <span className="font-bold text-primary">{skill.nivel}</span>/10
+                                </span>
+                                <input
+                                  type="range"
+                                  min="1"
+                                  max="10"
+                                  value={skill.nivel}
+                                  onChange={(e) => updateSkillLevel(svc.id, parseInt(e.target.value))}
+                                  className="w-full h-1.5 bg-muted-foreground/20 rounded-lg appearance-none cursor-pointer accent-primary"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
                 <DialogFooter className="pt-4">
@@ -1488,7 +1940,11 @@ function AdminDash() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {tecnicos.map((t) => (
-                    <tr key={t.id} className="hover:bg-muted/20 text-foreground">
+                    <tr
+                      key={t.id}
+                      className="hover:bg-muted/20 text-foreground cursor-pointer transition-all"
+                      onClick={() => setSelectedTecnico(t)}
+                    >
                       <td className="p-3 font-semibold">{t.nome}</td>
                       <td className="p-3 font-mono">{t.cpf || "Não informado"}</td>
                       <td className="p-3 text-xs text-muted-foreground max-w-xs truncate">{t.certificacoes || "Sem certificações"}</td>
@@ -1510,6 +1966,228 @@ function AdminDash() {
           )}
         </CardContent>
       </Card>
+
+      {/* Detalhes e Edição do Técnico */}
+      {selectedTecnico && (
+        <Dialog open={!!selectedTecnico} onOpenChange={(open) => { if (!open) setSelectedTecnico(null); }}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto border border-border bg-card">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold">Perfil do Técnico: {selectedTecnico.nome}</DialogTitle>
+              <DialogDescription>Gerencie dados cadastrais, habilidades e documentos de campo.</DialogDescription>
+            </DialogHeader>
+
+            <Tabs defaultValue="cadastro" className="w-full mt-4">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="cadastro" className="font-semibold">Cadastro e Habilidades</TabsTrigger>
+                <TabsTrigger value="documentos" className="font-semibold">Documentação</TabsTrigger>
+              </TabsList>
+
+              {/* Aba Cadastro e Habilidades */}
+              <TabsContent value="cadastro" className="space-y-4">
+                <form onSubmit={handleUpdateTechnician} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-nome">Nome Completo</Label>
+                      <Input id="edit-nome" required value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-status">Status de Escala</Label>
+                      <select
+                        id="edit-status"
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value)}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value="Disponivel">Disponível</option>
+                        <option value="Em_Campo">Em Campo</option>
+                        <option value="Folga">De Folga</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-score">Score de Avaliação (0.0 a 5.0)</Label>
+                      <Input
+                        id="edit-score"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="5"
+                        required
+                        value={editRankingScore}
+                        onChange={(e) => setEditRankingScore(parseFloat(e.target.value))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-cpf">CPF</Label>
+                      <Input id="edit-cpf" value={editCpf} onChange={(e) => setEditCpf(e.target.value)} placeholder="123.456.789-00" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-rg">RG</Label>
+                      <Input id="edit-rg" value={editRg} onChange={(e) => setEditRg(e.target.value)} placeholder="12.345.678-9" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Habilidades e Serviços (Nível de Conhecimento 1 a 10)</Label>
+                    <div className="border border-border rounded-lg p-3 space-y-3 max-h-48 overflow-y-auto bg-muted/20">
+                      {availableServices.map(svc => {
+                        const skill = editSkills.find(s => s.servico_id === svc.id);
+                        const isChecked = !!skill;
+                        return (
+                          <div key={svc.id} className="space-y-2 border-b border-border/50 pb-2 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id={`svc-edit-${svc.id}`}
+                                checked={isChecked}
+                                onChange={() => toggleEditSkill(svc.id)}
+                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-background"
+                              />
+                              <Label htmlFor={`svc-edit-${svc.id}`} className="text-xs font-semibold cursor-pointer text-foreground">
+                                {svc.nome_servico}
+                              </Label>
+                            </div>
+                            {isChecked && (
+                              <div className="flex items-center gap-3 pl-6">
+                                <span className="text-[10px] font-medium text-muted-foreground w-20">
+                                  Nível: <span className="font-bold text-primary">{skill.nivel}</span>/10
+                                </span>
+                                <input
+                                  type="range"
+                                  min="1"
+                                  max="10"
+                                  value={skill.nivel}
+                                  onChange={(e) => updateEditSkillLevel(svc.id, parseInt(e.target.value))}
+                                  className="w-full h-1.5 bg-muted-foreground/20 rounded-lg appearance-none cursor-pointer accent-primary"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4 border-t">
+                    <Button type="button" variant="outline" onClick={() => setSelectedTecnico(null)} disabled={editSubmitLoading}>Cancelar</Button>
+                    <Button type="submit" disabled={editSubmitLoading}>{editSubmitLoading ? "Atualizando..." : "Salvar Alterações"}</Button>
+                  </div>
+                </form>
+              </TabsContent>
+
+              {/* Aba Documentos do Técnico */}
+              <TabsContent value="documentos" className="space-y-6">
+                {/* Upload Form */}
+                <div className="bg-muted/30 border border-border p-4 rounded-lg space-y-4">
+                  <h4 className="text-sm font-bold text-foreground">Enviar Novo Documento</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="doc-name">Nome do Documento</Label>
+                      <Input
+                        id="doc-name"
+                        placeholder="Ex: Certificado NR-35, CNH"
+                        value={documentName}
+                        onChange={(e) => setDocumentName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="doc-file">Arquivo (Imagem ou PDF)</Label>
+                      <Input
+                        id="doc-file"
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={handleUploadDocument}
+                        disabled={uploadingDoc}
+                        className="cursor-pointer file:mr-4 file:py-1 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                      />
+                    </div>
+                  </div>
+                  {uploadingDoc && <p className="text-xs text-amber-500 animate-pulse font-medium">Fazendo upload e registrando arquivo...</p>}
+                </div>
+
+                {/* List and Preview grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* List */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-bold text-foreground border-b pb-2">Arquivos Registrados</h4>
+                    {loadingDocsAndSkills ? (
+                      <p className="text-xs text-muted-foreground">Carregando...</p>
+                    ) : tecnicoDocs.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-4 italic">Nenhum documento anexado a este perfil.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                        {tecnicoDocs.map(doc => (
+                          <div key={doc.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-card hover:bg-muted/10 transition-colors">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectAdminPreview(doc.url_documento, doc.nome_documento)}
+                              className="flex items-center gap-2 text-left flex-1"
+                            >
+                              <FileText className="h-4 w-4 text-primary shrink-0" />
+                              <span className="text-xs font-semibold text-foreground truncate max-w-[150px]">{doc.nome_documento}</span>
+                            </button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteDocument(doc.id)}
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 p-1.5 h-auto"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preview Container */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-bold text-foreground border-b pb-2">Visualização do Arquivo</h4>
+                    {adminPreviewUrl ? (
+                      <div 
+                        className="relative border border-border rounded-lg bg-zinc-950 overflow-hidden w-full h-[250px] flex items-center justify-center select-none"
+                        onContextMenu={(e) => e.preventDefault()}
+                        onDragStart={(e) => e.preventDefault()}
+                      >
+                        {adminPreviewType === "image" && (
+                          <img
+                            src={adminPreviewUrl}
+                            alt="Visualização"
+                            className="max-w-full max-h-full object-contain pointer-events-none"
+                          />
+                        )}
+                        {adminPreviewType === "pdf" && (
+                          <iframe
+                            src={`${adminPreviewUrl}#toolbar=0&navpanes=0&statusbar=0&view=FitH`}
+                            className="w-full h-full border-none pointer-events-none"
+                            title="PDF Preview"
+                          />
+                        )}
+                        {adminPreviewType === "other" && (
+                          <div className="text-center p-4">
+                            <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                            <p className="text-xs text-foreground font-semibold">Visualização indisponível</p>
+                          </div>
+                        )}
+                        {/* Blocker overlay */}
+                        <div className="absolute inset-0 bg-transparent z-10" />
+                      </div>
+                    ) : (
+                      <div className="border border-dashed border-border rounded-lg h-[250px] flex flex-col items-center justify-center text-center p-4 bg-muted/10">
+                        <Eye className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                        <p className="text-xs text-muted-foreground">Selecione um documento da lista para abrir a pré-visualização segura.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </DialogContent>
+        </Dialog>
+      )}
       
       {/* Cards adicionais da Fase 2 */}
       <div className="grid gap-4 md:grid-cols-3 border-t border-border pt-8">

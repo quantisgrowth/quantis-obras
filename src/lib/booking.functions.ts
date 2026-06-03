@@ -601,7 +601,10 @@ export const registerTechnician = createServerFn({ method: "POST" })
     telefone: z.string().nullable().optional(),
     cpf: z.string().nullable().optional(),
     rg: z.string().nullable().optional(),
-    certificacoes: z.string().nullable().optional(),
+    habilidades: z.array(z.object({
+      servico_id: z.string().uuid(),
+      nivel: z.number().int().min(1).max(10)
+    })).default([]),
   }).parse(input))
   .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
@@ -620,6 +623,16 @@ export const registerTechnician = createServerFn({ method: "POST" })
 
     // Import supabaseAdmin dynamically to avoid any client bundle leakage
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Fetch service names to construct certifications text (backwards compatibility)
+    let certString = "";
+    if (input.habilidades.length > 0) {
+      const { data: services } = await supabaseAdmin
+        .from("servicos_catalogo")
+        .select("id, nome_servico")
+        .in("id", input.habilidades.map(h => h.servico_id));
+      certString = (services || []).map(s => s.nome_servico).join(", ");
+    }
 
     // Create user in Auth
     const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
@@ -654,7 +667,7 @@ export const registerTechnician = createServerFn({ method: "POST" })
         nome: input.nome,
         cpf: input.cpf || null,
         rg: input.rg || null,
-        certificacoes: input.certificacoes || null,
+        certificacoes: certString || null,
         status: "Disponivel",
         ranking_score: 5.0,
         user_id: newUserId,
@@ -664,6 +677,21 @@ export const registerTechnician = createServerFn({ method: "POST" })
 
     if (tecErr || !newTecnico) {
       throw new Error("Erro ao cadastrar perfil técnico: " + (tecErr?.message || "Erro desconhecido"));
+    }
+
+    // Insert skills into 'habilidades_tecnicos'
+    if (input.habilidades.length > 0) {
+      const skillsToInsert = input.habilidades.map(h => ({
+        tecnico_id: newTecnico.id,
+        servico_id: h.servico_id,
+        nivel_conhecimento: h.nivel
+      }));
+      const { error: skillErr } = await supabaseAdmin
+        .from("habilidades_tecnicos")
+        .insert(skillsToInsert);
+      if (skillErr) {
+        console.error("Error inserting technician skills:", skillErr);
+      }
     }
 
     // Update profiles table to associate tecnico_id
@@ -677,6 +705,148 @@ export const registerTechnician = createServerFn({ method: "POST" })
     }
 
     return { success: true, tecnicoId: newTecnico.id };
+  });
+
+export const updateTechnician = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    id: z.string().uuid(),
+    nome: z.string().min(2),
+    status: z.string(),
+    ranking_score: z.number().min(0).max(5),
+    cpf: z.string().nullable().optional(),
+    rg: z.string().nullable().optional(),
+    habilidades: z.array(z.object({
+      servico_id: z.string().uuid(),
+      nivel: z.number().int().min(1).max(10)
+    })).default([]),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check if the current user is an admin
+    const { data: adminRole, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (roleErr || !adminRole) {
+      throw new Error("Acesso negado: Apenas administradores podem atualizar técnicos.");
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Fetch service names to construct certifications text
+    let certString = "";
+    if (input.habilidades.length > 0) {
+      const { data: services } = await supabaseAdmin
+        .from("servicos_catalogo")
+        .select("id, nome_servico")
+        .in("id", input.habilidades.map(h => h.servico_id));
+      certString = (services || []).map(s => s.nome_servico).join(", ");
+    }
+
+    // Update technician table
+    const { error: updateErr } = await supabaseAdmin
+      .from("tecnicos")
+      .update({
+        nome: input.nome,
+        status: input.status as any,
+        ranking_score: input.ranking_score,
+        cpf: input.cpf || null,
+        rg: input.rg || null,
+        certificacoes: certString || null,
+      })
+      .eq("id", input.id);
+
+    if (updateErr) throw updateErr;
+
+    // Update skills: delete old and insert new
+    await supabaseAdmin
+      .from("habilidades_tecnicos")
+      .delete()
+      .eq("tecnico_id", input.id);
+
+    if (input.habilidades.length > 0) {
+      const skillsToInsert = input.habilidades.map(h => ({
+        tecnico_id: input.id,
+        servico_id: h.servico_id,
+        nivel_conhecimento: h.nivel
+      }));
+      const { error: skillErr } = await supabaseAdmin
+        .from("habilidades_tecnicos")
+        .insert(skillsToInsert);
+      if (skillErr) throw skillErr;
+    }
+
+    return { success: true };
+  });
+
+export const addTechnicianDocument = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    tecnicoId: z.string().uuid(),
+    nomeDocumento: z.string().min(1),
+    urlDocumento: z.string().url(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check if the current user is an admin
+    const { data: adminRole, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (roleErr || !adminRole) {
+      throw new Error("Acesso negado: Apenas administradores podem adicionar documentos.");
+    }
+
+    const { data: doc, error } = await supabase
+      .from("documentos_tecnicos")
+      .insert({
+        tecnico_id: input.tecnicoId,
+        nome_documento: input.nomeDocumento,
+        url_documento: input.urlDocumento,
+      })
+      .select("id")
+      .single();
+
+    if (error) throw error;
+    return { success: true, documentId: doc.id };
+  });
+
+export const deleteTechnicianDocument = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    documentId: z.string().uuid(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check if the current user is an admin
+    const { data: adminRole, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (roleErr || !adminRole) {
+      throw new Error("Acesso negado: Apenas administradores podem excluir documentos.");
+    }
+
+    const { error } = await supabase
+      .from("documentos_tecnicos")
+      .delete()
+      .eq("id", input.documentId);
+
+    if (error) throw error;
+    return { success: true };
   });
 
 export const registerAdmin = createServerFn({ method: "POST" })
