@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
-  Upload, Eye, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck
+  Upload, Eye, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -1461,6 +1461,7 @@ function AdminDash() {
   const [editRg, setEditRg] = useState("");
   const [editSkills, setEditSkills] = useState<{ servico_id: string; nivel: number }[]>([]);
   const [editSubmitLoading, setEditSubmitLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   // Document upload states
   const [documentName, setDocumentName] = useState("");
@@ -1539,6 +1540,7 @@ function AdminDash() {
       setAdminPreviewUrl(null);
       setAdminPreviewType(null);
       setSelectedFile(null);
+      setIsEditing(false);
     } else {
       setTecnicoDocs([]);
       setTecnicoSkills([]);
@@ -1546,6 +1548,7 @@ function AdminDash() {
       setAdminPreviewUrl(null);
       setAdminPreviewType(null);
       setSelectedFile(null);
+      setIsEditing(false);
     }
   }, [selectedTecnico]);
 
@@ -1658,6 +1661,7 @@ function AdminDash() {
         };
         setSelectedTecnico(updated);
         fetchTecnicoDocsAndSkills(selectedTecnico.id);
+        setIsEditing(false);
       }
     } catch (err: any) {
       toast.error(err?.message || "Erro ao atualizar técnico.");
@@ -1947,6 +1951,7 @@ function AdminDash() {
                     <th className="p-3">Certificações</th>
                     <th className="p-3 text-center">Score</th>
                     <th className="p-3">Status</th>
+                    <th className="p-3 text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1968,6 +1973,19 @@ function AdminDash() {
                         }>
                           {t.status === "Disponivel" ? "Disponível" : t.status === "Em_Campo" ? "Em Campo" : "De Folga"}
                         </Badge>
+                      </td>
+                      <td className="p-3 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTecnico(t);
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -1999,7 +2017,7 @@ function AdminDash() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label htmlFor="edit-nome">Nome Completo</Label>
-                      <Input id="edit-nome" required value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+                      <Input id="edit-nome" required value={editNome} onChange={(e) => setEditNome(e.target.value)} disabled={!isEditing} />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="edit-status">Status de Escala</Label>
@@ -2007,7 +2025,8 @@ function AdminDash() {
                         id="edit-status"
                         value={editStatus}
                         onChange={(e) => setEditStatus(e.target.value)}
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                        disabled={!isEditing}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                       >
                         <option value="Disponivel">Disponível</option>
                         <option value="Em_Campo">Em Campo</option>
@@ -2028,15 +2047,16 @@ function AdminDash() {
                         required
                         value={editRankingScore}
                         onChange={(e) => setEditRankingScore(parseFloat(e.target.value))}
+                        disabled={!isEditing}
                       />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="edit-cpf">CPF</Label>
-                      <Input id="edit-cpf" value={editCpf} onChange={(e) => setEditCpf(e.target.value)} placeholder="123.456.789-00" />
+                      <Input id="edit-cpf" value={editCpf} onChange={(e) => setEditCpf(e.target.value)} placeholder="123.456.789-00" disabled={!isEditing} />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="edit-rg">RG</Label>
-                      <Input id="edit-rg" value={editRg} onChange={(e) => setEditRg(e.target.value)} placeholder="12.345.678-9" />
+                      <Input id="edit-rg" value={editRg} onChange={(e) => setEditRg(e.target.value)} placeholder="12.345.678-9" disabled={!isEditing} />
                     </div>
                   </div>
 
@@ -2054,7 +2074,8 @@ function AdminDash() {
                                 id={`svc-edit-${svc.id}`}
                                 checked={isChecked}
                                 onChange={() => toggleEditSkill(svc.id)}
-                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-background"
+                                disabled={!isEditing}
+                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-background disabled:opacity-50"
                               />
                               <Label htmlFor={`svc-edit-${svc.id}`} className="text-xs font-semibold cursor-pointer text-foreground">
                                 {svc.nome_servico}
@@ -2071,7 +2092,8 @@ function AdminDash() {
                                   max="10"
                                   value={skill.nivel}
                                   onChange={(e) => updateEditSkillLevel(svc.id, parseInt(e.target.value))}
-                                  className="w-full h-1.5 bg-muted-foreground/20 rounded-lg appearance-none cursor-pointer accent-primary"
+                                  disabled={!isEditing}
+                                  className="w-full h-1.5 bg-muted-foreground/20 rounded-lg appearance-none cursor-pointer accent-primary disabled:opacity-50"
                                 />
                               </div>
                             )}
@@ -2082,8 +2104,36 @@ function AdminDash() {
                   </div>
 
                   <div className="flex justify-end gap-2 pt-4 border-t">
-                    <Button type="button" variant="outline" onClick={() => setSelectedTecnico(null)} disabled={editSubmitLoading}>Cancelar</Button>
-                    <Button type="submit" disabled={editSubmitLoading}>{editSubmitLoading ? "Atualizando..." : "Salvar Alterações"}</Button>
+                    {!isEditing ? (
+                      <>
+                        <Button type="button" variant="outline" onClick={() => setSelectedTecnico(null)}>Fechar</Button>
+                        <Button type="button" onClick={() => setIsEditing(true)} className="bg-primary text-primary-foreground font-bold gap-1">
+                          <Edit className="h-4 w-4" /> Editar Perfil
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setEditNome(selectedTecnico.nome);
+                            setEditStatus(selectedTecnico.status);
+                            setEditRankingScore(selectedTecnico.ranking_score || 5);
+                            setEditCpf(selectedTecnico.cpf || "");
+                            setEditRg(selectedTecnico.rg || "");
+                            fetchTecnicoDocsAndSkills(selectedTecnico.id);
+                            setIsEditing(false);
+                          }}
+                          disabled={editSubmitLoading}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button type="submit" disabled={editSubmitLoading} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                          {editSubmitLoading ? "Salvando..." : "Salvar Alterações"}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </form>
               </TabsContent>
