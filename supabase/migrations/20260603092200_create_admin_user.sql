@@ -11,9 +11,9 @@ BEGIN
   
   -- If email matches master admin, set admin role; otherwise, client
   IF NEW.email = 'felipe@quantisgrowth.com.br' THEN
-    INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'admin') ON CONFLICT (user_id) DO UPDATE SET role = 'admin';
+    INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'admin') ON CONFLICT (user_id, role) DO NOTHING;
   ELSE
-    INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'cliente') ON CONFLICT DO NOTHING;
+    INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, 'cliente') ON CONFLICT (user_id, role) DO NOTHING;
   END IF;
   
   RETURN NEW;
@@ -71,6 +71,6 @@ BEGIN
   -- Ensure that if user already exists or was just created, they have the admin role in user_roles
   INSERT INTO public.user_roles (user_id, role)
   SELECT id, 'admin' FROM auth.users WHERE email = 'felipe@quantisgrowth.com.br'
-  ON CONFLICT (user_id) DO UPDATE SET role = 'admin';
+  ON CONFLICT (user_id, role) DO NOTHING;
 
 END $$;
