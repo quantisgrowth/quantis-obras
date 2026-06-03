@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
-  Upload, Eye, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon
+  Upload, Eye, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,7 +23,8 @@ import {
   recordCheckin,
   addMoldingCycle,
   finalizeExecution,
-  registerTechnician
+  registerTechnician,
+  registerAdmin
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -1232,6 +1233,14 @@ function AdminDash() {
   const [certificacoes, setCertificacoes] = useState("Moldagem de CPs, Ensaio de Concreto");
   const [submitLoading, setSubmitLoading] = useState(false);
 
+  // Form states for admin creation
+  const [adminDialogOpen, setAdminDialogOpen] = useState(false);
+  const [adminNome, setAdminNome] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminTelefone, setAdminTelefone] = useState("");
+  const [adminSubmitLoading, setAdminSubmitLoading] = useState(false);
+
   const fetchTecnicos = async () => {
     try {
       const { data, error } = await supabase
@@ -1286,63 +1295,136 @@ function AdminDash() {
       setSubmitLoading(false);
     }
   };
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminSubmitLoading(true);
+    try {
+      const res = await registerAdmin({
+        data: {
+          nome: adminNome,
+          email: adminEmail,
+          password: adminPassword,
+          telefone: adminTelefone || null,
+        }
+      });
+      if (res.success) {
+        toast.success("Administrador cadastrado com sucesso!");
+        setAdminDialogOpen(false);
+        // Reset form
+        setAdminNome("");
+        setAdminEmail("");
+        setAdminPassword("");
+        setAdminTelefone("");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao cadastrar administrador.");
+    } finally {
+      setAdminSubmitLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <SectionTitle title="Painel do Gestor" subtitle="Gerenciamento de técnicos, escala e configurações." />
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold self-start sm:self-center">
-              <UserPlus className="h-4 w-4" />
-              Cadastrar Novo Técnico
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto border border-border bg-card">
-            <DialogHeader>
-              <DialogTitle>Novo Técnico</DialogTitle>
-              <DialogDescription>Cadastre as credenciais de login e dados de campo do novo técnico.</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleCreateTechnician} className="space-y-4 pt-2">
-              <div className="space-y-1">
-                <Label htmlFor="nome">Nome Completo</Label>
-                <Input id="nome" required value={nome} onChange={(e) => setNome(e.target.value)} placeholder="João Silva" />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="email">E-mail</Label>
-                <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="joao.tecnico@geraltest.com" />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="password">Senha de Acesso (mínimo 6 caracteres)</Label>
-                <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-wrap gap-2 self-start sm:self-center">
+          {/* Modal Técnico */}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold">
+                <UserPlus className="h-4 w-4" />
+                Cadastrar Técnico
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto border border-border bg-card">
+              <DialogHeader>
+                <DialogTitle>Novo Técnico</DialogTitle>
+                <DialogDescription>Cadastre as credenciais de login e dados de campo do novo técnico.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCreateTechnician} className="space-y-4 pt-2">
                 <div className="space-y-1">
-                  <Label htmlFor="telefone">Telefone</Label>
-                  <Input id="telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="(15) 99999-9999" />
+                  <Label htmlFor="nome">Nome Completo</Label>
+                  <Input id="nome" required value={nome} onChange={(e) => setNome(e.target.value)} placeholder="João Silva" />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="cpf">CPF</Label>
-                  <Input id="cpf" value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="123.456.789-00" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="rg">RG</Label>
-                  <Input id="rg" value={rg} onChange={(e) => setRg(e.target.value)} placeholder="12.345.678-9" />
+                  <Label htmlFor="email">E-mail</Label>
+                  <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="joao.tecnico@geraltest.com" />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="certificacoes">Certificações</Label>
-                  <Input id="certificacoes" value={certificacoes} onChange={(e) => setCertificacoes(e.target.value)} placeholder="Ex: Moldagem de CPs, NBR 5738" />
+                  <Label htmlFor="password">Senha de Acesso (mínimo 6 caracteres)</Label>
+                  <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" />
                 </div>
-              </div>
-              <DialogFooter className="pt-4">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={submitLoading}>Cancelar</Button>
-                <Button type="submit" disabled={submitLoading}>{submitLoading ? "Cadastrando..." : "Confirmar Cadastro"}</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="telefone">Telefone</Label>
+                    <Input id="telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="(15) 99999-9999" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="cpf">CPF</Label>
+                    <Input id="cpf" value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="123.456.789-00" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="rg">RG</Label>
+                    <Input id="rg" value={rg} onChange={(e) => setRg(e.target.value)} placeholder="12.345.678-9" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="certificacoes">Certificações</Label>
+                    <Input id="certificacoes" value={certificacoes} onChange={(e) => setCertificacoes(e.target.value)} placeholder="Ex: Moldagem de CPs, NBR 5738" />
+                  </div>
+                </div>
+                <DialogFooter className="pt-4">
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={submitLoading}>Cancelar</Button>
+                  <Button type="submit" disabled={submitLoading}>{submitLoading ? "Cadastrando..." : "Confirmar Cadastro"}</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal Administrador */}
+          <Dialog open={adminDialogOpen} onOpenChange={setAdminDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2 border-amber-500/30 text-amber-500 hover:bg-amber-500/10 font-bold">
+                <ShieldCheck className="h-4 w-4" />
+                Cadastrar Administrador
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto border border-border bg-card">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-amber-500" />
+                  Novo Administrador
+                </DialogTitle>
+                <DialogDescription>Cadastre as credenciais de acesso para um novo administrador da Geraltest.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCreateAdmin} className="space-y-4 pt-2">
+                <div className="space-y-1">
+                  <Label htmlFor="admin-nome">Nome Completo</Label>
+                  <Input id="admin-nome" required value={adminNome} onChange={(e) => setAdminNome(e.target.value)} placeholder="Ex: Felipe Medeiros" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="admin-email">E-mail corporativo</Label>
+                  <Input id="admin-email" type="email" required value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="email@empresa.com" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="admin-password">Senha de Acesso (mínimo 6 caracteres)</Label>
+                  <Input id="admin-password" type="password" required minLength={6} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="••••••" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="admin-telefone">Telefone / Contato</Label>
+                  <Input id="admin-telefone" value={adminTelefone} onChange={(e) => setAdminTelefone(e.target.value)} placeholder="(15) 99999-9999" />
+                </div>
+                <DialogFooter className="pt-4">
+                  <Button type="button" variant="outline" onClick={() => setAdminDialogOpen(false)} disabled={adminSubmitLoading}>Cancelar</Button>
+                  <Button type="submit" className="bg-amber-600 hover:bg-amber-700 text-zinc-950 font-bold" disabled={adminSubmitLoading}>
+                    {adminSubmitLoading ? "Cadastrando..." : "Confirmar Cadastro"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Grid de Resumo */}

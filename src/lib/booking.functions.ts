@@ -679,6 +679,62 @@ export const registerTechnician = createServerFn({ method: "POST" })
     return { success: true, tecnicoId: newTecnico.id };
   });
 
+export const registerAdmin = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    nome: z.string().min(2),
+    email: z.string().email(),
+    password: z.string().min(6),
+    telefone: z.string().nullable().optional(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check if the current user is an admin
+    const { data: adminRole, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (roleErr || !adminRole) {
+      throw new Error("Acesso negado: Apenas administradores podem cadastrar outros administradores.");
+    }
+
+    // Import supabaseAdmin dynamically
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Create user in Auth
+    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: {
+        nome_completo: input.nome,
+        telefone: input.telefone || "",
+      },
+    });
+
+    if (authErr || !authData.user) {
+      throw new Error("Erro ao criar usuário administrativo: " + (authErr?.message || "Erro desconhecido"));
+    }
+
+    const newUserId = authData.user.id;
+
+    // Update user_roles to 'admin'
+    const { error: roleUpdateErr } = await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: newUserId, role: "admin" }, { onConflict: "user_id" });
+
+    if (roleUpdateErr) {
+      console.error("Error setting admin role:", roleUpdateErr);
+      throw new Error("Erro ao associar permissão administrativa.");
+    }
+
+    return { success: true, adminId: newUserId };
+  });
+
 export const startExecution = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid() }).parse(input))
