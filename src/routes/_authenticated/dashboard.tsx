@@ -1464,6 +1464,7 @@ function AdminDash() {
 
   // Document upload states
   const [documentName, setDocumentName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
   // Preview state
@@ -1537,12 +1538,14 @@ function AdminDash() {
       setEditRg(selectedTecnico.rg || "");
       setAdminPreviewUrl(null);
       setAdminPreviewType(null);
+      setSelectedFile(null);
     } else {
       setTecnicoDocs([]);
       setTecnicoSkills([]);
       setEditSkills([]);
       setAdminPreviewUrl(null);
       setAdminPreviewType(null);
+      setSelectedFile(null);
     }
   }, [selectedTecnico]);
 
@@ -1663,14 +1666,19 @@ function AdminDash() {
     }
   };
 
-  const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedTecnico) return;
+  const handleUploadDocument = async () => {
+    if (!selectedFile || !selectedTecnico) return;
 
-    const docName = documentName.trim() || file.name.split(".")[0];
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (selectedFile.size > MAX_SIZE) {
+      toast.error("O arquivo excede o limite máximo de 5MB.");
+      return;
+    }
+
+    const docName = documentName.trim() || selectedFile.name.split(".")[0];
     setUploadingDoc(true);
     try {
-      const fileUrl = await uploadPhotoOrBase64(file);
+      const fileUrl = await uploadPhotoOrBase64(selectedFile);
       const res = await addTechnicianDocument({
         data: {
           tecnicoId: selectedTecnico.id,
@@ -1681,6 +1689,9 @@ function AdminDash() {
       if (res.success) {
         toast.success("Documento adicionado com sucesso!");
         setDocumentName("");
+        setSelectedFile(null);
+        const fileInput = document.getElementById("doc-file") as HTMLInputElement;
+        if (fileInput) fileInput.value = "";
         fetchTecnicoDocsAndSkills(selectedTecnico.id);
       }
     } catch (err: any) {
@@ -2093,18 +2104,40 @@ function AdminDash() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="doc-file">Arquivo (Imagem ou PDF)</Label>
+                      <div className="flex justify-between items-center">
+                        <Label htmlFor="doc-file">Arquivo (Imagem ou PDF)</Label>
+                        <span className="text-[10px] text-muted-foreground font-semibold bg-muted px-1.5 py-0.5 rounded">Máx: 5MB</span>
+                      </div>
                       <Input
                         id="doc-file"
                         type="file"
                         accept="image/*,application/pdf"
-                        onChange={handleUploadDocument}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          if (file && file.size > 5 * 1024 * 1024) {
+                            toast.warning("Atenção: Este arquivo excede o limite máximo de 5MB.");
+                          }
+                          setSelectedFile(file);
+                        }}
                         disabled={uploadingDoc}
                         className="cursor-pointer file:mr-4 file:py-1 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
                       />
                     </div>
                   </div>
-                  {uploadingDoc && <p className="text-xs text-amber-500 animate-pulse font-medium">Fazendo upload e registrando arquivo...</p>}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 pt-2 border-t border-border/40">
+                    <span className="text-[10px] text-muted-foreground">
+                      * Formatos suportados: PDF, PNG, JPG, JPEG, WEBP.
+                    </span>
+                    <Button
+                      type="button"
+                      onClick={handleUploadDocument}
+                      disabled={uploadingDoc || !selectedFile}
+                      className="font-bold gap-1 bg-primary text-primary-foreground hover:bg-primary/90 text-xs py-1.5 h-8 self-end sm:self-auto"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      {uploadingDoc ? "Enviando..." : "Salvar Documento"}
+                    </Button>
+                  </div>
                 </div>
 
                 {/* List and Preview grid */}
