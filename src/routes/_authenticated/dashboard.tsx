@@ -1632,8 +1632,8 @@ function AdminDash() {
     }
   };
 
-  const handleUpdateTechnician = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUpdateTechnician = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!selectedTecnico) return;
     setEditSubmitLoading(true);
     try {
@@ -2013,7 +2013,7 @@ function AdminDash() {
 
               {/* Aba Cadastro e Habilidades */}
               <TabsContent value="cadastro" className="space-y-4">
-                <form onSubmit={handleUpdateTechnician} className="space-y-4">
+                <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label htmlFor="edit-nome">Nome Completo</Label>
@@ -2129,13 +2129,13 @@ function AdminDash() {
                         >
                           Cancelar
                         </Button>
-                        <Button type="submit" disabled={editSubmitLoading} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                        <Button type="button" onClick={() => handleUpdateTechnician()} disabled={editSubmitLoading} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
                           {editSubmitLoading ? "Salvando..." : "Salvar Alterações"}
                         </Button>
                       </>
                     )}
                   </div>
-                </form>
+                </div>
               </TabsContent>
 
               {/* Aba Documentos do Técnico */}
