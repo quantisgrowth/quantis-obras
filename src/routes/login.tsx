@@ -22,6 +22,19 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [loginType, setLoginType] = useState<"cliente" | "tecnico">("cliente");
+  const [clickCount, setClickCount] = useState(0);
+
+  const handleLogoClick = () => {
+    setClickCount((prev) => {
+      const next = prev + 1;
+      if (next >= 5) {
+        toast.info("Acessando área restrita...");
+        navigate({ to: "/admin-login" });
+        return 0;
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (user) {
@@ -64,7 +77,11 @@ function LoginPage() {
     <div className="grid min-h-screen place-items-center bg-background px-4">
       <Card className="w-full max-w-md shadow-[var(--shadow-elegant)] border border-border">
         <CardHeader className="space-y-3 text-center">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-primary text-primary-foreground animate-pulse">
+          <div
+            onClick={handleLogoClick}
+            className="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-primary text-primary-foreground animate-pulse cursor-pointer active:scale-95 transition-transform select-none"
+            title="Geraltest Brasil"
+          >
             <FlaskConical className="h-6 w-6" />
           </div>
           <CardTitle>Entrar na Geraltest</CardTitle>
@@ -112,6 +129,12 @@ function LoginPage() {
           </form>
         </CardContent>
       </Card>
+      <Link
+        to="/admin-login"
+        className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/80 transition-colors uppercase tracking-widest font-semibold mt-2"
+      >
+        Acesso Restrito
+      </Link>
     </div>
   );
 }
