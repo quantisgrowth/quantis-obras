@@ -806,7 +806,9 @@ export const addTechnicianDocument = createServerFn({ method: "POST" })
       throw new Error("Acesso negado: Apenas administradores podem adicionar documentos.");
     }
 
-    const { data: doc, error } = await supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: doc, error } = await supabaseAdmin
       .from("documentos_tecnicos")
       .insert({
         tecnico_id: input.tecnicoId,
@@ -840,7 +842,9 @@ export const deleteTechnicianDocument = createServerFn({ method: "POST" })
       throw new Error("Acesso negado: Apenas administradores podem excluir documentos.");
     }
 
-    const { error } = await supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { error } = await supabaseAdmin
       .from("documentos_tecnicos")
       .delete()
       .eq("id", input.documentId);
