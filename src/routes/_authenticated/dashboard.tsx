@@ -318,17 +318,29 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 
       {/* ── Abas do Painel ── */}
       <Tabs defaultValue="pendentes" onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-xl grid-cols-4 mb-6">
-          <TabsTrigger value="solicitar" className="font-semibold gap-1">
+        <TabsList className="flex flex-wrap gap-2 md:gap-3 bg-transparent p-0 h-auto justify-start mb-6">
+          <TabsTrigger 
+            value="solicitar" 
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
             <CalendarPlus className="h-4 w-4" /> Solicitação
           </TabsTrigger>
-          <TabsTrigger value="pendentes" className="font-semibold gap-1">
+          <TabsTrigger 
+            value="pendentes" 
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
             <Clock className="h-4 w-4" /> Aguardando Técnico ({pendentes.length})
           </TabsTrigger>
-          <TabsTrigger value="confirmados" className="font-semibold gap-1">
+          <TabsTrigger 
+            value="confirmados" 
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
             <Calendar className="h-4 w-4" /> Confirmados ({confirmados.length})
           </TabsTrigger>
-          <TabsTrigger value="realizados" className="font-semibold gap-1">
+          <TabsTrigger 
+            value="realizados" 
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
             <CheckCircle2 className="h-4 w-4" /> Realizados ({concluidos.length})
           </TabsTrigger>
         </TabsList>
