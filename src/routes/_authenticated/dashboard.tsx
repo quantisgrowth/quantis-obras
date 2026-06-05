@@ -154,7 +154,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 
   const [agendamentos, setAgendamentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("aguardados");
+  const [activeTab, setActiveTab] = useState("pendentes");
 
   // Booking detail modal state
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
@@ -273,8 +273,9 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
     }
   };
 
-  const aguardados = agendamentos.filter((a) =>
-    ["Pendente_Tecnico", "Confirmado", "Em_Execucao", "Aguardando_Medicao"].includes(a.status_agendamento)
+  const pendentes = agendamentos.filter((a) => a.status_agendamento === "Pendente_Tecnico");
+  const confirmados = agendamentos.filter((a) =>
+    ["Confirmado", "Em_Execucao", "Aguardando_Medicao"].includes(a.status_agendamento)
   );
   const concluidos = agendamentos.filter((a) =>
     ["Validado", "Laboratorio", "Cancelado"].includes(a.status_agendamento)
@@ -288,7 +289,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
       />
 
       {/* ── Cards de Resumo ── */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-4">
         <Card className="border border-border bg-card">
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total de Pedidos</p>
@@ -297,8 +298,14 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
         </Card>
         <Card className="border border-amber-500/30 bg-amber-500/5">
           <CardContent className="pt-5">
-            <p className="text-xs text-amber-600 font-medium uppercase tracking-wide">Aguardados / Pendentes</p>
-            <p className="text-3xl font-extrabold text-amber-600 mt-1">{aguardados.length}</p>
+            <p className="text-xs text-amber-600 font-medium uppercase tracking-wide">Aguardando Técnico</p>
+            <p className="text-3xl font-extrabold text-amber-600 mt-1">{pendentes.length}</p>
+          </CardContent>
+        </Card>
+        <Card className="border border-blue-500/30 bg-blue-500/5">
+          <CardContent className="pt-5">
+            <p className="text-xs text-blue-600 font-medium uppercase tracking-wide">Confirmados</p>
+            <p className="text-3xl font-extrabold text-blue-600 mt-1">{confirmados.length}</p>
           </CardContent>
         </Card>
         <Card className="border border-green-500/30 bg-green-500/5">
@@ -310,13 +317,16 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
       </div>
 
       {/* ── Abas do Painel ── */}
-      <Tabs defaultValue="aguardados" onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-lg grid-cols-3 mb-6">
+      <Tabs defaultValue="pendentes" onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full max-w-xl grid-cols-4 mb-6">
           <TabsTrigger value="solicitar" className="font-semibold gap-1">
             <CalendarPlus className="h-4 w-4" /> Solicitação
           </TabsTrigger>
-          <TabsTrigger value="aguardados" className="font-semibold gap-1">
-            <Clock className="h-4 w-4" /> Aguardados ({aguardados.length})
+          <TabsTrigger value="pendentes" className="font-semibold gap-1">
+            <Clock className="h-4 w-4" /> Aguardando Técnico ({pendentes.length})
+          </TabsTrigger>
+          <TabsTrigger value="confirmados" className="font-semibold gap-1">
+            <Calendar className="h-4 w-4" /> Confirmados ({confirmados.length})
           </TabsTrigger>
           <TabsTrigger value="realizados" className="font-semibold gap-1">
             <CheckCircle2 className="h-4 w-4" /> Realizados ({concluidos.length})
@@ -351,15 +361,15 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
           </Card>
         </TabsContent>
 
-        {/* ── TAB: AGUARDADOS ── */}
-        <TabsContent value="aguardados" className="space-y-4">
+        {/* ── TAB: AGUARDANDO TÉCNICO ── */}
+        <TabsContent value="pendentes" className="space-y-4">
           {loading ? (
-            <div className="text-sm text-muted-foreground py-8 text-center">Carregando agendamentos aguardados…</div>
-          ) : aguardados.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-8 text-center">Carregando agendamentos pendentes…</div>
+          ) : pendentes.length === 0 ? (
             <Card className="border border-dashed border-border py-12 text-center bg-muted/10">
               <CardContent className="space-y-3">
                 <Clock className="h-10 w-10 text-muted-foreground/30 mx-auto" />
-                <p className="text-sm text-muted-foreground">Nenhum agendamento aguardado ou pendente.</p>
+                <p className="text-sm text-muted-foreground">Nenhum agendamento aguardando aceitação de técnico.</p>
                 <Button onClick={() => setActiveTab("solicitar")} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
                   Agendar agora
                 </Button>
@@ -367,7 +377,67 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
             </Card>
           ) : (
             <div className="grid gap-3">
-              {aguardados.map((ag) => (
+              {pendentes.map((ag) => (
+                <Card
+                  key={ag.id}
+                  className="border border-border bg-card p-4 transition-all hover:border-primary/40 hover:shadow-sm cursor-pointer"
+                  onClick={() => setSelectedBooking(ag)}
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra sem nome"}</span>
+                        <Badge
+                          variant="outline"
+                          className={STATUS_COLORS[ag.status_agendamento] || "bg-muted text-muted-foreground"}
+                        >
+                          {STATUS_LABELS[ag.status_agendamento] || ag.status_agendamento}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground font-medium">
+                        {ag.servico?.nome_servico || "Controle Tecnológico"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span>
+                        {ag.obra?.cidade && ` · ${ag.obra.cidade}`}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end justify-between gap-3 min-w-[200px]">
+                      <div className="text-right sm:text-left md:text-right">
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {ag.cps_contratados} CPs · {ag.forma_pagamento}
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground italic flex items-center gap-1 bg-muted px-2 py-1 rounded">
+                        <Clock className="h-3 w-3" /> Aguardando aceite do técnico
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── TAB: CONFIRMADOS ── */}
+        <TabsContent value="confirmados" className="space-y-4">
+          {loading ? (
+            <div className="text-sm text-muted-foreground py-8 text-center">Carregando agendamentos confirmados…</div>
+          ) : confirmados.length === 0 ? (
+            <Card className="border border-dashed border-border py-12 text-center bg-muted/10">
+              <CardContent className="space-y-3">
+                <Calendar className="h-10 w-10 text-muted-foreground/30 mx-auto" />
+                <p className="text-sm text-muted-foreground">Nenhum agendamento confirmado por técnico.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3">
+              {confirmados.map((ag) => (
                 <Card
                   key={ag.id}
                   className="border border-border bg-card p-4 transition-all hover:border-primary/40 hover:shadow-sm cursor-pointer"
@@ -415,7 +485,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                         </Button>
                       ) : (
                         <div className="text-[10px] text-muted-foreground italic flex items-center gap-1 bg-muted px-2 py-1 rounded">
-                          <Eye className="h-3 w-3" /> Clique para acompanhar em tempo real
+                          <Eye className="h-3 w-3" /> Clique para ver técnico e acompanhar
                         </div>
                       )}
                     </div>
