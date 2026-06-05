@@ -382,9 +382,11 @@ async function selectAndInviteTechnician(
   // Filter by compatibility
   let compativeis = allTecnicos.filter((t: any) => {
     if (!t.certificacoes || !serviceCategory) return true;
+    const catLower = serviceCategory.toLowerCase();
     return (
-      t.certificacoes.toLowerCase().includes(serviceCategory.toLowerCase()) ||
-      serviceCategory.toLowerCase().includes("concreto")
+      t.certificacoes.toLowerCase().includes(catLower) ||
+      catLower.includes("concreto") ||
+      catLower.includes("geral")
     );
   });
 
@@ -556,6 +558,9 @@ export const processTimeouts = createServerFn({ method: "POST" })
     const { supabase } = context;
     const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
 
+    let processedCount = 0;
+
+    // 1. Process timed-out bookings
     const { data: timedOutBookings } = await supabase
       .from("agendamentos_medicoes")
       .select("*, servico:servicos_catalogo(*)")
@@ -563,33 +568,52 @@ export const processTimeouts = createServerFn({ method: "POST" })
       .not("tecnico_id", "is", null)
       .lt("convidado_em", threeHoursAgo);
 
-    if (!timedOutBookings || timedOutBookings.length === 0) {
-      return { processed: 0 };
+    if (timedOutBookings && timedOutBookings.length > 0) {
+      for (const booking of timedOutBookings) {
+        const currentRejected = booking.tecnicos_rejeitados || [];
+        const newRejected = [...new Set([...currentRejected, booking.tecnico_id])];
+
+        await supabase
+          .from("agendamentos_medicoes")
+          .update({
+            tecnico_id: null,
+            convidado_em: null,
+            tecnicos_rejeitados: newRejected,
+          })
+          .eq("id", booking.id);
+
+        await selectAndInviteTechnician(
+          supabase,
+          booking.id,
+          booking.data_servico,
+          booking.servico?.categoria || "",
+          newRejected
+        );
+        processedCount++;
+      }
     }
 
-    for (const booking of timedOutBookings) {
-      const currentRejected = booking.tecnicos_rejeitados || [];
-      const newRejected = [...new Set([...currentRejected, booking.tecnico_id])];
+    // 2. Process unassigned pending bookings
+    const { data: unassignedBookings } = await supabase
+      .from("agendamentos_medicoes")
+      .select("*, servico:servicos_catalogo(*)")
+      .eq("status_agendamento", "Pendente_Tecnico")
+      .is("tecnico_id", null);
 
-      await supabase
-        .from("agendamentos_medicoes")
-        .update({
-          tecnico_id: null,
-          convidado_em: null,
-          tecnicos_rejeitados: newRejected,
-        })
-        .eq("id", booking.id);
-
-      await selectAndInviteTechnician(
-        supabase,
-        booking.id,
-        booking.data_servico,
-        booking.servico?.categoria || "",
-        newRejected
-      );
+    if (unassignedBookings && unassignedBookings.length > 0) {
+      for (const booking of unassignedBookings) {
+        await selectAndInviteTechnician(
+          supabase,
+          booking.id,
+          booking.data_servico,
+          booking.servico?.categoria || "",
+          booking.tecnicos_rejeitados || []
+        );
+        processedCount++;
+      }
     }
 
-    return { processed: timedOutBookings.length };
+    return { processed: processedCount };
   });
 
 export const registerTechnician = createServerFn({ method: "POST" })

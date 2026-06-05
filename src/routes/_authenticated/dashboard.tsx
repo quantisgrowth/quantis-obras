@@ -28,7 +28,8 @@ import {
   updateTechnician,
   addTechnicianDocument,
   deleteTechnicianDocument,
-  syncUserRoles
+  syncUserRoles,
+  processTimeouts
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -53,6 +54,12 @@ function Dashboard() {
         .catch((err) => console.error("Error syncing user roles:", err));
     }
   }, [user, roles]);
+
+  useEffect(() => {
+    if (user) {
+      processTimeouts().catch((err) => console.error("Error processing timeouts/allocations:", err));
+    }
+  }, [user]);
 
   if (role === "admin") return <AdminDash />;
   if (role === "tecnico") return <TecnicoDash email={user?.email ?? ""} userId={user?.id ?? ""} />;

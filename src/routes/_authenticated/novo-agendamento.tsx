@@ -428,7 +428,8 @@ function NovoAgendamento() {
           if (!t.certificacoes) return true;
           return categories.every(cat => {
             if (!cat) return true;
-            return (t.certificacoes || "").toLowerCase().includes(cat) || cat.includes("concreto");
+            const catLower = cat.toLowerCase();
+            return (t.certificacoes || "").toLowerCase().includes(catLower) || catLower.includes("concreto") || catLower.includes("geral");
           });
         });
 
