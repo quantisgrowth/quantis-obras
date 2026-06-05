@@ -1348,7 +1348,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                       📅 <strong className="text-foreground">Data/Hora:</strong> {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
                     </p>
                     <p>
-                      🧪 <strong className="text-foreground">Quantidade CPs:</strong> {ag.cps_contratados} unidades ({ag.qtd_caminhoes} caminhão/ões)
+                      🧪 <strong className="text-foreground">Quantidade CPs:</strong> {ag.cps_contratados} unidades ({ag.qtd_caminhoes} {ag.qtd_caminhoes === 1 ? "caminhão" : "caminhões"})
                     </p>
                     {ag.observacoes && (
                       <p className="italic bg-card p-2 rounded border border-border mt-2">
