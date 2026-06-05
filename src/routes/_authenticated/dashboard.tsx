@@ -1455,6 +1455,7 @@ function AdminDash() {
   const [loadingDocsAndSkills, setLoadingDocsAndSkills] = useState(false);
 
   const [editNome, setEditNome] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editStatus, setEditStatus] = useState("");
   const [editRankingScore, setEditRankingScore] = useState(5);
   const [editCpf, setEditCpf] = useState("");
@@ -1533,6 +1534,7 @@ function AdminDash() {
     if (selectedTecnico) {
       fetchTecnicoDocsAndSkills(selectedTecnico.id);
       setEditNome(selectedTecnico.nome);
+      setEditEmail(selectedTecnico.email || "");
       setEditStatus(selectedTecnico.status);
       setEditRankingScore(selectedTecnico.ranking_score || 5);
       setEditCpf(selectedTecnico.cpf || "");
@@ -1545,6 +1547,7 @@ function AdminDash() {
       setTecnicoDocs([]);
       setTecnicoSkills([]);
       setEditSkills([]);
+      setEditEmail("");
       setAdminPreviewUrl(null);
       setAdminPreviewType(null);
       setSelectedFile(null);
@@ -1641,6 +1644,7 @@ function AdminDash() {
         data: {
           id: selectedTecnico.id,
           nome: editNome,
+          email: editEmail,
           status: editStatus,
           ranking_score: Number(editRankingScore),
           cpf: editCpf || null,
@@ -1654,6 +1658,7 @@ function AdminDash() {
         const updated = {
           ...selectedTecnico,
           nome: editNome,
+          email: editEmail,
           status: editStatus,
           ranking_score: Number(editRankingScore),
           cpf: editCpf || null,
@@ -2018,8 +2023,8 @@ function AdminDash() {
               {/* Aba Cadastro e Habilidades */}
               <TabsContent value="cadastro" className="space-y-4">
                 <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1 md:col-span-2">
                       <Label htmlFor="edit-nome">Nome Completo</Label>
                       <Input id="edit-nome" required value={editNome} onChange={(e) => setEditNome(e.target.value)} disabled={!isEditing} />
                     </div>
@@ -2039,7 +2044,11 @@ function AdminDash() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1 md:col-span-2">
+                      <Label htmlFor="edit-email">E-mail</Label>
+                      <Input id="edit-email" type="email" required value={editEmail} onChange={(e) => setEditEmail(e.target.value)} disabled={!isEditing} />
+                    </div>
                     <div className="space-y-1">
                       <Label htmlFor="edit-score">Score de Avaliação (0.0 a 5.0)</Label>
                       <Input
@@ -2054,6 +2063,9 @@ function AdminDash() {
                         disabled={!isEditing}
                       />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label htmlFor="edit-cpf">CPF</Label>
                       <Input id="edit-cpf" value={editCpf} onChange={(e) => setEditCpf(e.target.value)} placeholder="123.456.789-00" disabled={!isEditing} />
@@ -2122,6 +2134,7 @@ function AdminDash() {
                           variant="outline"
                           onClick={() => {
                             setEditNome(selectedTecnico.nome);
+                            setEditEmail(selectedTecnico.email || "");
                             setEditStatus(selectedTecnico.status);
                             setEditRankingScore(selectedTecnico.ranking_score || 5);
                             setEditCpf(selectedTecnico.cpf || "");

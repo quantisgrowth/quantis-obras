@@ -665,6 +665,7 @@ export const registerTechnician = createServerFn({ method: "POST" })
       .from("tecnicos")
       .insert({
         nome: input.nome,
+        email: input.email,
         cpf: input.cpf || null,
         rg: input.rg || null,
         certificacoes: certString || null,
@@ -712,6 +713,7 @@ export const updateTechnician = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => z.object({
     id: z.string().uuid(),
     nome: z.string().min(2),
+    email: z.string().email(),
     status: z.string(),
     ranking_score: z.number().min(0).max(5),
     cpf: z.string().nullable().optional(),
@@ -738,6 +740,30 @@ export const updateTechnician = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+    // Fetch technician's current info
+    const { data: currentTecnico, error: tecQueryErr } = await supabaseAdmin
+      .from("tecnicos")
+      .select("user_id, email")
+      .eq("id", input.id)
+      .single();
+
+    if (tecQueryErr || !currentTecnico) {
+      throw new Error("Erro ao buscar dados atuais do técnico: " + (tecQueryErr?.message || "Não encontrado"));
+    }
+
+    // Update email in Auth if it changed and user_id is set
+    if (input.email.toLowerCase() !== (currentTecnico.email || "").toLowerCase()) {
+      if (currentTecnico.user_id) {
+        const { error: authUpdateErr } = await supabaseAdmin.auth.admin.updateUserById(
+          currentTecnico.user_id,
+          { email: input.email }
+        );
+        if (authUpdateErr) {
+          throw new Error("Erro ao atualizar e-mail na autenticação: " + authUpdateErr.message);
+        }
+      }
+    }
+
     // Fetch service names to construct certifications text
     let certString = "";
     if (input.habilidades.length > 0) {
@@ -753,6 +779,7 @@ export const updateTechnician = createServerFn({ method: "POST" })
       .from("tecnicos")
       .update({
         nome: input.nome,
+        email: input.email,
         status: input.status as any,
         ranking_score: input.ranking_score,
         cpf: input.cpf || null,

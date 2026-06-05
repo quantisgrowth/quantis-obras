@@ -483,6 +483,7 @@ export type Database = {
           certificacoes: string | null
           cpf: string | null
           created_at: string
+          email: string | null
           foto_url: string | null
           horario_fim_ultimo_servico: string | null
           id: string
@@ -496,6 +497,7 @@ export type Database = {
           certificacoes?: string | null
           cpf?: string | null
           created_at?: string
+          email?: string | null
           foto_url?: string | null
           horario_fim_ultimo_servico?: string | null
           id?: string
@@ -509,6 +511,7 @@ export type Database = {
           certificacoes?: string | null
           cpf?: string | null
           created_at?: string
+          email?: string | null
           foto_url?: string | null
           horario_fim_ultimo_servico?: string | null
           id?: string
@@ -577,6 +580,7 @@ export type Database = {
         Row: {
           certificacoes: string | null
           created_at: string | null
+          email: string | null
           foto_url: string | null
           id: string | null
           nome: string | null
@@ -586,6 +590,7 @@ export type Database = {
         Insert: {
           certificacoes?: string | null
           created_at?: string | null
+          email?: string | null
           foto_url?: string | null
           id?: string | null
           nome?: string | null
@@ -595,6 +600,7 @@ export type Database = {
         Update: {
           certificacoes?: string | null
           created_at?: string | null
+          email?: string | null
           foto_url?: string | null
           id?: string | null
           nome?: string | null
@@ -605,6 +611,12 @@ export type Database = {
       }
     }
     Functions: {
+      get_email_by_cpf: {
+        Args: {
+          p_cpf: string
+        }
+        Returns: string | null
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

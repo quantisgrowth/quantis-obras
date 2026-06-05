@@ -64,7 +64,39 @@ function LoginPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    let loginEmail = email.trim();
+    const cleanCpf = loginEmail.replace(/\D/g, "");
+    const isCpf = cleanCpf.length === 11 && !loginEmail.includes("@");
+
+    if (isCpf) {
+      try {
+        const { data: resolvedEmail, error: rpcError } = await supabase
+          .rpc("get_email_by_cpf", { p_cpf: cleanCpf });
+
+        if (rpcError) {
+          toast.error("Erro ao processar login por CPF.");
+          console.error("RPC Error:", rpcError);
+          setLoading(false);
+          return;
+        }
+
+        if (resolvedEmail) {
+          loginEmail = resolvedEmail;
+        } else {
+          toast.error("Nenhum técnico cadastrado com este CPF.");
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        toast.error("Erro ao resolver login por CPF.");
+        console.error(err);
+        setLoading(false);
+        return;
+      }
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
     setLoading(false);
     if (error) {
       toast.error("Falha no login", { description: error.message });
@@ -101,8 +133,15 @@ function LoginPage() {
 
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input id="email" type="email" required placeholder="seuemail@exemplo.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Label htmlFor="email">{loginType === "tecnico" ? "E-mail ou CPF" : "E-mail"}</Label>
+              <Input
+                id="email"
+                type="text"
+                required
+                placeholder={loginType === "tecnico" ? "seuemail@exemplo.com ou 123.456.789-00" : "seuemail@exemplo.com"}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
