@@ -27,7 +27,8 @@ import {
   registerAdmin,
   updateTechnician,
   addTechnicianDocument,
-  deleteTechnicianDocument
+  deleteTechnicianDocument,
+  syncUserRoles
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -39,6 +40,20 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 function Dashboard() {
   const { roles, user } = useAuth();
   const role = primaryRole(roles);
+
+  useEffect(() => {
+    // If logged in but does not have technician/admin role, check if they are in 'tecnicos' table to repair
+    if (user && !roles.includes("tecnico") && !roles.includes("admin")) {
+      syncUserRoles()
+        .then((res) => {
+          if (res && res.roleSynced === "tecnico") {
+            window.location.reload();
+          }
+        })
+        .catch((err) => console.error("Error syncing user roles:", err));
+    }
+  }, [user, roles]);
+
   if (role === "admin") return <AdminDash />;
   if (role === "tecnico") return <TecnicoDash email={user?.email ?? ""} userId={user?.id ?? ""} />;
   return <ClienteDash email={user?.email ?? ""} userId={user?.id ?? ""} />;

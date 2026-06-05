@@ -654,7 +654,7 @@ export const registerTechnician = createServerFn({ method: "POST" })
     // Update user_roles to 'tecnico' (since trigger defaults to 'cliente')
     const { error: roleUpdateErr } = await supabaseAdmin
       .from("user_roles")
-      .upsert({ user_id: newUserId, role: "tecnico" }, { onConflict: "user_id" });
+      .upsert({ user_id: newUserId, role: "tecnico" }, { onConflict: "user_id,role" });
 
     if (roleUpdateErr) {
       console.error("Error setting technician role:", roleUpdateErr);
@@ -1197,3 +1197,39 @@ export const validateBooking = createServerFn({ method: "POST" })
     if (error) throw error;
     return { success: true };
   });
+
+export const syncUserRoles = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+
+    // Check if this user is in public.tecnicos
+    const { data: tecnico, error: tecErr } = await supabase
+      .from("tecnicos")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (tecErr) {
+      console.error("Error querying tecnico profile during sync:", tecErr);
+      return { roleSynced: null };
+    }
+
+    if (tecnico) {
+      // Ensure the user has the 'tecnico' role in user_roles
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error: roleErr } = await supabaseAdmin
+        .from("user_roles")
+        .upsert({ user_id: userId, role: "tecnico" }, { onConflict: "user_id,role" });
+      
+      if (roleErr) {
+        console.error("Error inserting role during sync:", roleErr);
+      } else {
+        console.log(`Successfully synced 'tecnico' role for user ${userId}`);
+        return { roleSynced: "tecnico" };
+      }
+    }
+
+    return { roleSynced: null };
+  });
+
