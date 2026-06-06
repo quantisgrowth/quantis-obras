@@ -1459,3 +1459,22 @@ export const updateBlockerStatus = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+export const resolveMapsUrl = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ url: z.string().url() }).parse(input))
+  .handler(async ({ data: input }) => {
+    try {
+      const res = await fetch(input.url, {
+        method: "GET",
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+      return { resolvedUrl: res.url };
+    } catch (err: any) {
+      console.error("Error resolving maps URL:", err);
+      return { resolvedUrl: null };
+    }
+  });
+

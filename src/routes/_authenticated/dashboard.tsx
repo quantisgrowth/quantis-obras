@@ -32,7 +32,8 @@ import {
   processTimeouts,
   resolveAlert,
   requestBlocker,
-  updateBlockerStatus
+  updateBlockerStatus,
+  resolveMapsUrl
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -2000,6 +2001,8 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
 
 function parseGoogleMapsCoords(url: string): { lat: number; lng: number } | null {
   if (!url) return null;
+  
+  // 1. Check for @lat,lng format
   const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (atMatch) {
     return {
@@ -2007,6 +2010,17 @@ function parseGoogleMapsCoords(url: string): { lat: number; lng: number } | null
       lng: parseFloat(atMatch[2])
     };
   }
+  
+  // 2. Check for !3dLat!4dLng format (exact pin coordinate format)
+  const bangMatch = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (bangMatch) {
+    return {
+      lat: parseFloat(bangMatch[1]),
+      lng: parseFloat(bangMatch[2])
+    };
+  }
+
+  // 3. Check for query parameters format q=lat,lng or ll=lat,lng
   const qMatch = url.match(/[?&](q|ll|query)=(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (qMatch) {
     return {
@@ -2014,6 +2028,8 @@ function parseGoogleMapsCoords(url: string): { lat: number; lng: number } | null
       lng: parseFloat(qMatch[3])
     };
   }
+  
+  // 4. Check for static maps URL format or center format
   const centerMatch = url.match(/[?&]center=(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (centerMatch) {
     return {
@@ -2021,6 +2037,8 @@ function parseGoogleMapsCoords(url: string): { lat: number; lng: number } | null
       lng: parseFloat(centerMatch[2])
     };
   }
+  
+  // 5. Try parsing naked lat,lng if they pasted just coordinates
   const nakedMatch = url.match(/^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/);
   if (nakedMatch) {
     return {
@@ -2504,6 +2522,49 @@ function AdminDash() {
         toast.error("Erro ao buscar endereço pelo CEP.");
       } finally {
         setFetchingCep(false);
+      }
+    }
+  };
+
+  const handleGoogleMapsUrlChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    setGoogleMapsUrl(rawVal);
+    if (!rawVal) return;
+
+    const urlMatch = rawVal.match(/(https?:\/\/[^\s]+)/);
+    let url = urlMatch ? urlMatch[1] : rawVal;
+
+    let coords = parseGoogleMapsCoords(url);
+    if (coords) {
+      setLocalLat(coords.lat.toString());
+      setLocalLng(coords.lng.toString());
+      toast.success("Coordenadas extraídas com sucesso!");
+      return;
+    }
+
+    const isActuallyShort = url.includes("maps.app.goo.gl") || url.includes("g.co") || url.includes("goo.gl");
+    
+    if (isActuallyShort) {
+      toast.loading("Resolvendo link curto do Google Maps...", { id: "resolve-maps" });
+      try {
+        const res = await resolveMapsUrl({ data: { url } });
+        toast.dismiss("resolve-maps");
+        if (res && res.resolvedUrl) {
+          const resolvedCoords = parseGoogleMapsCoords(res.resolvedUrl);
+          if (resolvedCoords) {
+            setLocalLat(resolvedCoords.lat.toString());
+            setLocalLng(resolvedCoords.lng.toString());
+            toast.success("Coordenadas extraídas do link curto!");
+          } else {
+            toast.warning("Link resolvido, mas não encontramos as coordenadas na URL final.");
+          }
+        } else {
+          toast.error("Não foi possível resolver o link curto.");
+        }
+      } catch (err: any) {
+        toast.dismiss("resolve-maps");
+        console.error("Erro ao resolver URL:", err);
+        toast.error("Erro ao resolver o link curto.");
       }
     }
   };
@@ -3057,15 +3118,7 @@ function AdminDash() {
                     <Input
                       id="loc-gmaps"
                       value={googleMapsUrl}
-                      onChange={(e) => {
-                        setGoogleMapsUrl(e.target.value);
-                        const coords = parseGoogleMapsCoords(e.target.value);
-                        if (coords) {
-                          setLocalLat(coords.lat.toString());
-                          setLocalLng(coords.lng.toString());
-                          toast.success("Coordenadas extraídas do link com sucesso!");
-                        }
-                      }}
+                      onChange={handleGoogleMapsUrlChange}
                       placeholder="Cole o link do Google Maps para extrair as coordenadas"
                     />
                   </div>
