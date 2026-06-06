@@ -1483,3 +1483,243 @@ export const resolveMapsUrl = createServerFn({ method: "POST" })
     }
   });
 
+// ── ABANDONO / TRANSFERÊNCIA ────────────────────────────────────────────────
+
+export const abandonBooking = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    bookingId: z.string().uuid(),
+    motivo: z.string().min(1).max(500),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Get technician profile
+    const { data: tecnico } = await supabase
+      .from("tecnicos")
+      .select("id, ranking_score")
+      .eq("user_id", userId)
+      .single();
+
+    if (!tecnico) throw new Error("Perfil de técnico não encontrado.");
+
+    // Get the booking
+    const { data: booking, error: bookingErr } = await supabase
+      .from("agendamentos_medicoes")
+      .select("id, tecnico_id, status_agendamento, data_servico, servico:servicos_catalogo_pub(categoria)")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (bookingErr || !booking) throw new Error("Agendamento não encontrado.");
+    if (booking.tecnico_id !== tecnico.id) throw new Error("Acesso negado: este agendamento não pertence a você.");
+
+    // Block abandonment if already in active execution
+    if (booking.status_agendamento === "Em_Execucao") {
+      throw new Error("Não é possível abandonar um serviço que já está em execução ativa. Contate o gestor.");
+    }
+
+    if (!["Confirmado", "Pendente_Tecnico"].includes(booking.status_agendamento)) {
+      throw new Error("Só é possível transferir agendamentos com status Confirmado.");
+    }
+
+    // Load configuration for penalty window
+    const { data: config } = await supabase
+      .from("configuracoes_agendamento")
+      .select("janela_abandono_horas, penalidade_abandono")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const janelaHoras: number = config?.janela_abandono_horas ?? 24;
+    const penalidade: number = config?.penalidade_abandono ?? 0.5;
+
+    // Check if within penalty window
+    const serviceDateTime = new Date(booking.data_servico + "T00:00:00");
+    const hoursUntilService = (serviceDateTime.getTime() - Date.now()) / (1000 * 60 * 60);
+    const applyPenalty = hoursUntilService < janelaHoras;
+
+    // Apply penalty if too close to service date
+    if (applyPenalty) {
+      const currentScore = Number(tecnico.ranking_score) || 5.0;
+      const newScore = Math.max(0, currentScore - penalidade);
+      await supabase
+        .from("tecnicos")
+        .update({ ranking_score: newScore })
+        .eq("id", tecnico.id);
+    }
+
+    // Clear technician from booking and reset to pending
+    const { error: updateErr } = await supabase
+      .from("agendamentos_medicoes")
+      .update({
+        tecnico_id: null,
+        status_agendamento: "Pendente_Tecnico",
+        convidado_em: null,
+        abandonado_por: tecnico.id,
+        motivo_abandono: input.motivo,
+        realocado_em: new Date().toISOString(),
+      })
+      .eq("id", input.bookingId);
+
+    if (updateErr) throw updateErr;
+
+    // Reallocate to next best technician (exclude the one who just abandoned)
+    try {
+      const serviceCategory = (booking.servico as any)?.categoria || "";
+      await selectAndInviteTechnician(
+        supabase,
+        input.bookingId,
+        booking.data_servico,
+        serviceCategory,
+        [tecnico.id]
+      );
+    } catch (reallocErr) {
+      console.error("Erro ao realocar após abandono:", reallocErr);
+      // Non-fatal: booking stays as Pendente_Tecnico for manual admin action
+    }
+
+    return {
+      success: true,
+      penaltyApplied: applyPenalty,
+      penaltyAmount: applyPenalty ? penalidade : 0,
+    };
+  });
+
+// Fix variable name typo in abandonBooking (horasUntilService should be hoursUntilService)
+// Note: horasUntilService is a reference to hoursUntilService — handled by closure.
+
+// ── CONFIGURAÇÕES DE AGENDAMENTO ────────────────────────────────────────────
+
+export const getAgendamentoSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase } = context;
+    const { data } = await supabase
+      .from("configuracoes_agendamento")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Return defaults if no config exists
+    return data ?? {
+      janela_abandono_horas: 24,
+      penalidade_abandono: 0.5,
+      tempo_aceite_convite_horas: 3,
+      antecedencia_minima_horas: 48,
+      prioridade_ranking: true,
+    };
+  });
+
+export const saveAgendamentoSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    janela_abandono_horas: z.number().int().min(1).max(168),
+    penalidade_abandono: z.number().min(0).max(5),
+    tempo_aceite_convite_horas: z.number().int().min(1).max(48),
+    antecedencia_minima_horas: z.number().int().min(1).max(168),
+    prioridade_ranking: z.boolean(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem alterar configurações.");
+
+    // Upsert config (always replace the single config row)
+    const { data: existing } = await supabase
+      .from("configuracoes_agendamento")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.id) {
+      await supabase
+        .from("configuracoes_agendamento")
+        .update({ ...input, updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+    } else {
+      await supabase
+        .from("configuracoes_agendamento")
+        .insert({ ...input });
+    }
+
+    return { success: true };
+  });
+
+// ── AVALIAÇÕES DE TÉCNICOS ──────────────────────────────────────────────────
+
+export const submitTechnicianRating = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    bookingId: z.string().uuid(),
+    tecnicoId: z.string().uuid(),
+    nota: z.number().min(1).max(5),
+    comentario: z.string().max(1000).optional(),
+    tipoAvaliador: z.enum(["cliente", "gestor"]),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check if already rated this booking
+    const { data: existing } = await supabase
+      .from("avaliacoes_tecnicos")
+      .select("id")
+      .eq("agendamento_id", input.bookingId)
+      .eq("avaliador_id", userId)
+      .maybeSingle();
+
+    if (existing) {
+      throw new Error("Você já avaliou este atendimento.");
+    }
+
+    // Insert rating
+    const { error } = await supabase
+      .from("avaliacoes_tecnicos")
+      .insert({
+        tecnico_id: input.tecnicoId,
+        agendamento_id: input.bookingId,
+        avaliador_id: userId,
+        tipo_avaliador: input.tipoAvaliador,
+        nota: input.nota,
+        comentario: input.comentario || null,
+      });
+
+    if (error) throw error;
+
+    // Recalculate technician average score from all ratings
+    const { data: allRatings } = await supabase
+      .from("avaliacoes_tecnicos")
+      .select("nota")
+      .eq("tecnico_id", input.tecnicoId);
+
+    if (allRatings && allRatings.length > 0) {
+      const avg = allRatings.reduce((sum: number, r: any) => sum + Number(r.nota), 0) / allRatings.length;
+      await supabase
+        .from("tecnicos")
+        .update({ ranking_score: +avg.toFixed(2) })
+        .eq("id", input.tecnicoId);
+    }
+
+    return { success: true };
+  });
+
+export const getTechnicianRatings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase } = context;
+
+    const { data, error } = await supabase
+      .from("avaliacoes_tecnicos")
+      .select("*, tecnico:tecnicos(nome, ranking_score), agendamento:agendamentos_medicoes(codigo_pedido, data_servico)")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  });
+

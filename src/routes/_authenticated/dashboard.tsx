@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
-  Upload, Eye, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit
+  Upload, Eye, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
+  Star, Settings2, LogOut
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,7 +34,12 @@ import {
   resolveAlert,
   requestBlocker,
   updateBlockerStatus,
-  resolveMapsUrl
+  resolveMapsUrl,
+  abandonBooking,
+  getAgendamentoSettings,
+  saveAgendamentoSettings,
+  submitTechnicianRating,
+  getTechnicianRatings
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -958,6 +964,13 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const [descricaoBlocker, setDescricaoBlocker] = useState("");
   const [savingBlocker, setSavingBlocker] = useState(false);
 
+  // Abandono/Transferência states
+  const [abandonDialogOpen, setAbandonDialogOpen] = useState(false);
+  const [abandonBookingId, setAbandonBookingId] = useState<string | null>(null);
+  const [abandonMotivo, setAbandonMotivo] = useState("Problema pessoal");
+  const [abandonCustomMotivo, setAbandonCustomMotivo] = useState("");
+  const [abandoningBooking, setAbandoningBooking] = useState(false);
+
   const fetchTecnicoData = async () => {
     try {
       const { processTimeouts: dynamicProcessTimeouts } = await import("@/lib/booking.functions");
@@ -1131,6 +1144,36 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
       toast.error(err?.message || "Erro ao recusar o convite.");
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleAbandonBooking = async () => {
+    if (!abandonBookingId) return;
+    const motivoFinal = abandonMotivo === "Outro" ? abandonCustomMotivo.trim() : abandonMotivo;
+    if (!motivoFinal) {
+      toast.error("Por favor, descreva o motivo do abandono.");
+      return;
+    }
+    setAbandoningBooking(true);
+    try {
+      const result = await abandonBooking({ data: { bookingId: abandonBookingId, motivo: motivoFinal } });
+      if (result.penaltyApplied) {
+        toast.warning(
+          `Atendimento transferido. Penalidade aplicada: -${result.penaltyAmount} pts no score por cancelamento dentro da janela de 24h.`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success("Atendimento transferido com sucesso! Um novo técnico será alocado.");
+      }
+      setAbandonDialogOpen(false);
+      setAbandonBookingId(null);
+      setAbandonMotivo("Problema pessoal");
+      setAbandonCustomMotivo("");
+      await fetchTecnicoData();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao transferir atendimento.");
+    } finally {
+      setAbandoningBooking(false);
     }
   };
 
@@ -1400,8 +1443,24 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                     {activeExec.obra?.nome_obra}
                   </CardTitle>
                 </div>
-                <div className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">
-                  📍 {activeExec.obra?.cidade}
+                <div className="flex items-center gap-3">
+                  <div className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">
+                    📍 {activeExec.obra?.cidade}
+                  </div>
+                  {!checkinRecord && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30 font-semibold text-xs gap-1.5"
+                      onClick={() => {
+                        setAbandonBookingId(activeExec.id);
+                        setAbandonDialogOpen(true);
+                      }}
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Transferir Atendimento
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="pt-5 space-y-6">
@@ -1709,14 +1768,28 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                         </div>
 
                         {ag.status_agendamento === "Confirmado" && (
-                          <Button
-                            size="sm"
-                            className="mt-2 sm:mt-0 w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-1 cursor-pointer"
-                            onClick={() => setSelectedStartBookingId(ag.id)}
-                            disabled={actionLoading !== null || activeExec !== null}
-                          >
-                            <Camera className="h-4 w-4" /> Iniciar Atendimento
-                          </Button>
+                          <div className="flex flex-col sm:flex-row gap-2 mt-2 sm:mt-0">
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-1 cursor-pointer"
+                              onClick={() => setSelectedStartBookingId(ag.id)}
+                              disabled={actionLoading !== null || activeExec !== null}
+                            >
+                              <Camera className="h-4 w-4" /> Iniciar Atendimento
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full sm:w-auto text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30 font-semibold gap-1"
+                              onClick={() => {
+                                setAbandonBookingId(ag.id);
+                                setAbandonDialogOpen(true);
+                              }}
+                              disabled={actionLoading !== null}
+                            >
+                              <LogOut className="h-3.5 w-3.5" /> Transferir
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1997,6 +2070,74 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── DIALOG: Abandono / Transferência ── */}
+      <Dialog open={abandonDialogOpen} onOpenChange={(open) => { if (!abandoningBooking) setAbandonDialogOpen(open); }}>
+        <DialogContent className="max-w-md border border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" /> Transferir Atendimento
+            </DialogTitle>
+            <DialogDescription>
+              Ao transferir, o atendimento será realocado automaticamente para outro técnico disponível.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+              <p className="font-bold flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" /> Atenção</p>
+              <p>Se você transferir com menos de <strong>24 horas</strong> de antecedência ao serviço, uma penalidade será aplicada ao seu score de avaliação.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="abandon-motivo-tec">Motivo da Transferência *</Label>
+              <select
+                id="abandon-motivo-tec"
+                value={abandonMotivo}
+                onChange={(e) => setAbandonMotivo(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="Problema pessoal">Problema pessoal</option>
+                <option value="Problema no veículo">Problema no veículo</option>
+                <option value="Emergência médica">Emergência médica</option>
+                <option value="Conflito de horário">Conflito de horário</option>
+                <option value="Outro">Outro (descrever)</option>
+              </select>
+            </div>
+
+            {abandonMotivo === "Outro" && (
+              <div className="space-y-2">
+                <Label htmlFor="abandon-custom-tec">Descreva o motivo *</Label>
+                <Input
+                  id="abandon-custom-tec"
+                  placeholder="Descreva brevemente o motivo..."
+                  value={abandonCustomMotivo}
+                  onChange={(e) => setAbandonCustomMotivo(e.target.value)}
+                  maxLength={300}
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="pt-2 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAbandonDialogOpen(false)}
+              disabled={abandoningBooking}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white font-bold gap-1.5"
+              onClick={handleAbandonBooking}
+              disabled={abandoningBooking}
+            >
+              <LogOut className="h-4 w-4" />
+              {abandoningBooking ? "Transferindo..." : "Confirmar Transferência"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
