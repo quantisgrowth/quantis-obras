@@ -457,6 +457,20 @@ async function selectAndInviteTechnician(
   return bestTechnician;
 }
 
+function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export const acceptInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid() }).parse(input))
@@ -465,7 +479,7 @@ export const acceptInvite = createServerFn({ method: "POST" })
 
     const { data: tecnico } = await supabase
       .from("tecnicos")
-      .select("id")
+      .select("id, nome, laboratorio_padrao_id, raio_atuacao_km")
       .eq("user_id", userId)
       .single();
 
@@ -475,7 +489,7 @@ export const acceptInvite = createServerFn({ method: "POST" })
 
     const { data: booking } = await supabase
       .from("agendamentos_medicoes")
-      .select("id, tecnico_id, status_agendamento")
+      .select("id, tecnico_id, status_agendamento, obra:obras(id, nome_obra, endereco, cidade, latitude, longitude)")
       .eq("id", input.bookingId)
       .single();
 
@@ -497,6 +511,57 @@ export const acceptInvite = createServerFn({ method: "POST" })
       .eq("id", input.bookingId);
 
     if (error) throw error;
+
+    // Check distance / operating radius to generate manager alert
+    if (tecnico.laboratorio_padrao_id) {
+      const { data: base } = await supabase
+        .from("locais_checkin")
+        .select("nome, cidade, latitude, longitude")
+        .eq("id", tecnico.laboratorio_padrao_id)
+        .single();
+
+      if (base && booking.obra) {
+        let isOut = false;
+        let distanceText = "";
+
+        if (
+          base.latitude !== null &&
+          base.longitude !== null &&
+          (booking.obra as any).latitude !== null &&
+          (booking.obra as any).longitude !== null
+        ) {
+          const dist = getDistanceKm(
+            Number(base.latitude),
+            Number(base.longitude),
+            Number((booking.obra as any).latitude),
+            Number((booking.obra as any).longitude)
+          );
+          const limit = Number(tecnico.raio_atuacao_km || 50);
+          if (dist > limit) {
+            isOut = true;
+            distanceText = `distância estimada de ${dist.toFixed(1)} km, excedendo o limite de ${limit} km`;
+          }
+        } else {
+          // Fallback to city comparison if coordinates are missing
+          const baseCity = (base.cidade || "").trim().toLowerCase();
+          const obraCity = ((booking.obra as any).cidade || "").trim().toLowerCase();
+          if (baseCity && obraCity && baseCity !== obraCity) {
+            isOut = true;
+            distanceText = `obra na cidade (${(booking.obra as any).cidade}) diferente da base do técnico (${base.cidade})`;
+          }
+        }
+
+        if (isOut) {
+          await supabase.from("alertas_gestao").insert({
+            agendamento_id: booking.id,
+            tecnico_id: tecnico.id,
+            tipo: "Fora_Raio_Atuacao",
+            descricao: `Técnico ${tecnico.nome} aceitou serviço fora do raio padrão (${distanceText}). É necessário cadastrar um local de check-in temporário (hotel/base de apoio).`,
+          });
+        }
+      }
+    }
+
     return { success: true };
   });
 
@@ -625,6 +690,8 @@ export const registerTechnician = createServerFn({ method: "POST" })
     telefone: z.string().nullable().optional(),
     cpf: z.string().nullable().optional(),
     rg: z.string().nullable().optional(),
+    laboratorioPadraoId: z.string().uuid().nullable().optional(),
+    raioAtuacaoKm: z.number().nullable().optional(),
     habilidades: z.array(z.object({
       servico_id: z.string().uuid(),
       nivel: z.number().int().min(1).max(10)
@@ -696,6 +763,8 @@ export const registerTechnician = createServerFn({ method: "POST" })
         status: "Disponivel",
         ranking_score: 5.0,
         user_id: newUserId,
+        laboratorio_padrao_id: input.laboratorioPadraoId || null,
+        raio_atuacao_km: input.raioAtuacaoKm ?? 50.00,
       })
       .select("id")
       .single();
@@ -742,6 +811,8 @@ export const updateTechnician = createServerFn({ method: "POST" })
     ranking_score: z.number().min(0).max(5),
     cpf: z.string().nullable().optional(),
     rg: z.string().nullable().optional(),
+    laboratorioPadraoId: z.string().uuid().nullable().optional(),
+    raioAtuacaoKm: z.number().nullable().optional(),
     habilidades: z.array(z.object({
       servico_id: z.string().uuid(),
       nivel: z.number().int().min(1).max(10)
@@ -809,6 +880,8 @@ export const updateTechnician = createServerFn({ method: "POST" })
         cpf: input.cpf || null,
         rg: input.rg || null,
         certificacoes: certString || null,
+        laboratorio_padrao_id: input.laboratorioPadraoId || null,
+        raio_atuacao_km: input.raioAtuacaoKm ?? 50.00,
       })
       .eq("id", input.id);
 
@@ -996,7 +1069,13 @@ export const registerAdmin = createServerFn({ method: "POST" })
 
 export const startExecution = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid() }).parse(input))
+  .inputValidator((input: unknown) => z.object({
+    bookingId: z.string().uuid(),
+    pontoPartidaId: z.string().uuid().nullable().optional(),
+    partidaCustomEndereco: z.string().nullable().optional(),
+    partidaLat: z.number().nullable().optional(),
+    partidaLng: z.number().nullable().optional(),
+  }).parse(input))
   .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
 
@@ -1029,6 +1108,11 @@ export const startExecution = createServerFn({ method: "POST" })
       .from("agendamentos_medicoes")
       .update({
         status_agendamento: "Em_Execucao",
+        ponto_partida_id: input.pontoPartidaId || null,
+        partida_custom_endereco: input.partidaCustomEndereco || null,
+        partida_lat: input.partidaLat || null,
+        partida_lng: input.partidaLng || null,
+        partido_em: new Date().toISOString(),
       })
       .eq("id", input.bookingId);
 
@@ -1255,5 +1339,36 @@ export const syncUserRoles = createServerFn({ method: "POST" })
     }
 
     return { roleSynced: null };
+  });
+
+export const resolveAlert = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ alertId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check if user is admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    const userRoles = (roles || []).map((r: any) => r.role);
+    const isAdmin = userRoles.includes("admin");
+
+    if (!isAdmin) {
+      throw new Error("Acesso negado: Apenas administradores podem resolver alertas.");
+    }
+
+    const { error } = await supabase
+      .from("alertas_gestao")
+      .update({
+        resolvido: true,
+        resolvido_em: new Date().toISOString(),
+      })
+      .eq("id", input.alertId);
+
+    if (error) throw error;
+    return { success: true };
   });
 

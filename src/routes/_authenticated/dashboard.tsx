@@ -29,7 +29,8 @@ import {
   addTechnicianDocument,
   deleteTechnicianDocument,
   syncUserRoles,
-  processTimeouts
+  processTimeouts,
+  resolveAlert
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -911,6 +912,17 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Check-in locations and departure selection states
+  const [locaisCheckin, setLocaisCheckin] = useState<any[]>([]);
+  const [selectedStartBookingId, setSelectedStartBookingId] = useState<string | null>(null);
+  const [semDefinicao, setSemDefinicao] = useState(false);
+  const [pontoPartidaId, setPontoPartidaId] = useState("");
+  const [customEndereco, setCustomEndereco] = useState("");
+  const [customNumero, setCustomNumero] = useState("");
+  const [customBairro, setCustomBairro] = useState("");
+  const [customCidade, setCustomCidade] = useState("");
+  const [customEstado, setCustomEstado] = useState("");
+
   // Active execution screen states
   const [activePhotos, setActivePhotos] = useState<any[]>([]);
   const [loadingExecPhotos, setLoadingExecPhotos] = useState(false);
@@ -985,6 +997,15 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
           setActiveExec(null);
         }
       }
+
+      // Get check-in locations
+      const { data: locs, error: locsErr } = await supabase
+        .from("locais_checkin")
+        .select("*")
+        .order("nome", { ascending: true });
+      if (!locsErr && locs) {
+        setLocaisCheckin(locs);
+      }
     } catch (err) {
       console.error("Error fetching technician dashboard data:", err);
     } finally {
@@ -1042,14 +1063,65 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
     }
   };
 
-  const handleStartExecution = async (bookingId: string) => {
-    setActionLoading(bookingId);
+  const handleConfirmStart = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStartBookingId) return;
+    
+    if (!semDefinicao && !pontoPartidaId) {
+      toast.error("Por favor, selecione um ponto de partida ou ative a opção customizada.");
+      return;
+    }
+
+    setActionLoading(selectedStartBookingId);
     try {
-      await startExecution({ data: { bookingId } });
-      toast.success("Execução iniciada! Registre os ensaios e check-in.");
+      // Capture geoloc
+      let lat: number | null = null;
+      let lng: number | null = null;
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000 });
+        });
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch (geoErr) {
+        console.warn("Could not get departure GPS location:", geoErr);
+      }
+
+      let customAddress: string | null = null;
+      if (semDefinicao) {
+        customAddress = `${customEndereco}, ${customNumero || "S/N"} - ${customBairro || ""}, ${customCidade}/${customEstado}`;
+      } else {
+        const selectedLoc = locaisCheckin.find(l => l.id === pontoPartidaId);
+        if (selectedLoc) {
+          customAddress = `${selectedLoc.nome} - ${selectedLoc.endereco}, ${selectedLoc.numero || ""} (${selectedLoc.cidade}/${selectedLoc.estado})`;
+        }
+      }
+
+      await startExecution({
+        data: {
+          bookingId: selectedStartBookingId,
+          pontoPartidaId: semDefinicao ? null : pontoPartidaId,
+          partidaCustomEndereco: customAddress,
+          partidaLat: lat,
+          partidaLng: lng
+        }
+      });
+
+      toast.success("Atendimento iniciado! Siga a rota até a obra.");
+      setSelectedStartBookingId(null);
+      
+      // Clear states
+      setSemDefinicao(false);
+      setPontoPartidaId("");
+      setCustomEndereco("");
+      setCustomNumero("");
+      setCustomBairro("");
+      setCustomCidade("");
+      setCustomEstado("");
+      
       await fetchTecnicoData();
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao iniciar execução.");
+      toast.error(err?.message || "Erro ao iniciar atendimento.");
     } finally {
       setActionLoading(null);
     }
@@ -1233,11 +1305,41 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
             </div>
           </CardHeader>
           <CardContent className="pt-5 space-y-6">
-            {/* Infos do pedido */}
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p>📍 <strong className="text-foreground">Endereço:</strong> {activeExec.obra?.endereco}, {activeExec.obra?.numero} · {activeExec.obra?.bairro}</p>
-              <p>🧪 <strong className="text-foreground">Serviço:</strong> {activeExec.servico?.nome_servico || "Controle Tecnológico"}</p>
-              <p>🧱 <strong className="text-foreground">CPs Contratados:</strong> {activeExec.cps_contratados} unidades ({activeExec.qtd_caminhoes} caminhões)</p>
+            {/* Infos do pedido e Rota GPS */}
+            <div className="grid gap-4 md:grid-cols-2 bg-muted/20 p-3 rounded-lg border">
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>📍 <strong className="text-foreground">Endereço Obra:</strong> {activeExec.obra?.endereco}, {activeExec.obra?.numero} · {activeExec.obra?.bairro}, {activeExec.obra?.cidade}/{activeExec.obra?.estado}</p>
+                <p>🧪 <strong className="text-foreground">Serviço:</strong> {activeExec.servico?.nome_servico || "Controle Tecnológico"}</p>
+                <p>🧱 <strong className="text-foreground">CPs Contratados:</strong> {activeExec.cps_contratados} unidades ({activeExec.qtd_caminhoes} caminhões)</p>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1.5 border-t md:border-t-0 md:border-l border-border pt-2 md:pt-0 md:pl-4 flex flex-col justify-center">
+                <p className="font-semibold text-foreground">🚀 Ponto de Partida do Técnico</p>
+                <p className="truncate">
+                  📍 {activeExec.partida_custom_endereco || "Laboratório / Base padrão"}
+                </p>
+                <div className="flex gap-2 pt-1 flex-wrap">
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                      `${activeExec.obra?.endereco || ""}, ${activeExec.obra?.numero || ""}, ${activeExec.obra?.cidade || ""}`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-[10px] shadow-sm transition-all cursor-pointer"
+                  >
+                    <MapPin className="h-3 w-3" /> Abrir no Google Maps
+                  </a>
+                  <a
+                    href={`https://waze.com/ul?q=${encodeURIComponent(
+                      `${activeExec.obra?.endereco || ""}, ${activeExec.obra?.numero || ""}, ${activeExec.obra?.cidade || ""}`
+                    )}&navigate=yes`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-[10px] shadow-sm transition-all cursor-pointer"
+                  >
+                    <Camera className="h-3 w-3" /> Abrir no Waze
+                  </a>
+                </div>
+              </div>
             </div>
 
             {/* Passos de execução */}
@@ -1463,66 +1565,211 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
         )}
       </div>
 
-      {/* ── SEÇÃO: MINHA ESCALA / AGENDA ── */}
-      <div className="space-y-4">
+      {/* ── SEÇÃO: MINHA ESCALA / AGENDA (DIVIDIDA) ── */}
+      <div className="space-y-6">
         <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <CalendarPlus className="h-5 w-5 text-primary" />
-          Minha Escala / Próximos Serviços ({agenda.length})
+          Minha Escala / Serviços
         </h2>
 
         {agenda.length === 0 ? (
           <Card className="border border-dashed border-border py-12 text-center bg-muted/10">
             <CardContent className="space-y-2">
               <ClipboardList className="h-8 w-8 text-muted-foreground/30 mx-auto" />
-              <p className="text-sm text-muted-foreground">Nenhum serviço confirmado na sua agenda por enquanto.</p>
+              <p className="text-sm text-muted-foreground">Nenhum serviço confirmado na sua escala por enquanto.</p>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-3">
-            {agenda.map((ag) => (
-              <Card key={ag.id} className="border border-border bg-card p-4 hover:shadow-sm transition-all">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra sem nome"}</span>
-                      <Badge variant="outline" className={STATUS_COLORS[ag.status_agendamento] || "bg-muted text-muted-foreground"}>
-                        {STATUS_LABELS[ag.status_agendamento] || ag.status_agendamento}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground font-medium">
-                      {ag.servico?.nome_servico || "Controle Tecnológico"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      📍 {ag.obra?.endereco}, {ag.obra?.numero} - {ag.obra?.bairro}, {ag.obra?.cidade}/{ag.obra?.estado}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span> · CPs: <span className="text-foreground font-medium">{ag.cps_contratados}</span>
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col sm:items-end justify-center min-w-[150px]">
-                    <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-muted px-2.5 py-1 rounded">
-                      <Clock className="h-3.5 w-3.5 text-primary" />
-                      {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
+          <div className="space-y-6">
+            {/* Helper local para renderizar cada card */}
+            {(() => {
+              const renderCard = (ag: any) => (
+                <Card key={ag.id} className="border border-border bg-card p-4 hover:shadow-sm transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra sem nome"}</span>
+                        <Badge variant="outline" className={STATUS_COLORS[ag.status_agendamento] || "bg-muted text-muted-foreground"}>
+                          {STATUS_LABELS[ag.status_agendamento] || ag.status_agendamento}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground font-medium">
+                        {ag.servico?.nome_servico || "Controle Tecnológico"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        📍 {ag.obra?.endereco}, {ag.obra?.numero} - {ag.obra?.bairro}, {ag.obra?.cidade}/{ag.obra?.estado}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span> · CPs: <span className="text-foreground font-medium">{ag.cps_contratados}</span>
+                      </p>
                     </div>
 
-                    {ag.status_agendamento === "Confirmado" && (
-                      <Button
-                        size="sm"
-                        className="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-1"
-                        onClick={() => handleStartExecution(ag.id)}
-                        disabled={actionLoading !== null || activeExec !== null}
-                      >
-                        <Camera className="h-4 w-4" /> Iniciar Atendimento
-                      </Button>
-                    )}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 justify-center min-w-[150px]">
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-muted px-2.5 py-1 rounded">
+                        <Clock className="h-3.5 w-3.5 text-primary" />
+                        {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
+                      </div>
+
+                      {ag.status_agendamento === "Confirmado" && (
+                        <Button
+                          size="sm"
+                          className="mt-2 sm:mt-0 w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-1 cursor-pointer"
+                          onClick={() => setSelectedStartBookingId(ag.id)}
+                          disabled={actionLoading !== null || activeExec !== null}
+                        >
+                          <Camera className="h-4 w-4" /> Iniciar Atendimento
+                        </Button>
+                      )}
+                    </div>
                   </div>
+                </Card>
+              );
+
+              const agendaConfirmados = agenda.filter(a => a.status_agendamento === "Confirmado");
+              const agendaEmAndamento = agenda.filter(a => a.status_agendamento === "Em_Execucao");
+              const agendaConcluidos = agenda.filter(a => ["Aguardando_Medicao", "Validado", "Laboratorio"].includes(a.status_agendamento));
+
+              return (
+                <div className="space-y-6">
+                  {/* 1. Em Andamento */}
+                  {agendaEmAndamento.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-indigo-600 animate-ping" />
+                        Em Andamento / Em Viagem ({agendaEmAndamento.length})
+                      </h3>
+                      <div className="grid gap-3">
+                        {agendaEmAndamento.map(renderCard)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 2. Aguardando Início */}
+                  {agendaConfirmados.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5" />
+                        Próximos Agendamentos / Aguardando Início ({agendaConfirmados.length})
+                      </h3>
+                      <div className="grid gap-3">
+                        {agendaConfirmados.map(renderCard)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Concluídos */}
+                  {agendaConcluidos.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-bold text-green-600 uppercase tracking-wider flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Histórico / Atendimentos Realizados ({agendaConcluidos.length})
+                      </h3>
+                      <div className="grid gap-3">
+                        {agendaConcluidos.map(renderCard)}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </Card>
-            ))}
+              );
+            })()}
           </div>
         )}
       </div>
+
+      {/* Modal Check-in de Partida */}
+      <Dialog open={!!selectedStartBookingId} onOpenChange={(open) => { if (!open) setSelectedStartBookingId(null); }}>
+        <DialogContent className="max-w-md border border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5 text-indigo-600" />
+              Check-in de Partida
+            </DialogTitle>
+            <DialogDescription>
+              Selecione ou informe de onde você está partindo para iniciar este atendimento.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleConfirmStart} className="space-y-4 pt-2 text-xs">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="sem-definicao"
+                  checked={semDefinicao}
+                  onChange={(e) => setSemDefinicao(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-background cursor-pointer"
+                />
+                <Label htmlFor="sem-definicao" className="text-xs font-semibold cursor-pointer">
+                  Local ainda sem definição (Digitar endereço de partida)
+                </Label>
+              </div>
+
+              {!semDefinicao ? (
+                <div className="space-y-1.5">
+                  <Label>Selecione a Base / Hotel de Partida</Label>
+                  <select
+                    required
+                    value={pontoPartidaId}
+                    onChange={(e) => setPontoPartidaId(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">-- Selecione um local cadastrado --</option>
+                    {locaisCheckin
+                      .filter(l => !l.agendamento_id || l.agendamento_id === selectedStartBookingId)
+                      .map(l => (
+                        <option key={l.id} value={l.id}>
+                          {l.nome} ({l.tipo} - {l.cidade}/{l.estado})
+                        </option>
+                      ))}
+                  </select>
+                  {locaisCheckin.filter(l => !l.agendamento_id || l.agendamento_id === selectedStartBookingId).length === 0 && (
+                    <p className="text-[10px] text-amber-600 font-medium mt-1">
+                      ⚠️ Nenhum local pré-cadastrado disponível. Use a opção de endereço customizado.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3 p-3 border rounded bg-muted/20">
+                  <p className="font-semibold text-foreground text-[11px]">Endereço de Partida Customizado</p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cust-end">Endereço (Rua/Av.)</Label>
+                    <Input id="cust-end" required value={customEndereco} onChange={(e) => setCustomEndereco(e.target.value)} placeholder="Ex: Av. Paulista" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cust-num">Número</Label>
+                      <Input id="cust-num" value={customNumero} onChange={(e) => setCustomNumero(e.target.value)} placeholder="Ex: 1000" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cust-bair">Bairro</Label>
+                      <Input id="cust-bair" value={customBairro} onChange={(e) => setCustomBairro(e.target.value)} placeholder="Ex: Centro" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cust-cid">Cidade</Label>
+                      <Input id="cust-cid" required value={customCidade} onChange={(e) => setCustomCidade(e.target.value)} placeholder="Ex: Sorocaba" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cust-est">Estado</Label>
+                      <Input id="cust-est" required maxLength={2} value={customEstado} onChange={(e) => setCustomEstado(e.target.value)} placeholder="Ex: SP" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setSelectedStartBookingId(null)} disabled={actionLoading !== null}>
+                Cancelar
+              </Button>
+              <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold" disabled={actionLoading !== null}>
+                {actionLoading !== null ? "Iniciando..." : "Confirmar Partida e Iniciar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1540,6 +1787,8 @@ function AdminDash() {
   const [telefone, setTelefone] = useState("");
   const [cpf, setCpf] = useState("");
   const [rg, setRg] = useState("");
+  const [laboratorioPadraoId, setLaboratorioPadraoId] = useState("");
+  const [raioAtuacaoKm, setRaioAtuacaoKm] = useState(50);
   const [availableServices, setAvailableServices] = useState<any[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<{ servico_id: string; nivel: number }[]>([]);
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -1564,6 +1813,8 @@ function AdminDash() {
   const [editRankingScore, setEditRankingScore] = useState(5);
   const [editCpf, setEditCpf] = useState("");
   const [editRg, setEditRg] = useState("");
+  const [editLaboratorioPadraoId, setEditLaboratorioPadraoId] = useState("");
+  const [editRaioAtuacaoKm, setEditRaioAtuacaoKm] = useState(50);
   const [editSkills, setEditSkills] = useState<{ servico_id: string; nivel: number }[]>([]);
   const [editSubmitLoading, setEditSubmitLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -1576,6 +1827,27 @@ function AdminDash() {
   // Preview state
   const [adminPreviewUrl, setAdminPreviewUrl] = useState<string | null>(null);
   const [adminPreviewType, setAdminPreviewType] = useState<string | null>(null);
+
+  // CRUD check-in locations states
+  const [locais, setLocais] = useState<any[]>([]);
+  const [loadingLocais, setLoadingLocais] = useState(false);
+  const [localNome, setLocalNome] = useState("");
+  const [localTipo, setLocalTipo] = useState("Laboratorio");
+  const [localEndereco, setLocalEndereco] = useState("");
+  const [localNumero, setLocalNumero] = useState("");
+  const [localBairro, setLocalBairro] = useState("");
+  const [localCidade, setLocalCidade] = useState("");
+  const [localEstado, setLocalEstado] = useState("");
+  const [localLat, setLocalLat] = useState("");
+  const [localLng, setLocalLng] = useState("");
+  const [submittingLocal, setSubmittingLocal] = useState(false);
+  const [showLocalDialog, setShowLocalDialog] = useState(false);
+
+  // Alerts states
+  const [alertas, setAlertas] = useState<any[]>([]);
+  const [loadingAlertas, setLoadingAlertas] = useState(false);
+  const [alertSupportDialogOpen, setAlertSupportDialogOpen] = useState(false);
+  const [selectedAlerta, setSelectedAlerta] = useState<any | null>(null);
 
   const fetchTecnicos = async () => {
     try {
@@ -1629,9 +1901,42 @@ function AdminDash() {
     }
   };
 
+  const fetchLocais = async () => {
+    setLoadingLocais(true);
+    try {
+      const { data, error } = await supabase
+        .from("locais_checkin")
+        .select("*")
+        .order("nome", { ascending: true });
+      if (!error && data) setLocais(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingLocais(false);
+    }
+  };
+
+  const fetchAlertas = async () => {
+    setLoadingAlertas(true);
+    try {
+      const { data, error } = await supabase
+        .from("alertas_gestao")
+        .select("*, agendamento:agendamentos_medicoes(*, obra:obras(*)), tecnico:tecnicos(*)")
+        .eq("resolvido", false)
+        .order("created_at", { ascending: false });
+      if (!error && data) setAlertas(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingAlertas(false);
+    }
+  };
+
   useEffect(() => {
     fetchTecnicos();
     fetchServices();
+    fetchLocais();
+    fetchAlertas();
   }, []);
 
   useEffect(() => {
@@ -1643,6 +1948,8 @@ function AdminDash() {
       setEditRankingScore(selectedTecnico.ranking_score || 5);
       setEditCpf(selectedTecnico.cpf || "");
       setEditRg(selectedTecnico.rg || "");
+      setEditLaboratorioPadraoId(selectedTecnico.laboratorio_padrao_id || "");
+      setEditRaioAtuacaoKm(Number(selectedTecnico.raio_atuacao_km) || 50);
       setAdminPreviewUrl(null);
       setAdminPreviewType(null);
       setSelectedFile(null);
@@ -1652,6 +1959,8 @@ function AdminDash() {
       setTecnicoSkills([]);
       setEditSkills([]);
       setEditEmail("");
+      setEditLaboratorioPadraoId("");
+      setEditRaioAtuacaoKm(50);
       setAdminPreviewUrl(null);
       setAdminPreviewType(null);
       setSelectedFile(null);
@@ -1715,6 +2024,8 @@ function AdminDash() {
           telefone,
           cpf,
           rg,
+          laboratorioPadraoId: laboratorioPadraoId || null,
+          raioAtuacaoKm: Number(raioAtuacaoKm) || 50,
           habilidades: selectedSkills,
         }
       });
@@ -1728,6 +2039,8 @@ function AdminDash() {
         setTelefone("");
         setCpf("");
         setRg("");
+        setLaboratorioPadraoId("");
+        setRaioAtuacaoKm(50);
         setSelectedSkills([]);
         // Refetch list
         fetchTecnicos();
@@ -1753,6 +2066,8 @@ function AdminDash() {
           ranking_score: Number(editRankingScore),
           cpf: editCpf || null,
           rg: editRg || null,
+          laboratorioPadraoId: editLaboratorioPadraoId || null,
+          raioAtuacaoKm: Number(editRaioAtuacaoKm) || 50,
           habilidades: editSkills
         }
       });
@@ -1766,7 +2081,9 @@ function AdminDash() {
           status: editStatus,
           ranking_score: Number(editRankingScore),
           cpf: editCpf || null,
-          rg: editRg || null
+          rg: editRg || null,
+          laboratorio_padrao_id: editLaboratorioPadraoId || null,
+          raio_atuacao_km: Number(editRaioAtuacaoKm) || 50
         };
         setSelectedTecnico(updated);
         fetchTecnicoDocsAndSkills(selectedTecnico.id);
@@ -1865,249 +2182,687 @@ function AdminDash() {
     }
   };
 
+  const handleCreateLocal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingLocal(true);
+    try {
+      const { error } = await supabase.from("locais_checkin").insert({
+        nome: localNome,
+        tipo: localTipo,
+        endereco: localEndereco,
+        numero: localNumero || null,
+        bairro: localBairro || null,
+        cidade: localCidade,
+        estado: localEstado,
+        latitude: localLat !== "" ? Number(localLat) : null,
+        longitude: localLng !== "" ? Number(localLng) : null,
+      });
+
+      if (error) throw error;
+
+      toast.success("Local de check-in cadastrado com sucesso!");
+      setShowLocalDialog(false);
+      
+      // Reset form
+      setLocalNome("");
+      setLocalTipo("Laboratorio");
+      setLocalEndereco("");
+      setLocalNumero("");
+      setLocalBairro("");
+      setLocalCidade("");
+      setLocalEstado("");
+      setLocalLat("");
+      setLocalLng("");
+      
+      fetchLocais();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao cadastrar local.");
+    } finally {
+      setSubmittingLocal(false);
+    }
+  };
+
+  const handleDeleteLocal = async (localId: string) => {
+    if (!confirm("Deseja realmente excluir este local de check-in?")) return;
+    try {
+      const { error } = await supabase
+        .from("locais_checkin")
+        .delete()
+        .eq("id", localId);
+      if (error) throw error;
+      toast.success("Local excluído com sucesso!");
+      fetchLocais();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao excluir local.");
+    }
+  };
+
+  const handleRegisterAlertSupport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAlerta) return;
+    try {
+      // 1. Insert temporary location for check-in
+      const { error: locErr } = await supabase.from("locais_checkin").insert({
+        nome: localNome,
+        tipo: localTipo,
+        endereco: localEndereco,
+        numero: localNumero || null,
+        bairro: localBairro || null,
+        cidade: localCidade,
+        estado: localEstado,
+        latitude: localLat !== "" ? Number(localLat) : null,
+        longitude: localLng !== "" ? Number(localLng) : null,
+        tecnico_id: selectedAlerta.tecnico_id,
+        agendamento_id: selectedAlerta.agendamento_id
+      });
+
+      if (locErr) throw locErr;
+
+      // 2. Resolve the alert
+      await resolveAlert({ data: { alertId: selectedAlerta.id } });
+
+      toast.success("Hospedagem cadastrada e alerta resolvido com sucesso!");
+      setAlertSupportDialogOpen(false);
+      
+      // Reset form fields
+      setLocalNome("");
+      setLocalTipo("Hotel");
+      setLocalEndereco("");
+      setLocalNumero("");
+      setLocalBairro("");
+      setLocalCidade("");
+      setLocalEstado("");
+      setLocalLat("");
+      setLocalLng("");
+      
+      fetchLocais();
+      fetchAlertas();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao vincular hospedagem.");
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <SectionTitle title="Painel do Gestor" subtitle="Gerenciamento de técnicos, escala e configurações." />
-        <div className="flex flex-wrap gap-2 self-start sm:self-center">
-          {/* Modal Técnico */}
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold">
-                <UserPlus className="h-4 w-4" />
-                Cadastrar Técnico
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto border border-border bg-card">
-              <DialogHeader>
-                <DialogTitle>Novo Técnico</DialogTitle>
-                <DialogDescription>Cadastre as credenciais de login e dados de campo do novo técnico.</DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleCreateTechnician} className="space-y-4 pt-2">
-                <div className="space-y-1">
-                  <Label htmlFor="nome">Nome Completo</Label>
-                  <Input id="nome" required value={nome} onChange={(e) => setNome(e.target.value)} placeholder="João Silva" />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="email">E-mail</Label>
-                  <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="joao.tecnico@geraltest.com" />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="password">Senha de Acesso (mínimo 6 caracteres)</Label>
-                  <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+      </div>
+
+      <Tabs defaultValue="tecnicos" className="w-full">
+        <TabsList className="flex flex-wrap gap-2 bg-transparent p-0 h-auto justify-start mb-6">
+          <TabsTrigger
+            value="tecnicos"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
+            <Users className="h-4 w-4" /> Gestão de Técnicos
+          </TabsTrigger>
+          <TabsTrigger
+            value="locais"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+            onClick={fetchLocais}
+          >
+            <MapPin className="h-4 w-4" /> Locais de Check-in
+          </TabsTrigger>
+          <TabsTrigger
+            value="alertas"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+            onClick={fetchAlertas}
+          >
+            <Bell className="h-4 w-4" /> Alertas de Escopo ({alertas.length})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── ABA: GESTÃO DE TÉCNICOS ── */}
+        <TabsContent value="tecnicos" className="space-y-6">
+          <div className="flex justify-end gap-2 mb-4">
+            {/* Modal Técnico */}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold cursor-pointer">
+                  <UserPlus className="h-4 w-4" />
+                  Cadastrar Técnico
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto border border-border bg-card">
+                <DialogHeader>
+                  <DialogTitle>Novo Técnico</DialogTitle>
+                  <DialogDescription>Cadastre as credenciais de login e dados de campo do novo técnico.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateTechnician} className="space-y-4 pt-2">
                   <div className="space-y-1">
-                    <Label htmlFor="telefone">Telefone</Label>
-                    <Input id="telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="(15) 99999-9999" />
+                    <Label htmlFor="nome">Nome Completo</Label>
+                    <Input id="nome" required value={nome} onChange={(e) => setNome(e.target.value)} placeholder="João Silva" />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="cpf">CPF</Label>
-                    <Input id="cpf" value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="123.456.789-00" />
+                    <Label htmlFor="email">E-mail</Label>
+                    <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="joao.tecnico@geraltest.com" />
                   </div>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="rg">RG</Label>
-                  <Input id="rg" value={rg} onChange={(e) => setRg(e.target.value)} placeholder="12.345.678-9" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Habilidades e Serviços (Nível de Conhecimento 1 a 10)</Label>
-                  <div className="border border-border rounded-lg p-3 space-y-3 max-h-48 overflow-y-auto bg-muted/20">
-                    {availableServices.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">Carregando serviços disponíveis...</p>
-                    ) : (
-                      availableServices.map(svc => {
-                        const skill = selectedSkills.find(s => s.servico_id === svc.id);
-                        const isChecked = !!skill;
-                        return (
-                          <div key={svc.id} className="space-y-2 border-b border-border/50 pb-2 last:border-0 last:pb-0">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id={`svc-reg-${svc.id}`}
-                                checked={isChecked}
-                                onChange={() => toggleSkill(svc.id)}
-                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-background"
-                              />
-                              <Label htmlFor={`svc-reg-${svc.id}`} className="text-xs font-semibold cursor-pointer text-foreground">
-                                {svc.nome_servico}
-                              </Label>
-                            </div>
-                            {isChecked && (
-                              <div className="flex items-center gap-3 pl-6">
-                                <span className="text-[10px] font-medium text-muted-foreground w-20">
-                                  Nível: <span className="font-bold text-primary">{skill.nivel}</span>/10
-                                </span>
+                  <div className="space-y-1">
+                    <Label htmlFor="password">Senha de Acesso (mínimo 6 caracteres)</Label>
+                    <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="telefone">Telefone</Label>
+                      <Input id="telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="(15) 99999-9999" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="cpf">CPF</Label>
+                      <Input id="cpf" value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="123.456.789-00" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="rg">RG</Label>
+                    <Input id="rg" value={rg} onChange={(e) => setRg(e.target.value)} placeholder="12.345.678-9" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="lab-padrao">Laboratório Padrão</Label>
+                      <select
+                        id="lab-padrao"
+                        value={laboratorioPadraoId}
+                        onChange={(e) => setLaboratorioPadraoId(e.target.value)}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value="">-- Sem Base Padrão --</option>
+                        {locais
+                          .filter((l) => l.tipo === "Laboratorio" && !l.agendamento_id)
+                          .map((l) => (
+                            <option key={l.id} value={l.id}>
+                              {l.nome}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="raio-atuacao">Raio de Atuação (km)</Label>
+                      <Input
+                        id="raio-atuacao"
+                        type="number"
+                        required
+                        value={raioAtuacaoKm}
+                        onChange={(e) => setRaioAtuacaoKm(Number(e.target.value))}
+                        placeholder="Ex: 50"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Habilidades e Serviços (Nível de Conhecimento 1 a 10)</Label>
+                    <div className="border border-border rounded-lg p-3 space-y-3 max-h-48 overflow-y-auto bg-muted/20">
+                      {availableServices.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Carregando serviços disponíveis...</p>
+                      ) : (
+                        availableServices.map(svc => {
+                          const skill = selectedSkills.find(s => s.servico_id === svc.id);
+                          const isChecked = !!skill;
+                          return (
+                            <div key={svc.id} className="space-y-2 border-b border-border/50 pb-2 last:border-0 last:pb-0">
+                              <div className="flex items-center gap-2">
                                 <input
-                                  type="range"
-                                  min="1"
-                                  max="10"
-                                  value={skill.nivel}
-                                  onChange={(e) => updateSkillLevel(svc.id, parseInt(e.target.value))}
-                                  className="w-full h-1.5 bg-muted-foreground/20 rounded-lg appearance-none cursor-pointer accent-primary"
+                                  type="checkbox"
+                                  id={`svc-reg-${svc.id}`}
+                                  checked={isChecked}
+                                  onChange={() => toggleSkill(svc.id)}
+                                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-background"
                                 />
+                                <Label htmlFor={`svc-reg-${svc.id}`} className="text-xs font-semibold cursor-pointer text-foreground">
+                                  {svc.nome_servico}
+                                </Label>
                               </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
+                              {isChecked && (
+                                <div className="flex items-center gap-3 pl-6">
+                                  <span className="text-[10px] font-medium text-muted-foreground w-20">
+                                    Nível: <span className="font-bold text-primary">{skill.nivel}</span>/10
+                                  </span>
+                                  <input
+                                    type="range"
+                                    min="1"
+                                    max="10"
+                                    value={skill.nivel}
+                                    onChange={(e) => updateSkillLevel(svc.id, parseInt(e.target.value))}
+                                    className="w-full h-1.5 bg-muted-foreground/20 rounded-lg appearance-none cursor-pointer accent-primary"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
-                </div>
-                <DialogFooter className="pt-4">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={submitLoading}>Cancelar</Button>
-                  <Button type="submit" disabled={submitLoading}>{submitLoading ? "Cadastrando..." : "Confirmar Cadastro"}</Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <DialogFooter className="pt-4">
+                    <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={submitLoading}>Cancelar</Button>
+                    <Button type="submit" disabled={submitLoading}>{submitLoading ? "Cadastrando..." : "Confirmar Cadastro"}</Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
 
-          {/* Modal Administrador */}
-          <Dialog open={adminDialogOpen} onOpenChange={setAdminDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="gap-2 border-amber-500/30 text-amber-500 hover:bg-amber-500/10 font-bold">
-                <ShieldCheck className="h-4 w-4" />
-                Cadastrar Administrador
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto border border-border bg-card">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <ShieldCheck className="h-5 w-5 text-amber-500" />
-                  Novo Administrador
-                </DialogTitle>
-                <DialogDescription>Cadastre as credenciais de acesso para um novo administrador da Geraltest.</DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleCreateAdmin} className="space-y-4 pt-2">
-                <div className="space-y-1">
-                  <Label htmlFor="admin-nome">Nome Completo</Label>
-                  <Input id="admin-nome" required value={adminNome} onChange={(e) => setAdminNome(e.target.value)} placeholder="Ex: Felipe Medeiros" />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="admin-email">E-mail corporativo</Label>
-                  <Input id="admin-email" type="email" required value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="email@empresa.com" />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="admin-password">Senha de Acesso (mínimo 6 caracteres)</Label>
-                  <Input id="admin-password" type="password" required minLength={6} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="••••••" />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="admin-telefone">Telefone / Contato</Label>
-                  <Input id="admin-telefone" value={adminTelefone} onChange={(e) => setAdminTelefone(e.target.value)} placeholder="(15) 99999-9999" />
-                </div>
-                <DialogFooter className="pt-4">
-                  <Button type="button" variant="outline" onClick={() => setAdminDialogOpen(false)} disabled={adminSubmitLoading}>Cancelar</Button>
-                  <Button type="submit" className="bg-amber-600 hover:bg-amber-700 text-zinc-950 font-bold" disabled={adminSubmitLoading}>
-                    {adminSubmitLoading ? "Cadastrando..." : "Confirmar Cadastro"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+            {/* Modal Administrador */}
+            <Dialog open={adminDialogOpen} onOpenChange={setAdminDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2 border-amber-500/30 text-amber-500 hover:bg-amber-500/10 font-bold cursor-pointer">
+                  <ShieldCheck className="h-4 w-4" />
+                  Cadastrar Administrador
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto border border-border bg-card">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-amber-500" />
+                    Novo Administrador
+                  </DialogTitle>
+                  <DialogDescription>Cadastre as credenciais de acesso para um novo administrador da Geraltest.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateAdmin} className="space-y-4 pt-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="admin-nome">Nome Completo</Label>
+                    <Input id="admin-nome" required value={adminNome} onChange={(e) => setAdminNome(e.target.value)} placeholder="Ex: Felipe Medeiros" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="admin-email">E-mail corporativo</Label>
+                    <Input id="admin-email" type="email" required value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="email@empresa.com" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="admin-password">Senha de Acesso (mínimo 6 caracteres)</Label>
+                    <Input id="admin-password" type="password" required minLength={6} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="••••••" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="admin-telefone">Telefone / Contato</Label>
+                    <Input id="admin-telefone" value={adminTelefone} onChange={(e) => setAdminTelefone(e.target.value)} placeholder="(15) 99999-9999" />
+                  </div>
+                  <DialogFooter className="pt-4">
+                    <Button type="button" variant="outline" onClick={() => setAdminDialogOpen(false)} disabled={adminSubmitLoading}>Cancelar</Button>
+                    <Button type="submit" className="bg-amber-600 hover:bg-amber-700 text-zinc-950 font-bold" disabled={adminSubmitLoading}>
+                      {adminSubmitLoading ? "Cadastrando..." : "Confirmar Cadastro"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
 
-      {/* Grid de Resumo */}
-      <div className="grid gap-4 sm:grid-cols-4">
-        <Card className="border border-border bg-card">
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Técnicos Ativos</p>
-            <p className="text-3xl font-extrabold text-foreground mt-1">{tecnicos.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="border border-green-500/20 bg-green-500/5">
-          <CardContent className="pt-5">
-            <p className="text-xs text-green-600 font-medium uppercase tracking-wide font-bold">Disponíveis Hoje</p>
-            <p className="text-3xl font-extrabold text-green-600 mt-1">
-              {tecnicos.filter(t => t.status === "Disponivel").length}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border border-amber-500/20 bg-amber-500/5">
-          <CardContent className="pt-5">
-            <p className="text-xs text-amber-600 font-medium uppercase tracking-wide font-bold">Em Campo</p>
-            <p className="text-3xl font-extrabold text-amber-600 mt-1">
-              {tecnicos.filter(t => t.status === "Em_Campo").length}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border border-border bg-card">
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Média de Avaliações</p>
-            <p className="text-3xl font-extrabold text-foreground mt-1">
-              {tecnicos.length > 0
-                ? (tecnicos.reduce((acc, t) => acc + (t.ranking_score || 0), 0) / tecnicos.length).toFixed(1)
-                : "5.0"} ⭐
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+          {/* Grid de Resumo */}
+          <div className="grid gap-4 sm:grid-cols-4">
+            <Card className="border border-border bg-card">
+              <CardContent className="pt-5">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Técnicos Ativos</p>
+                <p className="text-3xl font-extrabold text-foreground mt-1">{tecnicos.length}</p>
+              </CardContent>
+            </Card>
+            <Card className="border border-green-500/20 bg-green-500/5">
+              <CardContent className="pt-5">
+                <p className="text-xs text-green-600 font-medium uppercase tracking-wide font-bold">Disponíveis Hoje</p>
+                <p className="text-3xl font-extrabold text-green-600 mt-1">
+                  {tecnicos.filter(t => t.status === "Disponivel").length}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border border-amber-500/20 bg-amber-500/5">
+              <CardContent className="pt-5">
+                <p className="text-xs text-amber-600 font-medium uppercase tracking-wide font-bold">Em Campo</p>
+                <p className="text-3xl font-extrabold text-amber-600 mt-1">
+                  {tecnicos.filter(t => t.status === "Em_Campo").length}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border border-border bg-card">
+              <CardContent className="pt-5">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Média de Avaliações</p>
+                <p className="text-3xl font-extrabold text-foreground mt-1">
+                  {tecnicos.length > 0
+                    ? (tecnicos.reduce((acc, t) => acc + (t.ranking_score || 0), 0) / tecnicos.length).toFixed(1)
+                    : "5.0"} ⭐
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Lista de Técnicos */}
-      <Card className="border border-border bg-card">
-        <CardHeader>
-          <CardTitle className="text-lg font-bold">Técnicos Cadastrados</CardTitle>
-          <CardDescription>Escala de profissionais ativos e habilitados para execução dos ensaios.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center text-sm text-muted-foreground py-8">Carregando técnicos...</div>
-          ) : tecnicos.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-8 border border-dashed rounded-lg">Nenhum técnico cadastrado ainda. Use o botão acima para adicionar.</div>
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full text-left border-collapse text-sm">
-                <thead>
-                  <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground">
-                    <th className="p-3">Nome</th>
-                    <th className="p-3">CPF</th>
-                    <th className="p-3">Certificações</th>
-                    <th className="p-3 text-center">Score</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-center">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {tecnicos.map((t) => (
-                    <tr
-                      key={t.id}
-                      className="hover:bg-muted/20 text-foreground cursor-pointer transition-all"
-                      onClick={() => setSelectedTecnico(t)}
+          {/* Lista de Técnicos */}
+          <Card className="border border-border bg-card">
+            <CardHeader>
+              <CardTitle className="text-lg font-bold">Técnicos Cadastrados</CardTitle>
+              <CardDescription>Escala de profissionais ativos e habilitados para execução dos ensaios.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center text-sm text-muted-foreground py-8">Carregando técnicos...</div>
+              ) : tecnicos.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-8 border border-dashed rounded-lg">Nenhum técnico cadastrado ainda. Use o botão acima para adicionar.</div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground">
+                        <th className="p-3">Nome</th>
+                        <th className="p-3">CPF</th>
+                        <th className="p-3">Certificações</th>
+                        <th className="p-3 text-center">Score</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3 text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {tecnicos.map((t) => (
+                        <tr
+                          key={t.id}
+                          className="hover:bg-muted/20 text-foreground cursor-pointer transition-all"
+                          onClick={() => setSelectedTecnico(t)}
+                        >
+                          <td className="p-3 font-semibold">{t.nome}</td>
+                          <td className="p-3 font-mono">{t.cpf || "Não informado"}</td>
+                          <td className="p-3 text-xs text-muted-foreground max-w-xs truncate">{t.certificacoes || "Sem certificações"}</td>
+                          <td className="p-3 text-center font-bold text-amber-500">{t.ranking_score ? Number(t.ranking_score).toFixed(1) : "5.0"} ⭐</td>
+                          <td className="p-3">
+                            <Badge variant="outline" className={
+                              t.status === "Disponivel" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                              t.status === "Em_Campo" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
+                              "bg-muted text-muted-foreground"
+                            }>
+                              {t.status === "Disponivel" ? "Disponível" : t.status === "Em_Campo" ? "Em Campo" : "De Folga"}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTecnico(t);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── ABA: LOCAIS DE CHECK-IN ── */}
+        <TabsContent value="locais" className="space-y-6">
+          <div className="flex justify-end mb-4">
+            <Dialog open={showLocalDialog} onOpenChange={setShowLocalDialog}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold cursor-pointer">
+                  <Plus className="h-4 w-4" />
+                  Cadastrar Local
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md border border-border bg-card">
+                <DialogHeader>
+                  <DialogTitle>Novo Local de Check-in</DialogTitle>
+                  <DialogDescription>Cadastre laboratórios, hotéis ou pontos de partida para check-in.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateLocal} className="space-y-4 pt-2 text-xs">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc-nome">Nome do Local</Label>
+                    <Input id="loc-nome" required value={localNome} onChange={(e) => setLocalNome(e.target.value)} placeholder="Ex: Laboratório Central Sorocaba" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc-tipo">Tipo do Ponto</Label>
+                    <select
+                      id="loc-tipo"
+                      value={localTipo}
+                      onChange={(e) => setLocalTipo(e.target.value)}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
                     >
-                      <td className="p-3 font-semibold">{t.nome}</td>
-                      <td className="p-3 font-mono">{t.cpf || "Não informado"}</td>
-                      <td className="p-3 text-xs text-muted-foreground max-w-xs truncate">{t.certificacoes || "Sem certificações"}</td>
-                      <td className="p-3 text-center font-bold text-amber-500">{t.ranking_score ? Number(t.ranking_score).toFixed(1) : "5.0"} ⭐</td>
-                      <td className="p-3">
-                        <Badge variant="outline" className={
-                          t.status === "Disponivel" ? "bg-green-500/10 text-green-600 border-green-500/20" :
-                          t.status === "Em_Campo" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
-                          "bg-muted text-muted-foreground"
-                        }>
-                          {t.status === "Disponivel" ? "Disponível" : t.status === "Em_Campo" ? "Em Campo" : "De Folga"}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-center">
+                      <option value="Laboratorio">Laboratório / Barracão</option>
+                      <option value="Hotel">Hotel / Hospedagem</option>
+                      <option value="Apoio">Ponto de Apoio / Obra Central</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc-end">Endereço (Rua/Av.)</Label>
+                    <Input id="loc-end" required value={localEndereco} onChange={(e) => setLocalEndereco(e.target.value)} placeholder="Ex: Rodovia Raposo Tavares" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="loc-num">Número</Label>
+                      <Input id="loc-num" value={localNumero} onChange={(e) => setLocalNumero(e.target.value)} placeholder="Ex: Km 104" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="loc-bair">Bairro</Label>
+                      <Input id="loc-bair" value={localBairro} onChange={(e) => setLocalBairro(e.target.value)} placeholder="Ex: Jardim Bandeirantes" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="loc-cid">Cidade</Label>
+                      <Input id="loc-cid" required value={localCidade} onChange={(e) => setLocalCidade(e.target.value)} placeholder="Ex: Sorocaba" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="loc-est">Estado</Label>
+                      <Input id="loc-est" required maxLength={2} value={localEstado} onChange={(e) => setLocalEstado(e.target.value)} placeholder="Ex: SP" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="loc-lat">Latitude (opcional)</Label>
+                      <Input id="loc-lat" type="number" step="0.0000001" value={localLat} onChange={(e) => setLocalLat(e.target.value)} placeholder="Ex: -23.5015" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="loc-lng">Longitude (opcional)</Label>
+                      <Input id="loc-lng" type="number" step="0.0000001" value={localLng} onChange={(e) => setLocalLng(e.target.value)} placeholder="Ex: -47.4526" />
+                    </div>
+                  </div>
+
+                  <DialogFooter className="pt-4">
+                    <Button type="button" variant="outline" onClick={() => setShowLocalDialog(false)} disabled={submittingLocal}>Cancelar</Button>
+                    <Button type="submit" disabled={submittingLocal}>{submittingLocal ? "Salvando..." : "Confirmar Cadastro"}</Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <Card className="border border-border bg-card">
+            <CardHeader>
+              <CardTitle className="text-lg font-bold">Locais Registrados para Check-in</CardTitle>
+              <CardDescription>Bases de apoio, laboratórios permanentes e hotéis credenciados para o início das escalas.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingLocais ? (
+                <div className="text-center text-sm text-muted-foreground py-8">Carregando locais...</div>
+              ) : locais.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-8 border border-dashed rounded-lg">Nenhum local cadastrado. Use o botão acima para adicionar.</div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground">
+                        <th className="p-3">Nome</th>
+                        <th className="p-3">Tipo</th>
+                        <th className="p-3">Endereço Completo</th>
+                        <th className="p-3">Coordenadas (Lat/Lng)</th>
+                        <th className="p-3 text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {locais.map((loc) => (
+                        <tr key={loc.id} className="hover:bg-muted/10 text-foreground transition-all">
+                          <td className="p-3 font-semibold">{loc.nome}</td>
+                          <td className="p-3">
+                            <Badge variant="outline" className={
+                              loc.tipo === "Laboratorio" ? "bg-teal-500/10 text-teal-600 border-teal-500/20" :
+                              loc.tipo === "Hotel" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
+                              "bg-purple-500/10 text-purple-600 border-purple-500/20"
+                            }>
+                              {loc.tipo === "Laboratorio" ? "Laboratório / Barracão" :
+                               loc.tipo === "Hotel" ? "Hotel / Hospedagem" :
+                               loc.tipo === "Apoio" ? "B. Apoio / Obra" : "Outro"}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-xs">{loc.endereco}, {loc.numero || "S/N"} - {loc.bairro}, {loc.cidade}/{loc.estado}</td>
+                          <td className="p-3 text-xs font-mono">
+                            {loc.latitude !== null && loc.longitude !== null ? `${loc.latitude}, ${loc.longitude}` : "Não cadastradas"}
+                          </td>
+                          <td className="p-3 text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 p-1 cursor-pointer"
+                              onClick={() => handleDeleteLocal(loc.id)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── ABA: ALERTAS DE ESCOPO ── */}
+        <TabsContent value="alertas" className="space-y-6">
+          <Card className="border border-border bg-card">
+            <CardHeader>
+              <CardTitle className="text-lg font-bold">Alertas de Escopo Técnico</CardTitle>
+              <CardDescription>Pendências de agendamentos aceitos fora do raio de atuação que necessitam de local de hospedagem ou apoio.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingAlertas ? (
+                <div className="text-center text-sm text-muted-foreground py-8">Carregando pendências...</div>
+              ) : alertas.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-8 border border-dashed rounded-lg bg-muted/10">
+                  <CheckCircle2 className="h-8 w-8 text-green-500/40 mx-auto mb-2" />
+                  Nenhum alerta pendente. Toda a logística dos técnicos está no raio correto.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {alertas.map((alerta) => (
+                    <div key={alerta.id} className="border-2 border-red-500/20 bg-red-500/5 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="destructive" className="font-bold">⚠️ Fora do Raio</Badge>
+                          <span className="text-xs text-muted-foreground font-semibold font-mono">Agendamento: {alerta.agendamento?.codigo_pedido}</span>
+                        </div>
+                        <p className="text-sm font-semibold mt-1">{alerta.descricao}</p>
+                        <p className="text-xs text-muted-foreground">Obra: {alerta.agendamento?.obra?.nome_obra} ({alerta.agendamento?.obra?.cidade}/{alerta.agendamento?.obra?.estado})</p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
                         <Button
-                          variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTecnico(t);
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer"
+                          onClick={() => {
+                            setSelectedAlerta(alerta);
+                            setLocalTipo("Hotel");
+                            setLocalNome(`Hotel para ${alerta.tecnico?.nome} - ${alerta.agendamento?.obra?.cidade}`);
+                            setLocalCidade(alerta.agendamento?.obra?.cidade || "");
+                            setLocalEstado(alerta.agendamento?.obra?.estado || "SP");
+                            setAlertSupportDialogOpen(true);
                           }}
                         >
-                          <Edit className="h-4 w-4" />
+                          Cadastrar Hospedagem
                         </Button>
-                      </td>
-                    </tr>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-red-500/30 text-red-600 hover:bg-red-500/10 cursor-pointer font-semibold"
+                          onClick={async () => {
+                            if (confirm("Deseja realmente ignorar o alerta? O técnico poderá iniciar utilizando a opção 'Local sem definição'.")) {
+                              try {
+                                await resolveAlert({ data: { alertId: alerta.id } });
+                                toast.info("Alerta resolvido.");
+                                fetchAlertas();
+                              } catch (err: any) {
+                                toast.error(err?.message);
+                              }
+                            }
+                          }}
+                        >
+                          Ignorar Alerta
+                        </Button>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Modal Hospedagem Temporária do Alerta */}
+          <Dialog open={alertSupportDialogOpen} onOpenChange={setAlertSupportDialogOpen}>
+            <DialogContent className="max-w-md border border-border bg-card">
+              <DialogHeader>
+                <DialogTitle>Vincular Hospedagem / Base de Apoio</DialogTitle>
+                <DialogDescription>
+                  Cadastre o ponto de partida do técnico para este serviço específico para resolver a pendência logística.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleRegisterAlertSupport} className="space-y-4 pt-2 text-xs">
+                <div className="space-y-1.5">
+                  <Label htmlFor="h-nome">Nome da Hospedagem / Base</Label>
+                  <Input id="h-nome" required value={localNome} onChange={(e) => setLocalNome(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="h-tipo">Tipo do Local</Label>
+                  <select
+                    id="h-tipo"
+                    value={localTipo}
+                    onChange={(e) => setLocalTipo(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background"
+                  >
+                    <option value="Hotel">Hotel / Hospedagem</option>
+                    <option value="Apoio">Ponto de Apoio / Obra Central</option>
+                    <option value="Laboratorio">Laboratório Auxiliar</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="h-end">Endereço (Rua/Av.)</Label>
+                  <Input id="h-end" required value={localEndereco} onChange={(e) => setLocalEndereco(e.target.value)} placeholder="Ex: Av. Principal Tatuí" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="h-num">Número</Label>
+                    <Input id="h-num" value={localNumero} onChange={(e) => setLocalNumero(e.target.value)} placeholder="Ex: 123" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="h-bair">Bairro</Label>
+                    <Input id="h-bair" value={localBairro} onChange={(e) => setLocalBairro(e.target.value)} placeholder="Ex: Centro" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="h-cid">Cidade</Label>
+                    <Input id="h-cid" required value={localCidade} onChange={(e) => setLocalCidade(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="h-est">Estado</Label>
+                    <Input id="h-est" required maxLength={2} value={localEstado} onChange={(e) => setLocalEstado(e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="h-lat">Latitude (opcional)</Label>
+                    <Input id="h-lat" type="number" step="0.0000001" value={localLat} onChange={(e) => setLocalLat(e.target.value)} placeholder="-23.3512" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="h-lng">Longitude (opcional)</Label>
+                    <Input id="h-lng" type="number" step="0.0000001" value={localLng} onChange={(e) => setLocalLng(e.target.value)} placeholder="-47.2844" />
+                  </div>
+                </div>
+
+                <DialogFooter className="pt-4">
+                  <Button type="button" variant="outline" onClick={() => setAlertSupportDialogOpen(false)}>Cancelar</Button>
+                  <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Vincular e Resolver</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+      </Tabs>
 
       {/* Detalhes e Edição do Técnico */}
       {selectedTecnico && (
@@ -2177,6 +2932,39 @@ function AdminDash() {
                     <div className="space-y-1">
                       <Label htmlFor="edit-rg">RG</Label>
                       <Input id="edit-rg" value={editRg} onChange={(e) => setEditRg(e.target.value)} placeholder="12.345.678-9" disabled={!isEditing} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-lab-padrao">Laboratório Padrão</Label>
+                      <select
+                        id="edit-lab-padrao"
+                        value={editLaboratorioPadraoId}
+                        onChange={(e) => setEditLaboratorioPadraoId(e.target.value)}
+                        disabled={!isEditing}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                      >
+                        <option value="">-- Sem Base Padrão --</option>
+                        {locais
+                          .filter((l) => l.tipo === "Laboratorio" && !l.agendamento_id)
+                          .map((l) => (
+                            <option key={l.id} value={l.id}>
+                              {l.nome}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-raio-atuacao">Raio de Atuação (km)</Label>
+                      <Input
+                        id="edit-raio-atuacao"
+                        type="number"
+                        required
+                        value={editRaioAtuacaoKm}
+                        onChange={(e) => setEditRaioAtuacaoKm(Number(e.target.value))}
+                        disabled={!isEditing}
+                      />
                     </div>
                   </div>
 
