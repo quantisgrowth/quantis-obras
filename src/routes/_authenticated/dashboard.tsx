@@ -30,7 +30,9 @@ import {
   deleteTechnicianDocument,
   syncUserRoles,
   processTimeouts,
-  resolveAlert
+  resolveAlert,
+  requestBlocker,
+  updateBlockerStatus
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -944,6 +946,17 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const [photoRetorno, setPhotoRetorno] = useState<File | null>(null);
   const [finalizing, setFinalizing] = useState(false);
 
+  // Blocker / Absence states
+  const [tecnicoActiveTab, setTecnicoActiveTab] = useState("execucao");
+  const [blockers, setBlockers] = useState<any[]>([]);
+  const [loadingBlockers, setLoadingBlockers] = useState(false);
+  const [blockerDialogOpen, setBlockerDialogOpen] = useState(false);
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [tipoBlocker, setTipoBlocker] = useState("Folga");
+  const [descricaoBlocker, setDescricaoBlocker] = useState("");
+  const [savingBlocker, setSavingBlocker] = useState(false);
+
   const fetchTecnicoData = async () => {
     try {
       const { processTimeouts: dynamicProcessTimeouts } = await import("@/lib/booking.functions");
@@ -1006,10 +1019,67 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
       if (!locsErr && locs) {
         setLocaisCheckin(locs);
       }
+
+      // Get blockers
+      setLoadingBlockers(true);
+      const { data: blks, error: blkErr } = await supabase
+        .from("bloqueios_tecnicos")
+        .select("*")
+        .eq("tecnico_id", tec.id)
+        .order("data_inicio", { ascending: false });
+      if (!blkErr && blks) {
+        setBlockers(blks);
+      }
+      setLoadingBlockers(false);
     } catch (err) {
       console.error("Error fetching technician dashboard data:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRequestBlocker = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dataInicio || !dataFim) {
+      toast.error("Por favor, preencha as datas.");
+      return;
+    }
+    setSavingBlocker(true);
+    try {
+      await requestBlocker({
+        data: {
+          dataInicio,
+          dataFim,
+          tipo: tipoBlocker as any,
+          descricao: descricaoBlocker,
+        }
+      });
+      toast.success("Solicitação de bloqueio registrada com sucesso!");
+      setBlockerDialogOpen(false);
+      setDataInicio("");
+      setDataFim("");
+      setTipoBlocker("Folga");
+      setDescricaoBlocker("");
+      await fetchTecnicoData();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao solicitar bloqueio.");
+    } finally {
+      setSavingBlocker(false);
+    }
+  };
+
+  const handleDeleteBlocker = async (blockerId: string) => {
+    if (!confirm("Tem certeza que deseja cancelar esta solicitação de bloqueio?")) return;
+    try {
+      const { error } = await supabase
+        .from("bloqueios_tecnicos")
+        .delete()
+        .eq("id", blockerId);
+      if (error) throw error;
+      toast.success("Solicitação excluída com sucesso.");
+      await fetchTecnicoData();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao excluir solicitação.");
     }
   };
 
@@ -1283,398 +1353,552 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
         </div>
       </div>
 
-      {/* ── SEÇÃO: EXECUÇÃO EM EXECUÇÃO ATIVA ── */}
-      {activeExec && (
-        <Card className="border-2 border-indigo-500 bg-indigo-500/5 shadow-md">
-          <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-500/20">
-            <div>
-              <div className="flex items-center gap-2">
-                <Badge className="bg-indigo-600 text-white border-0 font-bold flex items-center gap-1">
-                  <Camera className="h-3 w-3" /> Em Execução Ativo
-                </Badge>
-                <span className="text-xs text-indigo-700 dark:text-indigo-400 font-semibold font-mono">
-                  {activeExec.codigo_pedido}
-                </span>
-              </div>
-              <CardTitle className="text-xl font-bold mt-1 text-foreground">
-                {activeExec.obra?.nome_obra}
-              </CardTitle>
-            </div>
-            <div className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">
-              📍 {activeExec.obra?.cidade}
-            </div>
-          </CardHeader>
-          <CardContent className="pt-5 space-y-6">
-            {/* Infos do pedido e Rota GPS */}
-            <div className="grid gap-4 md:grid-cols-2 bg-muted/20 p-3 rounded-lg border">
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p>📍 <strong className="text-foreground">Endereço Obra:</strong> {activeExec.obra?.endereco}, {activeExec.obra?.numero} · {activeExec.obra?.bairro}, {activeExec.obra?.cidade}/{activeExec.obra?.estado}</p>
-                <p>🧪 <strong className="text-foreground">Serviço:</strong> {activeExec.servico?.nome_servico || "Controle Tecnológico"}</p>
-                <p>🧱 <strong className="text-foreground">CPs Contratados:</strong> {activeExec.cps_contratados} unidades ({activeExec.qtd_caminhoes} caminhões)</p>
-              </div>
-              <div className="text-xs text-muted-foreground space-y-1.5 border-t md:border-t-0 md:border-l border-border pt-2 md:pt-0 md:pl-4 flex flex-col justify-center">
-                <p className="font-semibold text-foreground">🚀 Ponto de Partida do Técnico</p>
-                <p className="truncate">
-                  📍 {activeExec.partida_custom_endereco || "Laboratório / Base padrão"}
-                </p>
-                <div className="flex gap-2 pt-1 flex-wrap">
-                  <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                      `${activeExec.obra?.endereco || ""}, ${activeExec.obra?.numero || ""}, ${activeExec.obra?.cidade || ""}`
-                    )}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-[10px] shadow-sm transition-all cursor-pointer"
-                  >
-                    <MapPin className="h-3 w-3" /> Abrir no Google Maps
-                  </a>
-                  <a
-                    href={`https://waze.com/ul?q=${encodeURIComponent(
-                      `${activeExec.obra?.endereco || ""}, ${activeExec.obra?.numero || ""}, ${activeExec.obra?.cidade || ""}`
-                    )}&navigate=yes`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-[10px] shadow-sm transition-all cursor-pointer"
-                  >
-                    <Camera className="h-3 w-3" /> Abrir no Waze
-                  </a>
-                </div>
-              </div>
-            </div>
+      <Tabs value={tecnicoActiveTab} onValueChange={setTecnicoActiveTab} className="w-full animate-in fade-in-50 duration-200">
+        <TabsList className="flex flex-wrap gap-2 md:gap-3 bg-transparent p-0 h-auto justify-start mb-6">
+          <TabsTrigger
+            value="execucao"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
+            <Camera className="h-4 w-4" /> Execução Ativa
+          </TabsTrigger>
+          <TabsTrigger
+            value="convites"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
+            <Bell className="h-4 w-4" /> Convites Pendentes ({convites.length})
+          </TabsTrigger>
+          <TabsTrigger
+            value="escala"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
+            <Calendar className="h-4 w-4" /> Minha Escala ({agenda.length})
+          </TabsTrigger>
+          <TabsTrigger
+            value="calendario"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
+            <Clock className="h-4 w-4" /> Calendário / Ausências ({blockers.length})
+          </TabsTrigger>
+        </TabsList>
 
-            {/* Passos de execução */}
-            <div className="grid gap-4 md:grid-cols-3">
-              {/* Passo 1: Check-in */}
-              <Card className="border border-border bg-card p-4 relative overflow-hidden">
-                <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5 mb-2">
-                  <MapPin className="h-4.5 w-4.5 text-primary" />
-                  1. Check-in na Obra
-                </h4>
-                {checkinRecord ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-                      <CheckCircle2 className="h-4 w-4" /> Check-in realizado!
-                    </p>
-                    <img src={checkinRecord.url_foto} alt="Checkin" className="h-16 w-full object-cover rounded border border-border" />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">Tire uma foto ao chegar no canteiro para iniciar.</p>
-                    <Label htmlFor="checkin-file" className="w-full flex items-center justify-center gap-1 px-3 py-2 border rounded-md cursor-pointer hover:bg-muted text-xs font-semibold">
-                      <Camera className="h-4 w-4" /> Capturar Foto Chegada
-                    </Label>
-                    <Input id="checkin-file" type="file" accept="image/*" capture="environment" className="hidden" onChange={handleCheckin} disabled={uploadingCheckin} />
-                    {uploadingCheckin && <p className="text-[10px] text-muted-foreground animate-pulse">Registrando check-in...</p>}
-                  </div>
-                )}
-              </Card>
-
-              {/* Passo 2: Moldagem */}
-              <Card className="border border-border bg-card p-4">
-                <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5 mb-2">
-                  <FlaskConical className="h-4.5 w-4.5 text-primary" />
-                  2. Lançar Moldagens ({cycleRecords.length})
-                </h4>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Registre as leituras de slump e CPs moldados de cada caminhão.
-                </p>
-                
-                <div className="space-y-2">
-                  <Dialog open={cycleDialogOpen} onOpenChange={setCycleDialogOpen}>
-                    <DialogTrigger asChild disabled={!checkinRecord}>
-                      <Button className="w-full text-xs font-bold gap-1 h-9" size="sm">
-                        <Plus className="h-4 w-4" /> Lançar Novo Caminhão
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-sm">
-                      <DialogHeader>
-                        <DialogTitle>Lançar Ensaio / Moldagem</DialogTitle>
-                        <DialogDescription>Preencha os dados do ensaio de concreto deste ciclo.</DialogDescription>
-                      </DialogHeader>
-                      <form onSubmit={handleAddCycle} className="space-y-4 pt-2">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="numCaminhao">Caminhão #</Label>
-                            <Input id="numCaminhao" required value={numCaminhao} onChange={(e) => setNumCaminhao(e.target.value)} placeholder="Ex: 01" />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="notaFiscal">Nota Fiscal</Label>
-                            <Input id="notaFiscal" required value={notaFiscal} onChange={(e) => setNotaFiscal(e.target.value)} placeholder="Ex: NF-1234" />
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="pecaConcretada">Estrutura Concretada</Label>
-                          <Input id="pecaConcretada" required value={pecaConcretada} onChange={(e) => setPecaConcretada(e.target.value)} placeholder="Ex: Laje 2º andar - Bloco A" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="slump">Slump Test (mm)</Label>
-                            <Input id="slump" type="number" required value={slump} onChange={(e) => setSlump(Number(e.target.value))} placeholder="Ex: 100" />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="cps">CPs Moldados</Label>
-                            <Input id="cps" type="number" required value={cpsMoldados} onChange={(e) => setCpsMoldados(Number(e.target.value))} placeholder="Ex: 2" />
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="cycle-photo">Foto do Ensaio / Slump (Obrigatório)</Label>
-                          <Input id="cycle-photo" type="file" accept="image/*" capture="environment" required onChange={(e) => setCyclePhoto(e.target.files ? e.target.files[0] : null)} />
-                        </div>
-                        <DialogFooter className="pt-2">
-                          <Button type="button" variant="outline" onClick={() => setCycleDialogOpen(false)} disabled={savingCycle}>Cancelar</Button>
-                          <Button type="submit" disabled={savingCycle}>{savingCycle ? "Lançando..." : "Registrar Ciclo"}</Button>
-                        </DialogFooter>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-
-                  {cycleRecords.length > 0 && (
-                    <div className="text-[10px] text-muted-foreground max-h-24 overflow-y-auto divide-y divide-border border rounded p-1.5 bg-muted/10 font-medium">
-                      {cycleRecords.map((c, i) => (
-                        <div key={c.id} className="py-1 flex justify-between">
-                          <span>Cam. {c.metadata?.numero_caminhao} ({c.metadata?.peca_concretada})</span>
-                          <span className="font-bold">{c.metadata?.cps_moldados} CPs · Slump: {c.metadata?.slump}mm</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Card>
-
-              {/* Passo 3: Concluir */}
-              <Card className="border border-border bg-card p-4 flex flex-col justify-between">
+        {/* ── TAB: EXECUÇÃO ATIVA ── */}
+        <TabsContent value="execucao" className="space-y-4">
+          {activeExec ? (
+            <Card className="border-2 border-indigo-500 bg-indigo-500/5 shadow-md">
+              <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-500/20">
                 <div>
-                  <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5 mb-2">
-                    <CheckCircle2 className="h-4.5 w-4.5 text-primary" />
-                    3. Concluir Serviço
-                  </h4>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Total coletado até agora: <strong className="text-primary text-sm">{totalCpsMolded} de {activeExec.cps_contratados} CPs</strong> contratados.
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-indigo-600 text-white border-0 font-bold flex items-center gap-1">
+                      <Camera className="h-3 w-3" /> Em Execução Ativo
+                    </Badge>
+                    <span className="text-xs text-indigo-700 dark:text-indigo-400 font-semibold font-mono">
+                      {activeExec.codigo_pedido}
+                    </span>
+                  </div>
+                  <CardTitle className="text-xl font-bold mt-1 text-foreground">
+                    {activeExec.obra?.nome_obra}
+                  </CardTitle>
+                </div>
+                <div className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">
+                  📍 {activeExec.obra?.cidade}
+                </div>
+              </CardHeader>
+              <CardContent className="pt-5 space-y-6">
+                {/* Infos do pedido e Rota GPS */}
+                <div className="grid gap-4 md:grid-cols-2 bg-muted/20 p-3 rounded-lg border">
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>📍 <strong className="text-foreground">Endereço Obra:</strong> {activeExec.obra?.endereco}, {activeExec.obra?.numero} · {activeExec.obra?.bairro}, {activeExec.obra?.cidade}/{activeExec.obra?.estado}</p>
+                    <p>🧪 <strong className="text-foreground">Serviço:</strong> {activeExec.servico?.nome_servico || "Controle Tecnológico"}</p>
+                    <p>🧱 <strong className="text-foreground">CPs Contratados:</strong> {activeExec.cps_contratados} unidades ({activeExec.qtd_caminhoes} caminhões)</p>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-1.5 border-t md:border-t-0 md:border-l border-border pt-2 md:pt-0 md:pl-4 flex flex-col justify-center">
+                    <p className="font-semibold text-foreground">🚀 Ponto de Partida do Técnico</p>
+                    <p className="truncate">
+                      📍 {activeExec.partida_custom_endereco || "Laboratório / Base padrão"}
+                    </p>
+                    <div className="flex gap-2 pt-1 flex-wrap">
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                          `${activeExec.obra?.endereco || ""}, ${activeExec.obra?.numero || ""}, ${activeExec.obra?.cidade || ""}`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-[10px] shadow-sm transition-all cursor-pointer"
+                      >
+                        <MapPin className="h-3 w-3" /> Abrir no Google Maps
+                      </a>
+                      <a
+                        href={`https://waze.com/ul?q=${encodeURIComponent(
+                          `${activeExec.obra?.endereco || ""}, ${activeExec.obra?.numero || ""}, ${activeExec.obra?.cidade || ""}`
+                        )}&navigate=yes`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-[10px] shadow-sm transition-all cursor-pointer"
+                      >
+                        <MapPin className="h-3 w-3" /> Abrir no Waze
+                      </a>
+                    </div>
+                  </div>
                 </div>
 
-                <Dialog open={concludeDialogOpen} onOpenChange={setConcludeDialogOpen}>
-                  <DialogTrigger asChild disabled={cycleRecords.length === 0}>
-                    <Button className="w-full text-xs font-bold gap-1 h-9 bg-emerald-600 hover:bg-emerald-700" size="sm">
-                      <Check className="h-4 w-4" /> Finalizar e Enviar
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-sm">
-                    <DialogHeader>
-                      <DialogTitle>Concluir Serviço</DialogTitle>
-                      <DialogDescription>
-                        Envie os ensaios finais. As medições serão validadas pelo cliente.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleFinalize} className="space-y-4 pt-2 text-xs">
-                      <div className="bg-muted/40 p-3 rounded border border-border">
-                        <p className="font-semibold text-foreground text-sm">Resumo Coleta</p>
-                        <p className="mt-1">CPs Moldados Reais: <strong className="text-primary text-sm">{totalCpsMolded} unidades</strong></p>
-                      </div>
+                {/* Passos de execução */}
+                <div className="grid gap-4 md:grid-cols-3">
+                  {/* Passo 1: Check-in */}
+                  <Card className="border border-border bg-card p-4 relative overflow-hidden">
+                    <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5 mb-2">
+                      <MapPin className="h-4.5 w-4.5 text-primary" />
+                      1. Check-in na Obra
+                    </h4>
+                    {checkinRecord ? (
                       <div className="space-y-2">
-                        <Label htmlFor="photo-final">Foto Panorâmica dos CPs Organizados (Opcional)</Label>
-                        <Input id="photo-final" type="file" accept="image/*" capture="environment" onChange={(e) => setPhotoFinal(e.target.files ? e.target.files[0] : null)} />
+                        <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <CheckCircle2 className="h-4 w-4" /> Check-in realizado!
+                        </p>
+                        <img src={checkinRecord.url_foto} alt="Checkin" className="h-16 w-full object-cover rounded border border-border" />
                       </div>
+                    ) : (
                       <div className="space-y-2">
-                        <Label htmlFor="photo-retorno">Foto de Retorno de Carga / Betoneira Limpa (Opcional)</Label>
-                        <Input id="photo-retorno" type="file" accept="image/*" capture="environment" onChange={(e) => setPhotoRetorno(e.target.files ? e.target.files[0] : null)} />
+                        <p className="text-xs text-muted-foreground">Tire uma foto ao chegar no canteiro para iniciar.</p>
+                        <Label htmlFor="checkin-file" className="w-full flex items-center justify-center gap-1 px-3 py-2 border rounded-md cursor-pointer hover:bg-muted text-xs font-semibold">
+                          <Camera className="h-4 w-4" /> Capturar Foto Chegada
+                        </Label>
+                        <Input id="checkin-file" type="file" accept="image/*" capture="environment" className="hidden" onChange={handleCheckin} disabled={uploadingCheckin} />
+                        {uploadingCheckin && <p className="text-[10px] text-muted-foreground animate-pulse">Registrando check-in...</p>}
                       </div>
-                      <DialogFooter className="pt-2">
-                        <Button type="button" variant="outline" onClick={() => setConcludeDialogOpen(false)} disabled={finalizing}>Cancelar</Button>
-                        <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" disabled={finalizing}>
-                          {finalizing ? "Concluindo..." : "Confirmar Conclusão"}
-                        </Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              </Card>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── SEÇÃO: CONVITES PENDENTES ── */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <Bell className="h-5 w-5 text-amber-500" />
-          Convites Pendentes ({convites.length})
-        </h2>
-
-        {convites.length === 0 ? (
-          <Card className="border border-dashed border-border py-10 text-center bg-muted/10">
-            <CardContent className="space-y-2">
-              <Clock className="h-8 w-8 text-muted-foreground/30 mx-auto" />
-              <p className="text-sm text-muted-foreground">Você não possui convites pendentes no momento.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            {convites.map((ag) => (
-              <Card key={ag.id} className="border-2 border-amber-500/40 bg-amber-500/5 hover:shadow-md transition-all">
-                <CardHeader className="pb-3 flex flex-row items-start justify-between space-y-0 gap-4">
-                  <div>
-                    <CardTitle className="text-lg font-bold text-foreground">
-                      {ag.obra?.nome_obra || "Obra sem nome"}
-                    </CardTitle>
-                    <CardDescription className="text-xs font-semibold text-amber-600 mt-1">
-                      {ag.servico?.nome_servico || "Controle Tecnológico"}
-                    </CardDescription>
-                  </div>
-                  <InvitationCountdown convidadoEm={ag.convidado_em} onTimeout={fetchTecnicoData} />
-                </CardHeader>
-                <CardContent className="space-y-3 pb-4">
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p>
-                      📍 <strong className="text-foreground">Endereço:</strong> {ag.obra?.endereco}, {ag.obra?.numero} - {ag.obra?.bairro}, {ag.obra?.cidade}/{ag.obra?.estado}
-                    </p>
-                    <p>
-                      📅 <strong className="text-foreground">Data/Hora:</strong> {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
-                    </p>
-                    <p>
-                      🧪 <strong className="text-foreground">Quantidade CPs:</strong> {ag.cps_contratados} unidades ({ag.qtd_caminhoes} {ag.qtd_caminhoes === 1 ? "caminhão" : "caminhões"})
-                    </p>
-                    {ag.observacoes && (
-                      <p className="italic bg-card p-2 rounded border border-border mt-2">
-                        "{ag.observacoes}"
-                      </p>
                     )}
-                  </div>
+                  </Card>
 
-                  <div className="flex gap-2 pt-2">
-                    <Button 
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                      onClick={() => handleAccept(ag.id)}
-                      disabled={actionLoading !== null}
-                    >
-                      {actionLoading === ag.id ? "Processando..." : "Aceitar Convite"}
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      className="flex-1 border-red-500/30 text-red-600 hover:bg-red-500/10"
-                      onClick={() => handleReject(ag.id)}
-                      disabled={actionLoading !== null}
-                    >
-                      {actionLoading === ag.id ? "Processando..." : "Recusar"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+                  {/* Passo 2: Moldagem */}
+                  <Card className="border border-border bg-card p-4">
+                    <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5 mb-2">
+                      <FlaskConical className="h-4.5 w-4.5 text-primary" />
+                      2. Lançar Moldagens ({cycleRecords.length})
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Registre as leituras de slump e CPs moldados de cada caminhão.
+                    </p>
+                    
+                    <div className="space-y-2">
+                      <Dialog open={cycleDialogOpen} onOpenChange={setCycleDialogOpen}>
+                        <DialogTrigger asChild disabled={!checkinRecord}>
+                          <Button className="w-full text-xs font-bold gap-1 h-9" size="sm">
+                            <Plus className="h-4 w-4" /> Lançar Novo Caminhão
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-sm border border-border bg-card">
+                          <DialogHeader>
+                            <DialogTitle>Lançar Ensaio / Moldagem</DialogTitle>
+                            <DialogDescription>Preencha os dados do ensaio de concreto deste ciclo.</DialogDescription>
+                          </DialogHeader>
+                          <form onSubmit={handleAddCycle} className="space-y-4 pt-2">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label htmlFor="numCaminhao">Caminhão #</Label>
+                                <Input id="numCaminhao" required value={numCaminhao} onChange={(e) => setNumCaminhao(e.target.value)} placeholder="Ex: 01" />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="notaFiscal">Nota Fiscal</Label>
+                                <Input id="notaFiscal" required value={notaFiscal} onChange={(e) => setNotaFiscal(e.target.value)} placeholder="Ex: NF-1234" />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="pecaConcretada">Estrutura Concretada</Label>
+                              <Input id="pecaConcretada" required value={pecaConcretada} onChange={(e) => setPecaConcretada(e.target.value)} placeholder="Ex: Laje 2º andar - Bloco A" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label htmlFor="slump">Slump Test (mm)</Label>
+                                <Input id="slump" type="number" required value={slump} onChange={(e) => setSlump(Number(e.target.value))} placeholder="Ex: 100" />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="cps">CPs Moldados</Label>
+                                <Input id="cps" type="number" required value={cpsMoldados} onChange={(e) => setCpsMoldados(Number(e.target.value))} placeholder="Ex: 2" />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="cycle-photo">Foto do Ensaio / Slump (Obrigatório)</Label>
+                              <Input id="cycle-photo" type="file" accept="image/*" capture="environment" required onChange={(e) => setCyclePhoto(e.target.files ? e.target.files[0] : null)} />
+                            </div>
+                            <DialogFooter className="pt-2">
+                              <Button type="button" variant="outline" onClick={() => setCycleDialogOpen(false)} disabled={savingCycle}>Cancelar</Button>
+                              <Button type="submit" disabled={savingCycle}>{savingCycle ? "Lançando..." : "Registrar Ciclo"}</Button>
+                            </DialogFooter>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
 
-      {/* ── SEÇÃO: MINHA ESCALA / AGENDA (DIVIDIDA) ── */}
-      <div className="space-y-6">
-        <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <CalendarPlus className="h-5 w-5 text-primary" />
-          Minha Escala / Serviços
-        </h2>
-
-        {agenda.length === 0 ? (
-          <Card className="border border-dashed border-border py-12 text-center bg-muted/10">
-            <CardContent className="space-y-2">
-              <ClipboardList className="h-8 w-8 text-muted-foreground/30 mx-auto" />
-              <p className="text-sm text-muted-foreground">Nenhum serviço confirmado na sua escala por enquanto.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {/* Helper local para renderizar cada card */}
-            {(() => {
-              const renderCard = (ag: any) => (
-                <Card key={ag.id} className="border border-border bg-card p-4 hover:shadow-sm transition-all">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra sem nome"}</span>
-                        <Badge variant="outline" className={STATUS_COLORS[ag.status_agendamento] || "bg-muted text-muted-foreground"}>
-                          {STATUS_LABELS[ag.status_agendamento] || ag.status_agendamento}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground font-medium">
-                        {ag.servico?.nome_servico || "Controle Tecnológico"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        📍 {ag.obra?.endereco}, {ag.obra?.numero} - {ag.obra?.bairro}, {ag.obra?.cidade}/{ag.obra?.estado}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span> · CPs: <span className="text-foreground font-medium">{ag.cps_contratados}</span>
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 justify-center min-w-[150px]">
-                      <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-muted px-2.5 py-1 rounded">
-                        <Clock className="h-3.5 w-3.5 text-primary" />
-                        {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
-                      </div>
-
-                      {ag.status_agendamento === "Confirmado" && (
-                        <Button
-                          size="sm"
-                          className="mt-2 sm:mt-0 w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-1 cursor-pointer"
-                          onClick={() => setSelectedStartBookingId(ag.id)}
-                          disabled={actionLoading !== null || activeExec !== null}
-                        >
-                          <Camera className="h-4 w-4" /> Iniciar Atendimento
-                        </Button>
+                      {cycleRecords.length > 0 && (
+                        <div className="text-[10px] text-muted-foreground max-h-24 overflow-y-auto divide-y divide-border border rounded p-1.5 bg-muted/10 font-medium">
+                          {cycleRecords.map((c, i) => (
+                            <div key={c.id} className="py-1 flex justify-between">
+                              <span>Cam. {c.metadata?.numero_caminhao} ({c.metadata?.peca_concretada})</span>
+                              <span className="font-bold">{c.metadata?.cps_moldados} CPs · Slump: {c.metadata?.slump}mm</span>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                  </div>
-                </Card>
-              );
+                  </Card>
 
-              const agendaConfirmados = agenda.filter(a => a.status_agendamento === "Confirmado");
-              const agendaEmAndamento = agenda.filter(a => a.status_agendamento === "Em_Execucao");
-              const agendaConcluidos = agenda.filter(a => ["Aguardando_Medicao", "Validado", "Laboratorio"].includes(a.status_agendamento));
-
-              return (
-                <div className="space-y-6">
-                  {/* 1. Em Andamento */}
-                  {agendaEmAndamento.length > 0 && (
-                    <div className="space-y-2">
-                      <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-indigo-600 animate-ping" />
-                        Em Andamento / Em Viagem ({agendaEmAndamento.length})
-                      </h3>
-                      <div className="grid gap-3">
-                        {agendaEmAndamento.map(renderCard)}
-                      </div>
+                  {/* Passo 3: Concluir */}
+                  <Card className="border border-border bg-card p-4 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5 mb-2">
+                        <CheckCircle2 className="h-4.5 w-4.5 text-primary" />
+                        3. Concluir Serviço
+                      </h4>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Total coletado até agora: <strong className="text-primary text-sm">{totalCpsMolded} de {activeExec.cps_contratados} CPs</strong> contratados.
+                      </p>
                     </div>
-                  )}
 
-                  {/* 2. Aguardando Início */}
-                  {agendaConfirmados.length > 0 && (
-                    <div className="space-y-2">
-                      <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5" />
-                        Próximos Agendamentos / Aguardando Início ({agendaConfirmados.length})
-                      </h3>
-                      <div className="grid gap-3">
-                        {agendaConfirmados.map(renderCard)}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 3. Concluídos */}
-                  {agendaConcluidos.length > 0 && (
-                    <div className="space-y-2">
-                      <h3 className="text-xs font-bold text-green-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Histórico / Atendimentos Realizados ({agendaConcluidos.length})
-                      </h3>
-                      <div className="grid gap-3">
-                        {agendaConcluidos.map(renderCard)}
-                      </div>
-                    </div>
-                  )}
+                    <Dialog open={concludeDialogOpen} onOpenChange={setConcludeDialogOpen}>
+                      <DialogTrigger asChild disabled={cycleRecords.length === 0}>
+                        <Button className="w-full text-xs font-bold gap-1 h-9 bg-emerald-600 hover:bg-emerald-700" size="sm">
+                          <Check className="h-4 w-4" /> Finalizar e Enviar
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-sm border border-border bg-card">
+                        <DialogHeader>
+                          <DialogTitle>Concluir Serviço</DialogTitle>
+                          <DialogDescription>
+                            Envie os ensaios finais. As medições serão validadas pelo cliente.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleFinalize} className="space-y-4 pt-2 text-xs">
+                          <div className="bg-muted/40 p-3 rounded border border-border">
+                            <p className="font-semibold text-foreground text-sm">Resumo Coleta</p>
+                            <p className="mt-1">CPs Moldados Reais: <strong className="text-primary text-sm">{totalCpsMolded} unidades</strong></p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="photo-final">Foto Panorâmica dos CPs Organizados (Opcional)</Label>
+                            <Input id="photo-final" type="file" accept="image/*" capture="environment" onChange={(e) => setPhotoFinal(e.target.files ? e.target.files[0] : null)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="photo-retorno">Foto de Retorno de Carga / Betoneira Limpa (Opcional)</Label>
+                            <Input id="photo-retorno" type="file" accept="image/*" capture="environment" onChange={(e) => setPhotoRetorno(e.target.files ? e.target.files[0] : null)} />
+                          </div>
+                          <DialogFooter className="pt-2">
+                            <Button type="button" variant="outline" onClick={() => setConcludeDialogOpen(false)} disabled={finalizing}>Cancelar</Button>
+                            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" disabled={finalizing}>
+                              {finalizing ? "Concluindo..." : "Confirmar Conclusão"}
+                            </Button>
+                          </DialogFooter>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  </Card>
                 </div>
-              );
-            })()}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border border-dashed border-border py-12 text-center bg-muted/10">
+              <CardContent className="space-y-3">
+                <Camera className="h-10 w-10 text-muted-foreground/30 mx-auto" />
+                <p className="text-sm text-muted-foreground font-semibold">Nenhum agendamento em execução ativo no momento.</p>
+                <p className="text-xs text-muted-foreground/70">Inicie um serviço confirmado na aba "Minha Escala".</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── TAB: CONVITES PENDENTES ── */}
+        <TabsContent value="convites" className="space-y-4">
+          {convites.length === 0 ? (
+            <Card className="border border-dashed border-border py-12 text-center bg-muted/10">
+              <CardContent className="space-y-2">
+                <Clock className="h-8 w-8 text-muted-foreground/30 mx-auto" />
+                <p className="text-sm text-muted-foreground">Você não possui convites pendentes no momento.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {convites.map((ag) => (
+                <Card key={ag.id} className="border-2 border-amber-500/40 bg-amber-500/5 hover:shadow-md transition-all">
+                  <CardHeader className="pb-3 flex flex-row items-start justify-between space-y-0 gap-4">
+                    <div>
+                      <CardTitle className="text-lg font-bold text-foreground">
+                        {ag.obra?.nome_obra || "Obra sem nome"}
+                      </CardTitle>
+                      <CardDescription className="text-xs font-semibold text-amber-600 mt-1">
+                        {ag.servico?.nome_servico || "Controle Tecnológico"}
+                      </CardDescription>
+                    </div>
+                    <InvitationCountdown convidadoEm={ag.convidado_em} onTimeout={fetchTecnicoData} />
+                  </CardHeader>
+                  <CardContent className="space-y-3 pb-4">
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>
+                        📍 <strong className="text-foreground">Endereço:</strong> {ag.obra?.endereco}, {ag.obra?.numero} - {ag.obra?.bairro}, {ag.obra?.cidade}/{ag.obra?.estado}
+                      </p>
+                      <p>
+                        📅 <strong className="text-foreground">Data/Hora:</strong> {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
+                      </p>
+                      <p>
+                        🧪 <strong className="text-foreground">Quantidade CPs:</strong> {ag.cps_contratados} unidades ({ag.qtd_caminhoes} {ag.qtd_caminhoes === 1 ? "caminhão" : "caminhões"})
+                      </p>
+                      {ag.observacoes && (
+                        <p className="italic bg-card p-2 rounded border border-border mt-2">
+                          "{ag.observacoes}"
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <Button 
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                        onClick={() => handleAccept(ag.id)}
+                        disabled={actionLoading !== null}
+                      >
+                        {actionLoading === ag.id ? "Processando..." : "Aceitar Convite"}
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        className="flex-1 border-red-500/30 text-red-600 hover:bg-red-500/10"
+                        onClick={() => handleReject(ag.id)}
+                        disabled={actionLoading !== null}
+                      >
+                        {actionLoading === ag.id ? "Processando..." : "Recusar"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── TAB: MINHA ESCALA ── */}
+        <TabsContent value="escala" className="space-y-4">
+          {agenda.length === 0 ? (
+            <Card className="border border-dashed border-border py-12 text-center bg-muted/10">
+              <CardContent className="space-y-2">
+                <ClipboardList className="h-8 w-8 text-muted-foreground/30 mx-auto" />
+                <p className="text-sm text-muted-foreground">Nenhum serviço confirmado na sua escala por enquanto.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {(() => {
+                const renderCard = (ag: any) => (
+                  <Card key={ag.id} className="border border-border bg-card p-4 hover:shadow-sm transition-all">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra sem nome"}</span>
+                          <Badge variant="outline" className={STATUS_COLORS[ag.status_agendamento] || "bg-muted text-muted-foreground"}>
+                            {STATUS_LABELS[ag.status_agendamento] || ag.status_agendamento}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground font-medium">
+                          {ag.servico?.nome_servico || "Controle Tecnológico"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          📍 {ag.obra?.endereco}, {ag.obra?.numero} - {ag.obra?.bairro}, {ag.obra?.cidade}/{ag.obra?.estado}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span> · CPs: <span className="text-foreground font-medium">{ag.cps_contratados}</span>
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 justify-center min-w-[150px]">
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-muted px-2.5 py-1 rounded">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
+                        </div>
+
+                        {ag.status_agendamento === "Confirmado" && (
+                          <Button
+                            size="sm"
+                            className="mt-2 sm:mt-0 w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-1 cursor-pointer"
+                            onClick={() => setSelectedStartBookingId(ag.id)}
+                            disabled={actionLoading !== null || activeExec !== null}
+                          >
+                            <Camera className="h-4 w-4" /> Iniciar Atendimento
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                );
+
+                const agendaConfirmados = agenda.filter(a => a.status_agendamento === "Confirmado");
+                const agendaEmAndamento = agenda.filter(a => a.status_agendamento === "Em_Execucao");
+                const agendaConcluidos = agenda.filter(a => ["Aguardando_Medicao", "Validado", "Laboratorio"].includes(a.status_agendamento));
+
+                return (
+                  <div className="space-y-6">
+                    {/* 1. Em Andamento */}
+                    {agendaEmAndamento.length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-indigo-600 animate-ping" />
+                          Em Andamento / Em Viagem ({agendaEmAndamento.length})
+                        </h3>
+                        <div className="grid gap-3">
+                          {agendaEmAndamento.map(renderCard)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 2. Próximos */}
+                    {agendaConfirmados.length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5" />
+                          Próximos Agendamentos / Aguardando Início ({agendaConfirmados.length})
+                        </h3>
+                        <div className="grid gap-3">
+                          {agendaConfirmados.map(renderCard)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3. Concluídos */}
+                    {agendaConcluidos.length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-xs font-bold text-green-600 uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Histórico / Realizados ({agendaConcluidos.length})
+                        </h3>
+                        <div className="grid gap-3">
+                          {agendaConcluidos.map(renderCard)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── TAB: CALENDÁRIO / INDISPONIBILIDADE ── */}
+        <TabsContent value="calendario" className="space-y-4">
+          <div className="flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-foreground">Solicitações de Indisponibilidade</h3>
+              <p className="text-xs text-muted-foreground">Adicione consultas, folgas ou outros compromissos para travar novos agendamentos.</p>
+            </div>
+            <Dialog open={blockerDialogOpen} onOpenChange={setBlockerDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold cursor-pointer text-xs h-9">
+                  <Plus className="h-4 w-4" /> Solicitar Bloqueio
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-sm border border-border bg-card">
+                <DialogHeader>
+                  <DialogTitle>Solicitar Indisponibilidade</DialogTitle>
+                  <DialogDescription>A agenda será travada para novos convites após a aprovação da gerência.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleRequestBlocker} className="space-y-4 pt-2 text-xs">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="dataInicio">Data Início</Label>
+                      <Input id="dataInicio" type="date" required value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="dataFim">Data Fim</Label>
+                      <Input id="dataFim" type="date" required value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="tipoBlocker">Tipo de Motivo</Label>
+                    <select
+                      id="tipoBlocker"
+                      value={tipoBlocker}
+                      onChange={(e: any) => setTipoBlocker(e.target.value)}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background"
+                    >
+                      <option value="Folga">Folga / Descanso</option>
+                      <option value="Medico">Médico / Consulta / Exame</option>
+                      <option value="Problema_Veiculo">Problema com Veículo</option>
+                      <option value="Outro">Outro Contratempo</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="descricaoBlocker">Justificativa / Descrição</Label>
+                    <Input id="descricaoBlocker" value={descricaoBlocker} onChange={(e) => setDescricaoBlocker(e.target.value)} placeholder="Ex: Consulta oftalmológica às 14h" />
+                  </div>
+                  <DialogFooter className="pt-2">
+                    <Button type="button" variant="outline" onClick={() => setBlockerDialogOpen(false)} disabled={savingBlocker}>Cancelar</Button>
+                    <Button type="submit" disabled={savingBlocker}>{savingBlocker ? "Enviando..." : "Confirmar Solicitação"}</Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
           </div>
-        )}
-      </div>
+
+          {loadingBlockers ? (
+            <div className="text-center text-sm text-muted-foreground py-8">Carregando bloqueios...</div>
+          ) : blockers.length === 0 ? (
+            <Card className="border border-dashed border-border py-12 text-center bg-muted/10">
+              <CardContent className="space-y-2">
+                <Clock className="h-8 w-8 text-muted-foreground/30 mx-auto" />
+                <p className="text-sm text-muted-foreground">Nenhuma solicitação de bloqueio registrada.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground">
+                    <th className="p-3">Período</th>
+                    <th className="p-3">Motivo</th>
+                    <th className="p-3">Descrição</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {blockers.map((blk) => (
+                    <tr key={blk.id} className="hover:bg-muted/10 text-foreground transition-all">
+                      <td className="p-3 font-semibold text-nowrap">
+                        {new Date(blk.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")} até {new Date(blk.data_fim + "T00:00:00").toLocaleDateString("pt-BR")}
+                      </td>
+                      <td className="p-3">
+                        <Badge variant="outline" className={
+                          blk.tipo === "Medico" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                          blk.tipo === "Folga" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                          blk.tipo === "Problema_Veiculo" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
+                          "bg-purple-500/10 text-purple-600 border-purple-500/20"
+                        }>
+                          {blk.tipo === "Medico" ? "🔬 Médico" :
+                           blk.tipo === "Folga" ? "🌴 Folga" :
+                           blk.tipo === "Problema_Veiculo" ? "🚗 Veículo" : "Outro"}
+                        </Badge>
+                      </td>
+                      <td className="p-3 max-w-xs truncate">{blk.descricao || "Sem justificativa"}</td>
+                      <td className="p-3 text-center">
+                        <Badge variant="outline" className={
+                          blk.status === "Aprovado" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                          blk.status === "Rejeitado" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                          "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                        }>
+                          {blk.status === "Aprovado" ? "✅ Aprovado" :
+                           blk.status === "Rejeitado" ? "❌ Rejeitado" : "⏳ Pendente"}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-center">
+                        {blk.status === "Pendente" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50 p-1 cursor-pointer h-auto"
+                            onClick={() => handleDeleteBlocker(blk.id)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Modal Check-in de Partida */}
       <Dialog open={!!selectedStartBookingId} onOpenChange={(open) => { if (!open) setSelectedStartBookingId(null); }}>
@@ -1774,6 +1998,39 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   );
 }
 
+function parseGoogleMapsCoords(url: string): { lat: number; lng: number } | null {
+  if (!url) return null;
+  const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (atMatch) {
+    return {
+      lat: parseFloat(atMatch[1]),
+      lng: parseFloat(atMatch[2])
+    };
+  }
+  const qMatch = url.match(/[?&](q|ll|query)=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (qMatch) {
+    return {
+      lat: parseFloat(qMatch[2]),
+      lng: parseFloat(qMatch[3])
+    };
+  }
+  const centerMatch = url.match(/[?&]center=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (centerMatch) {
+    return {
+      lat: parseFloat(centerMatch[1]),
+      lng: parseFloat(centerMatch[2])
+    };
+  }
+  const nakedMatch = url.match(/^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/);
+  if (nakedMatch) {
+    return {
+      lat: parseFloat(nakedMatch[1]),
+      lng: parseFloat(nakedMatch[2])
+    };
+  }
+  return null;
+}
+
 // ── ADMIN DASHBOARD ────────────────────────────────────────────────────────
 function AdminDash() {
   const [tecnicos, setTecnicos] = useState<any[]>([]);
@@ -1842,12 +2099,50 @@ function AdminDash() {
   const [localLng, setLocalLng] = useState("");
   const [submittingLocal, setSubmittingLocal] = useState(false);
   const [showLocalDialog, setShowLocalDialog] = useState(false);
+  const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
+  const [googleMapsUrl, setGoogleMapsUrl] = useState("");
 
   // Alerts states
   const [alertas, setAlertas] = useState<any[]>([]);
   const [loadingAlertas, setLoadingAlertas] = useState(false);
   const [alertSupportDialogOpen, setAlertSupportDialogOpen] = useState(false);
   const [selectedAlerta, setSelectedAlerta] = useState<any | null>(null);
+
+  // Blocker requests states
+  const [blockerRequests, setBlockerRequests] = useState<any[]>([]);
+  const [loadingBlockers, setLoadingBlockers] = useState(false);
+
+  const fetchBlockerRequests = async () => {
+    setLoadingBlockers(true);
+    try {
+      const { data, error } = await supabase
+        .from("bloqueios_tecnicos")
+        .select("*, tecnico:tecnicos(nome)")
+        .order("created_at", { ascending: false });
+      if (!error && data) {
+        setBlockerRequests(data);
+      }
+    } catch (err) {
+      console.error("Error fetching blocker requests:", err);
+    } finally {
+      setLoadingBlockers(false);
+    }
+  };
+
+  const handleResolveBlocker = async (blockerId: string, status: 'Aprovado' | 'Rejeitado') => {
+    try {
+      await updateBlockerStatus({
+        data: {
+          blockerId,
+          status
+        }
+      });
+      toast.success(`Solicitação de bloqueio ${status === 'Aprovado' ? 'aprovada' : 'rejeitada'} com sucesso!`);
+      await fetchBlockerRequests();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao resolver solicitação de bloqueio.");
+    }
+  };
 
   const fetchTecnicos = async () => {
     try {
@@ -1937,6 +2232,7 @@ function AdminDash() {
     fetchServices();
     fetchLocais();
     fetchAlertas();
+    fetchBlockerRequests();
   }, []);
 
   useEffect(() => {
@@ -2182,11 +2478,24 @@ function AdminDash() {
     }
   };
 
-  const handleCreateLocal = async (e: React.FormEvent) => {
+  const handleSaveLocal = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmittingLocal(true);
     try {
-      const { error } = await supabase.from("locais_checkin").insert({
+      let finalLat = localLat;
+      let finalLng = localLng;
+
+      if (googleMapsUrl) {
+        const coords = parseGoogleMapsCoords(googleMapsUrl);
+        if (coords) {
+          finalLat = coords.lat.toString();
+          finalLng = coords.lng.toString();
+        } else {
+          toast.warning("Não conseguimos extrair as coordenadas do link do Maps. Por favor, insira manualmente ou certifique-se de que o link contém '@latitude,longitude'.");
+        }
+      }
+
+      const localData = {
         nome: localNome,
         tipo: localTipo,
         endereco: localEndereco,
@@ -2194,13 +2503,25 @@ function AdminDash() {
         bairro: localBairro || null,
         cidade: localCidade,
         estado: localEstado,
-        latitude: localLat !== "" ? Number(localLat) : null,
-        longitude: localLng !== "" ? Number(localLng) : null,
-      });
+        latitude: finalLat !== "" ? Number(finalLat) : null,
+        longitude: finalLng !== "" ? Number(finalLng) : null,
+      };
 
-      if (error) throw error;
+      if (editingLocalId) {
+        const { error } = await supabase
+          .from("locais_checkin")
+          .update(localData)
+          .eq("id", editingLocalId);
+        if (error) throw error;
+        toast.success("Local de check-in atualizado com sucesso!");
+      } else {
+        const { error } = await supabase
+          .from("locais_checkin")
+          .insert(localData);
+        if (error) throw error;
+        toast.success("Local de check-in cadastrado com sucesso!");
+      }
 
-      toast.success("Local de check-in cadastrado com sucesso!");
       setShowLocalDialog(false);
       
       // Reset form
@@ -2213,13 +2534,45 @@ function AdminDash() {
       setLocalEstado("");
       setLocalLat("");
       setLocalLng("");
+      setGoogleMapsUrl("");
+      setEditingLocalId(null);
       
       fetchLocais();
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao cadastrar local.");
+      toast.error(err?.message || "Erro ao salvar local.");
     } finally {
       setSubmittingLocal(false);
     }
+  };
+
+  const handleEditLocalClick = (loc: any) => {
+    setEditingLocalId(loc.id);
+    setLocalNome(loc.nome);
+    setLocalTipo(loc.tipo);
+    setLocalEndereco(loc.endereco);
+    setLocalNumero(loc.numero || "");
+    setLocalBairro(loc.bairro || "");
+    setLocalCidade(loc.cidade);
+    setLocalEstado(loc.estado);
+    setLocalLat(loc.latitude !== null ? loc.latitude.toString() : "");
+    setLocalLng(loc.longitude !== null ? loc.longitude.toString() : "");
+    setGoogleMapsUrl("");
+    setShowLocalDialog(true);
+  };
+
+  const handleAddLocalClick = () => {
+    setEditingLocalId(null);
+    setLocalNome("");
+    setLocalTipo("Laboratorio");
+    setLocalEndereco("");
+    setLocalNumero("");
+    setLocalBairro("");
+    setLocalCidade("");
+    setLocalEstado("");
+    setLocalLat("");
+    setLocalLng("");
+    setGoogleMapsUrl("");
+    setShowLocalDialog(true);
   };
 
   const handleDeleteLocal = async (localId: string) => {
@@ -2309,6 +2662,13 @@ function AdminDash() {
             onClick={fetchAlertas}
           >
             <Bell className="h-4 w-4" /> Alertas de Escopo ({alertas.length})
+          </TabsTrigger>
+          <TabsTrigger
+            value="bloqueios"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+            onClick={fetchBlockerRequests}
+          >
+            <Clock className="h-4 w-4" /> Bloqueios e Folgas ({blockerRequests.filter(b => b.status === "Pendente").length})
           </TabsTrigger>
         </TabsList>
 
@@ -2589,18 +2949,18 @@ function AdminDash() {
         <TabsContent value="locais" className="space-y-6">
           <div className="flex justify-end mb-4">
             <Dialog open={showLocalDialog} onOpenChange={setShowLocalDialog}>
-              <DialogTrigger asChild>
-                <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold cursor-pointer">
-                  <Plus className="h-4 w-4" />
-                  Cadastrar Local
-                </Button>
-              </DialogTrigger>
+              <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold cursor-pointer" onClick={handleAddLocalClick}>
+                <Plus className="h-4 w-4" />
+                Cadastrar Local
+              </Button>
               <DialogContent className="max-w-md border border-border bg-card">
                 <DialogHeader>
-                  <DialogTitle>Novo Local de Check-in</DialogTitle>
-                  <DialogDescription>Cadastre laboratórios, hotéis ou pontos de partida para check-in.</DialogDescription>
+                  <DialogTitle>{editingLocalId ? "Editar Local de Check-in" : "Novo Local de Check-in"}</DialogTitle>
+                  <DialogDescription>
+                    {editingLocalId ? "Edite as informações do local de check-in." : "Cadastre laboratórios, hotéis ou pontos de partida para check-in."}
+                  </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleCreateLocal} className="space-y-4 pt-2 text-xs">
+                <form onSubmit={handleSaveLocal} className="space-y-4 pt-2 text-xs">
                   <div className="space-y-1.5">
                     <Label htmlFor="loc-nome">Nome do Local</Label>
                     <Input id="loc-nome" required value={localNome} onChange={(e) => setLocalNome(e.target.value)} placeholder="Ex: Laboratório Central Sorocaba" />
@@ -2643,6 +3003,25 @@ function AdminDash() {
                       <Input id="loc-est" required maxLength={2} value={localEstado} onChange={(e) => setLocalEstado(e.target.value)} placeholder="Ex: SP" />
                     </div>
                   </div>
+                  
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loc-gmaps">Link do Google Maps (Extrai coordenadas automaticamente)</Label>
+                    <Input
+                      id="loc-gmaps"
+                      value={googleMapsUrl}
+                      onChange={(e) => {
+                        setGoogleMapsUrl(e.target.value);
+                        const coords = parseGoogleMapsCoords(e.target.value);
+                        if (coords) {
+                          setLocalLat(coords.lat.toString());
+                          setLocalLng(coords.lng.toString());
+                          toast.success("Coordenadas extraídas do link com sucesso!");
+                        }
+                      }}
+                      placeholder="Cole o link do Google Maps para extrair as coordenadas"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="loc-lat">Latitude (opcional)</Label>
@@ -2656,7 +3035,7 @@ function AdminDash() {
 
                   <DialogFooter className="pt-4">
                     <Button type="button" variant="outline" onClick={() => setShowLocalDialog(false)} disabled={submittingLocal}>Cancelar</Button>
-                    <Button type="submit" disabled={submittingLocal}>{submittingLocal ? "Salvando..." : "Confirmar Cadastro"}</Button>
+                    <Button type="submit" disabled={submittingLocal}>{submittingLocal ? "Salvando..." : "Confirmar"}</Button>
                   </DialogFooter>
                 </form>
               </DialogContent>
@@ -2705,14 +3084,24 @@ function AdminDash() {
                             {loc.latitude !== null && loc.longitude !== null ? `${loc.latitude}, ${loc.longitude}` : "Não cadastradas"}
                           </td>
                           <td className="p-3 text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 p-1 cursor-pointer"
-                              onClick={() => handleDeleteLocal(loc.id)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                            <div className="flex justify-center gap-1.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 p-1 cursor-pointer"
+                                onClick={() => handleEditLocalClick(loc)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 p-1 cursor-pointer"
+                                onClick={() => handleDeleteLocal(loc.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2861,6 +3250,99 @@ function AdminDash() {
               </form>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        {/* ── ABA: FOLGAS E BLOQUEIOS ── */}
+        <TabsContent value="bloqueios" className="space-y-6">
+          <Card className="border border-border bg-card">
+            <CardHeader>
+              <CardTitle className="text-lg font-bold">Solicitações de Folgas e Bloqueios</CardTitle>
+              <CardDescription>Revise e aprove ou rejeite as solicitações de ausência e indisponibilidade dos técnicos.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingBlockers ? (
+                <div className="text-center text-sm text-muted-foreground py-8">Carregando solicitações...</div>
+              ) : blockerRequests.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-8 border border-dashed rounded-lg bg-muted/10">
+                  <CheckCircle2 className="h-8 w-8 text-green-500/40 mx-auto mb-2" />
+                  Nenhuma solicitação de bloqueio registrada.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground">
+                        <th className="p-3">Técnico</th>
+                        <th className="p-3">Período</th>
+                        <th className="p-3">Motivo</th>
+                        <th className="p-3">Justificativa</th>
+                        <th className="p-3 text-center">Status</th>
+                        <th className="p-3 text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {blockerRequests.map((blk) => (
+                        <tr key={blk.id} className="hover:bg-muted/10 text-foreground transition-all">
+                          <td className="p-3 font-bold">{blk.tecnico?.nome || "Técnico Desconhecido"}</td>
+                          <td className="p-3 font-semibold text-nowrap">
+                            {new Date(blk.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")} até {new Date(blk.data_fim + "T00:00:00").toLocaleDateString("pt-BR")}
+                          </td>
+                          <td className="p-3">
+                            <Badge variant="outline" className={
+                              blk.tipo === "Medico" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                              blk.tipo === "Folga" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                              blk.tipo === "Problema_Veiculo" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
+                              "bg-purple-500/10 text-purple-600 border-purple-500/20"
+                            }>
+                              {blk.tipo === "Medico" ? "🔬 Médico" :
+                               blk.tipo === "Folga" ? "🌴 Folga" :
+                               blk.tipo === "Problema_Veiculo" ? "🚗 Veículo" : "Outro"}
+                            </Badge>
+                          </td>
+                          <td className="p-3 max-w-xs truncate">{blk.descricao || "Sem justificativa"}</td>
+                          <td className="p-3 text-center">
+                            <Badge variant="outline" className={
+                              blk.status === "Aprovado" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                              blk.status === "Rejeitado" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                              "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                            }>
+                              {blk.status === "Aprovado" ? "✅ Aprovado" :
+                               blk.status === "Rejeitado" ? "❌ Rejeitado" : "⏳ Pendente"}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-center">
+                            {blk.status === "Pendente" ? (
+                              <div className="flex justify-center gap-1.5 font-bold">
+                                <Button
+                                  size="sm"
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 px-2.5 text-[10px]"
+                                  onClick={() => handleResolveBlocker(blk.id, 'Aprovado')}
+                                >
+                                  Aprovar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-red-500/30 text-red-600 hover:bg-red-500/10 h-7 px-2.5 text-[10px]"
+                                  onClick={() => handleResolveBlocker(blk.id, 'Rejeitado')}
+                                >
+                                  Rejeitar
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                Resolvido
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

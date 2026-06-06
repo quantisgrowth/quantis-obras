@@ -408,7 +408,22 @@ async function selectAndInviteTechnician(
     .in("status_agendamento", ["Confirmado", "Em_Execucao", "Pendente_Tecnico"])
     .in("tecnico_id", tecIds);
 
+  // Filter out technicians who have an approved availability blocker covering that date
+  const { data: blockersOnDate } = await supabase
+    .from("bloqueios_tecnicos")
+    .select("tecnico_id")
+    .eq("status", "Aprovado")
+    .lte("data_inicio", dataServico)
+    .gte("data_fim", dataServico)
+    .in("tecnico_id", tecIds);
+
   const busyTecnicoIds = new Set((bookingsOnDate || []).map((b: any) => b.tecnico_id));
+  (blockersOnDate || []).forEach((blk: any) => {
+    if (blk.tecnico_id) {
+      busyTecnicoIds.add(blk.tecnico_id);
+    }
+  });
+
   const availableTecnicos = compativeis.filter((t: any) => !busyTecnicoIds.has(t.id));
 
   if (availableTecnicos.length === 0) {
@@ -1367,6 +1382,78 @@ export const resolveAlert = createServerFn({ method: "POST" })
         resolvido_em: new Date().toISOString(),
       })
       .eq("id", input.alertId);
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const requestBlocker = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    dataInicio: z.string(),
+    dataFim: z.string(),
+    tipo: z.enum(['Medico', 'Folga', 'Problema_Veiculo', 'Outro']),
+    descricao: z.string().nullable().optional(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Get technician profile
+    const { data: tecnico } = await supabase
+      .from("tecnicos")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
+
+    if (!tecnico) {
+      throw new Error("Acesso negado: Perfil de técnico não encontrado.");
+    }
+
+    const { error } = await supabase
+      .from("bloqueios_tecnicos")
+      .insert({
+        tecnico_id: tecnico.id,
+        data_inicio: input.dataInicio,
+        data_fim: input.dataFim,
+        tipo: input.tipo,
+        descricao: input.descricao || null,
+        status: 'Pendente'
+      });
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const updateBlockerStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    blockerId: z.string().uuid(),
+    status: z.enum(['Aprovado', 'Rejeitado'])
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check if user is admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    const userRoles = (roles || []).map((r: any) => r.role);
+    const isAdmin = userRoles.includes("admin");
+
+    if (!isAdmin) {
+      throw new Error("Acesso negado: Apenas administradores podem aprovar ou rejeitar bloqueios.");
+    }
+
+    const { error } = await supabase
+      .from("bloqueios_tecnicos")
+      .update({
+        status: input.status,
+        resolvido_em: new Date().toISOString(),
+        resolvido_por: userId
+      })
+      .eq("id", input.blockerId);
 
     if (error) throw error;
     return { success: true };
