@@ -2569,6 +2569,77 @@ function AdminDash() {
     }
   };
 
+  const handleVerifyLocation = async () => {
+    let url = googleMapsUrl.trim();
+    
+    // If no URL is provided, but we have address, we can search for it on Google Maps
+    if (!url) {
+      const addressParts = [
+        localEndereco,
+        localNumero,
+        localBairro,
+        localCidade,
+        localEstado
+      ].filter(Boolean);
+
+      if (addressParts.length > 0) {
+        const queryStr = addressParts.join(", ");
+        url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}`;
+        setGoogleMapsUrl(url);
+        toast.info("Abrindo busca por endereço no Google Maps.");
+      } else {
+        toast.warning("Insira um link do Google Maps ou preencha o CEP/Endereço primeiro.");
+        return;
+      }
+    }
+
+    // Clean URL matches
+    const urlMatch = url.match(/(https?:\/\/[^\s]+)/);
+    let resolvedTargetUrl = urlMatch ? urlMatch[1] : url;
+
+    // 1. Open the URL in a new tab so the user can verify
+    window.open(resolvedTargetUrl, '_blank');
+
+    // 2. Try to pull coordinates from the URL (directly or via short url resolution)
+    let coords = parseGoogleMapsCoords(resolvedTargetUrl);
+    if (coords) {
+      setLocalLat(coords.lat.toString());
+      setLocalLng(coords.lng.toString());
+      toast.success("Coordenadas extraídas com sucesso!");
+      return;
+    }
+
+    const isActuallyShort = resolvedTargetUrl.includes("maps.app.goo.gl") || 
+                            resolvedTargetUrl.includes("g.co") || 
+                            resolvedTargetUrl.includes("goo.gl");
+    
+    if (isActuallyShort) {
+      toast.loading("Resolvendo link curto e buscando coordenadas...", { id: "resolve-maps-verify" });
+      try {
+        const res = await resolveMapsUrl({ data: { url: resolvedTargetUrl } });
+        toast.dismiss("resolve-maps-verify");
+        if (res && res.resolvedUrl) {
+          const resolvedCoords = parseGoogleMapsCoords(res.resolvedUrl);
+          if (resolvedCoords) {
+            setLocalLat(resolvedCoords.lat.toString());
+            setLocalLng(resolvedCoords.lng.toString());
+            toast.success("Coordenadas extraídas com sucesso após resolver o link!");
+          } else {
+            toast.warning("Link aberto no navegador! Mas não foi possível extrair coordenadas automaticamente. Insira-as manualmente.");
+          }
+        } else {
+          toast.error("Não foi possível resolver o link curto.");
+        }
+      } catch (err: any) {
+        toast.dismiss("resolve-maps-verify");
+        console.error("Erro ao resolver URL:", err);
+        toast.error("Erro ao resolver o link curto.");
+      }
+    } else {
+      toast.warning("Link aberto no navegador! Mas não detectamos coordenadas na URL. Insira-as manualmente.");
+    }
+  };
+
   const handleSaveLocal = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmittingLocal(true);
@@ -3115,12 +3186,25 @@ function AdminDash() {
                   
                   <div className="space-y-1.5">
                     <Label htmlFor="loc-gmaps">Link do Google Maps (Extrai coordenadas automaticamente)</Label>
-                    <Input
-                      id="loc-gmaps"
-                      value={googleMapsUrl}
-                      onChange={handleGoogleMapsUrlChange}
-                      placeholder="Cole o link do Google Maps para extrair as coordenadas"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        id="loc-gmaps"
+                        value={googleMapsUrl}
+                        onChange={handleGoogleMapsUrlChange}
+                        placeholder="Cole o link do Google Maps para extrair as coordenadas"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleVerifyLocation}
+                        className="shrink-0 flex gap-1.5 items-center cursor-pointer bg-secondary hover:bg-secondary/80 text-foreground border border-input h-10 px-3 font-semibold text-xs"
+                        title="Conferir a localização no Google Maps e puxar coordenadas"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Conferir
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
