@@ -1021,12 +1021,12 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
         setLocaisCheckin(locs);
       }
 
-      // Get blockers
+      // Get blockers (both technician-specific and global/company-wide blockers)
       setLoadingBlockers(true);
       const { data: blks, error: blkErr } = await supabase
         .from("bloqueios_tecnicos")
         .select("*")
-        .eq("tecnico_id", tec.id)
+        .or(`tecnico_id.eq.${tec.id},tecnico_id.is.null`)
         .order("data_inicio", { ascending: false });
       if (!blkErr && blks) {
         setBlockers(blks);
@@ -1862,11 +1862,15 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                           blk.tipo === "Medico" ? "bg-red-500/10 text-red-600 border-red-500/20" :
                           blk.tipo === "Folga" ? "bg-green-500/10 text-green-600 border-green-500/20" :
                           blk.tipo === "Problema_Veiculo" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
+                          blk.tipo === "Feriado" ? "bg-sky-500/10 text-sky-600 border-sky-500/20" :
+                          blk.tipo === "Bloqueio_Global" ? "bg-indigo-500/10 text-indigo-600 border-indigo-500/20" :
                           "bg-purple-500/10 text-purple-600 border-purple-500/20"
                         }>
                           {blk.tipo === "Medico" ? "🔬 Médico" :
                            blk.tipo === "Folga" ? "🌴 Folga" :
-                           blk.tipo === "Problema_Veiculo" ? "🚗 Veículo" : "Outro"}
+                           blk.tipo === "Problema_Veiculo" ? "🚗 Veículo" :
+                           blk.tipo === "Feriado" ? "🎉 Feriado" :
+                           blk.tipo === "Bloqueio_Global" ? "🔒 Bloqueio Global" : "Outro"}
                         </Badge>
                       </td>
                       <td className="p-3 max-w-xs truncate">{blk.descricao || "Sem justificativa"}</td>
@@ -1881,7 +1885,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                         </Badge>
                       </td>
                       <td className="p-3 text-center">
-                        {blk.status === "Pendente" && (
+                        {blk.status === "Pendente" && blk.tecnico_id !== null && (
                           <Button
                             variant="ghost"
                             size="sm"
