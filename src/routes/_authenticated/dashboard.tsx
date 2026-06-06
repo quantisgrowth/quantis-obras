@@ -2132,6 +2132,15 @@ function AdminDash() {
   const [blockerRequests, setBlockerRequests] = useState<any[]>([]);
   const [loadingBlockers, setLoadingBlockers] = useState(false);
 
+  // States for creating a blocker/holiday
+  const [showBlockerDialog, setShowBlockerDialog] = useState(false);
+  const [blockerTecnicoId, setBlockerTecnicoId] = useState("global");
+  const [blockerDataInicio, setBlockerDataInicio] = useState("");
+  const [blockerDataFim, setBlockerDataFim] = useState("");
+  const [blockerTipo, setBlockerTipo] = useState("Feriado");
+  const [blockerDescricao, setBlockerDescricao] = useState("");
+  const [submittingBlocker, setSubmittingBlocker] = useState(false);
+
   const fetchBlockerRequests = async () => {
     setLoadingBlockers(true);
     try {
@@ -2161,6 +2170,70 @@ function AdminDash() {
       await fetchBlockerRequests();
     } catch (err: any) {
       toast.error(err?.message || "Erro ao resolver solicitação de bloqueio.");
+    }
+  };
+
+  const handleCreateBlocker = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!blockerDataInicio || !blockerDataFim) {
+      toast.error("Por favor, preencha as datas de início e fim.");
+      return;
+    }
+
+    setSubmittingBlocker(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData.user?.id || null;
+
+      const newBlocker = {
+        tecnico_id: blockerTecnicoId === "global" ? null : blockerTecnicoId,
+        data_inicio: blockerDataInicio,
+        data_fim: blockerDataFim,
+        tipo: blockerTipo,
+        descricao: blockerDescricao || null,
+        status: "Aprovado",
+        resolvido_em: new Date().toISOString(),
+        resolvido_por: currentUserId
+      };
+
+      const { error } = await supabase
+        .from("bloqueios_tecnicos")
+        .insert(newBlocker);
+
+      if (error) throw error;
+
+      toast.success("Bloqueio/Feriado criado e aprovado com sucesso!");
+      setShowBlockerDialog(false);
+      
+      // Reset form
+      setBlockerTecnicoId("global");
+      setBlockerDataInicio("");
+      setBlockerDataFim("");
+      setBlockerTipo("Feriado");
+      setBlockerDescricao("");
+      
+      await fetchBlockerRequests();
+    } catch (err: any) {
+      console.error("Erro ao criar bloqueio:", err);
+      toast.error(err?.message || "Erro ao criar bloqueio.");
+    } finally {
+      setSubmittingBlocker(false);
+    }
+  };
+
+  const handleDeleteBlocker = async (blockerId: string) => {
+    if (!confirm("Deseja realmente excluir este bloqueio/folga?")) return;
+    try {
+      const { error } = await supabase
+        .from("bloqueios_tecnicos")
+        .delete()
+        .eq("id", blockerId);
+      if (error) throw error;
+      toast.success("Bloqueio/folga excluído com sucesso!");
+      await fetchBlockerRequests();
+    } catch (err: any) {
+      console.error("Erro ao excluir bloqueio:", err);
+      toast.error(err?.message || "Erro ao excluir bloqueio.");
     }
   };
 
@@ -3479,6 +3552,131 @@ function AdminDash() {
 
         {/* ── ABA: FOLGAS E BLOQUEIOS ── */}
         <TabsContent value="bloqueios" className="space-y-6">
+          <div className="flex justify-end mb-4">
+            <Dialog open={showBlockerDialog} onOpenChange={setShowBlockerDialog}>
+              <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold cursor-pointer" onClick={() => {
+                setBlockerTecnicoId("global");
+                setBlockerDataInicio("");
+                setBlockerDataFim("");
+                setBlockerTipo("Feriado");
+                setBlockerDescricao("");
+                setShowBlockerDialog(true);
+              }}>
+                <Plus className="h-4 w-4" />
+                Adicionar Bloqueio / Feriado
+              </Button>
+              <DialogContent className="max-w-md border border-border bg-card">
+                <DialogHeader>
+                  <DialogTitle className="font-bold text-lg">Adicionar Bloqueio de Agenda</DialogTitle>
+                  <DialogDescription>
+                    Cadastre feriados, folgas ou indisponibilidades de técnicos para travar a agenda na data desejada.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateBlocker} className="space-y-4 pt-2 text-xs">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="blk-scope">Escopo do Bloqueio</Label>
+                    <select
+                      id="blk-scope"
+                      value={blockerTecnicoId === "global" ? "global" : "tecnico"}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "global") {
+                          setBlockerTecnicoId("global");
+                          setBlockerTipo("Feriado");
+                        } else {
+                          setBlockerTecnicoId(tecnicos[0]?.id || "");
+                          setBlockerTipo("Folga");
+                        }
+                      }}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="global">Global (Toda a Empresa / Feriado)</option>
+                      <option value="tecnico">Técnico Específico</option>
+                    </select>
+                  </div>
+
+                  {blockerTecnicoId !== "global" && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="blk-tec">Selecionar Técnico</Label>
+                      <select
+                        id="blk-tec"
+                        value={blockerTecnicoId}
+                        onChange={(e) => setBlockerTecnicoId(e.target.value)}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        {tecnicos.map((tec) => (
+                          <option key={tec.id} value={tec.id}>{tec.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="blk-tipo">Motivo / Tipo</Label>
+                    <select
+                      id="blk-tipo"
+                      value={blockerTipo}
+                      onChange={(e) => setBlockerTipo(e.target.value)}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {blockerTecnicoId === "global" ? (
+                        <>
+                          <option value="Feriado">Feriado / Recesso</option>
+                          <option value="Bloqueio_Global">Bloqueio Geral (Sem técnicos disponíveis)</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="Folga">🌴 Folga / Licença</option>
+                          <option value="Medico">🔬 Exame / Atestado Médico</option>
+                          <option value="Problema_Veiculo">🚗 Problema com Veículo</option>
+                          <option value="Outro">Outro Motivo</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="blk-inicio">Data Início</Label>
+                      <Input
+                        id="blk-inicio"
+                        type="date"
+                        required
+                        value={blockerDataInicio}
+                        onChange={(e) => setBlockerDataInicio(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="blk-fim">Data Fim</Label>
+                      <Input
+                        id="blk-fim"
+                        type="date"
+                        required
+                        value={blockerDataFim}
+                        onChange={(e) => setBlockerDataFim(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="blk-desc">Descrição / Justificativa</Label>
+                    <Input
+                      id="blk-desc"
+                      value={blockerDescricao}
+                      onChange={(e) => setBlockerDescricao(e.target.value)}
+                      placeholder="Ex: Feriado de Tiradentes ou Ausência planejada"
+                    />
+                  </div>
+
+                  <DialogFooter className="pt-4">
+                    <Button type="button" variant="outline" onClick={() => setShowBlockerDialog(false)} disabled={submittingBlocker}>Cancelar</Button>
+                    <Button type="submit" disabled={submittingBlocker}>{submittingBlocker ? "Salvando..." : "Confirmar"}</Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+
           <Card className="border border-border bg-card">
             <CardHeader>
               <CardTitle className="text-lg font-bold">Solicitações de Folgas e Bloqueios</CardTitle>
@@ -3508,7 +3706,7 @@ function AdminDash() {
                     <tbody className="divide-y divide-border">
                       {blockerRequests.map((blk) => (
                         <tr key={blk.id} className="hover:bg-muted/10 text-foreground transition-all">
-                          <td className="p-3 font-bold">{blk.tecnico?.nome || "Técnico Desconhecido"}</td>
+                          <td className="p-3 font-bold">{blk.tecnico?.nome || "⚠️ Todos (Bloqueio Global)"}</td>
                           <td className="p-3 font-semibold text-nowrap">
                             {new Date(blk.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")} até {new Date(blk.data_fim + "T00:00:00").toLocaleDateString("pt-BR")}
                           </td>
@@ -3517,11 +3715,15 @@ function AdminDash() {
                               blk.tipo === "Medico" ? "bg-red-500/10 text-red-600 border-red-500/20" :
                               blk.tipo === "Folga" ? "bg-green-500/10 text-green-600 border-green-500/20" :
                               blk.tipo === "Problema_Veiculo" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
+                              blk.tipo === "Feriado" ? "bg-sky-500/10 text-sky-600 border-sky-500/20" :
+                              blk.tipo === "Bloqueio_Global" ? "bg-indigo-500/10 text-indigo-600 border-indigo-500/20" :
                               "bg-purple-500/10 text-purple-600 border-purple-500/20"
                             }>
                               {blk.tipo === "Medico" ? "🔬 Médico" :
                                blk.tipo === "Folga" ? "🌴 Folga" :
-                               blk.tipo === "Problema_Veiculo" ? "🚗 Veículo" : "Outro"}
+                               blk.tipo === "Problema_Veiculo" ? "🚗 Veículo" :
+                               blk.tipo === "Feriado" ? "🎉 Feriado" :
+                               blk.tipo === "Bloqueio_Global" ? "🔒 Bloqueio Global" : "Outro"}
                             </Badge>
                           </td>
                           <td className="p-3 max-w-xs truncate">{blk.descricao || "Sem justificativa"}</td>
@@ -3536,29 +3738,40 @@ function AdminDash() {
                             </Badge>
                           </td>
                           <td className="p-3 text-center">
-                            {blk.status === "Pendente" ? (
-                              <div className="flex justify-center gap-1.5 font-bold">
-                                <Button
-                                  size="sm"
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 px-2.5 text-[10px]"
-                                  onClick={() => handleResolveBlocker(blk.id, 'Aprovado')}
-                                >
-                                  Aprovar
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-red-500/30 text-red-600 hover:bg-red-500/10 h-7 px-2.5 text-[10px]"
-                                  onClick={() => handleResolveBlocker(blk.id, 'Rejeitado')}
-                                >
-                                  Rejeitar
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                Resolvido
-                              </span>
-                            )}
+                            <div className="flex justify-center items-center gap-1.5">
+                              {blk.status === "Pendente" ? (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-7 px-2.5 text-[10px] cursor-pointer"
+                                    onClick={() => handleResolveBlocker(blk.id, 'Aprovado')}
+                                  >
+                                    Aprovar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-red-500/30 text-red-600 hover:bg-red-500/10 h-7 px-2.5 text-[10px] cursor-pointer"
+                                    onClick={() => handleResolveBlocker(blk.id, 'Rejeitado')}
+                                  >
+                                    Rejeitar
+                                  </Button>
+                                </>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  Resolvido
+                                </span>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 p-1 cursor-pointer h-7"
+                                title="Excluir bloqueio"
+                                onClick={() => handleDeleteBlocker(blk.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}

@@ -414,15 +414,20 @@ async function selectAndInviteTechnician(
     .select("tecnico_id")
     .eq("status", "Aprovado")
     .lte("data_inicio", dataServico)
-    .gte("data_fim", dataServico)
-    .in("tecnico_id", tecIds);
+    .gte("data_fim", dataServico);
 
   const busyTecnicoIds = new Set((bookingsOnDate || []).map((b: any) => b.tecnico_id));
-  (blockersOnDate || []).forEach((blk: any) => {
-    if (blk.tecnico_id) {
-      busyTecnicoIds.add(blk.tecnico_id);
+  if (blockersOnDate && blockersOnDate.length > 0) {
+    const isGloballyBlocked = blockersOnDate.some((blk: any) => blk.tecnico_id === null);
+    if (isGloballyBlocked) {
+      return null;
     }
-  });
+    blockersOnDate.forEach((blk: any) => {
+      if (blk.tecnico_id) {
+        busyTecnicoIds.add(blk.tecnico_id);
+      }
+    });
+  }
 
   const availableTecnicos = compativeis.filter((t: any) => !busyTecnicoIds.has(t.id));
 
