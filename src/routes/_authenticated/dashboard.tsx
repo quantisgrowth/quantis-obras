@@ -2101,6 +2101,8 @@ function AdminDash() {
   const [showLocalDialog, setShowLocalDialog] = useState(false);
   const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
   const [googleMapsUrl, setGoogleMapsUrl] = useState("");
+  const [localCep, setLocalCep] = useState("");
+  const [fetchingCep, setFetchingCep] = useState(false);
 
   // Alerts states
   const [alertas, setAlertas] = useState<any[]>([]);
@@ -2478,6 +2480,34 @@ function AdminDash() {
     }
   };
 
+  const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    const clean = rawVal.replace(/\D/g, "");
+    setLocalCep(rawVal);
+    
+    if (clean.length === 8) {
+      setFetchingCep(true);
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+        const data = await res.json();
+        if (data.erro) {
+          toast.error("CEP não encontrado.");
+        } else {
+          setLocalEndereco(data.logradouro || "");
+          setLocalBairro(data.bairro || "");
+          setLocalCidade(data.localidade || "");
+          setLocalEstado(data.uf || "");
+          toast.success("Endereço preenchido com sucesso pelo CEP!");
+        }
+      } catch (err) {
+        console.error("Erro ao buscar CEP:", err);
+        toast.error("Erro ao buscar endereço pelo CEP.");
+      } finally {
+        setFetchingCep(false);
+      }
+    }
+  };
+
   const handleSaveLocal = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmittingLocal(true);
@@ -2503,6 +2533,7 @@ function AdminDash() {
         bairro: localBairro || null,
         cidade: localCidade,
         estado: localEstado,
+        cep: localCep || null,
         latitude: finalLat !== "" ? Number(finalLat) : null,
         longitude: finalLng !== "" ? Number(finalLng) : null,
       };
@@ -2535,6 +2566,7 @@ function AdminDash() {
       setLocalLat("");
       setLocalLng("");
       setGoogleMapsUrl("");
+      setLocalCep("");
       setEditingLocalId(null);
       
       fetchLocais();
@@ -2554,6 +2586,7 @@ function AdminDash() {
     setLocalBairro(loc.bairro || "");
     setLocalCidade(loc.cidade);
     setLocalEstado(loc.estado);
+    setLocalCep(loc.cep || "");
     setLocalLat(loc.latitude !== null ? loc.latitude.toString() : "");
     setLocalLng(loc.longitude !== null ? loc.longitude.toString() : "");
     setGoogleMapsUrl("");
@@ -2572,6 +2605,7 @@ function AdminDash() {
     setLocalLat("");
     setLocalLng("");
     setGoogleMapsUrl("");
+    setLocalCep("");
     setShowLocalDialog(true);
   };
 
@@ -2961,10 +2995,24 @@ function AdminDash() {
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSaveLocal} className="space-y-4 pt-2 text-xs">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="loc-nome">Nome do Local</Label>
-                    <Input id="loc-nome" required value={localNome} onChange={(e) => setLocalNome(e.target.value)} placeholder="Ex: Laboratório Central Sorocaba" />
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1.5 col-span-1">
+                      <Label htmlFor="loc-cep">CEP</Label>
+                      <Input
+                        id="loc-cep"
+                        value={localCep}
+                        onChange={handleCepChange}
+                        placeholder="Ex: 18035-000"
+                        disabled={fetchingCep}
+                        className={fetchingCep ? "animate-pulse" : ""}
+                      />
+                    </div>
+                    <div className="space-y-1.5 col-span-2">
+                      <Label htmlFor="loc-nome">Nome do Local</Label>
+                      <Input id="loc-nome" required value={localNome} onChange={(e) => setLocalNome(e.target.value)} placeholder="Ex: Laboratório Central Sorocaba" />
+                    </div>
                   </div>
+
                   <div className="space-y-1.5">
                     <Label htmlFor="loc-tipo">Tipo do Ponto</Label>
                     <select
@@ -3022,14 +3070,34 @@ function AdminDash() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="loc-lat">Latitude (opcional)</Label>
-                      <Input id="loc-lat" type="number" step="0.0000001" value={localLat} onChange={(e) => setLocalLat(e.target.value)} placeholder="Ex: -23.5015" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="loc-lng">Longitude (opcional)</Label>
-                      <Input id="loc-lng" type="number" step="0.0000001" value={localLng} onChange={(e) => setLocalLng(e.target.value)} placeholder="Ex: -47.4526" />
+                  <div className="space-y-1.5">
+                    <Label>Coordenadas Geográficas (Opcional)</Label>
+                    <div className="flex items-end gap-2">
+                      <div className="grid grid-cols-2 gap-2 flex-1">
+                        <div className="space-y-1">
+                          <Label htmlFor="loc-lat" className="text-[10px] text-muted-foreground">Latitude</Label>
+                          <Input id="loc-lat" type="number" step="0.0000001" value={localLat} onChange={(e) => setLocalLat(e.target.value)} placeholder="Ex: -23.5015" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="loc-lng" className="text-[10px] text-muted-foreground">Longitude</Label>
+                          <Input id="loc-lng" type="number" step="0.0000001" value={localLng} onChange={(e) => setLocalLng(e.target.value)} placeholder="Ex: -47.4526" />
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 px-3 cursor-pointer shrink-0 border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-indigo-900/50 dark:hover:bg-indigo-950/30"
+                        title="Visualizar localização no Google Maps"
+                        onClick={() => {
+                          if (localLat && localLng) {
+                            window.open(`https://www.google.com/maps/search/?api=1&query=${localLat},${localLng}`, '_blank');
+                          } else {
+                            toast.warning("Preencha a latitude e longitude primeiro.");
+                          }
+                        }}
+                      >
+                        <MapPin className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
 
@@ -3079,16 +3147,35 @@ function AdminDash() {
                                loc.tipo === "Apoio" ? "B. Apoio / Obra" : "Outro"}
                             </Badge>
                           </td>
-                          <td className="p-3 text-xs">{loc.endereco}, {loc.numero || "S/N"} - {loc.bairro}, {loc.cidade}/{loc.estado}</td>
+                          <td className="p-3 text-xs">
+                            {loc.cep ? `CEP: ${loc.cep} · ` : ""}
+                            {loc.endereco}, {loc.numero || "S/N"} - {loc.bairro}, {loc.cidade}/{loc.estado}
+                          </td>
                           <td className="p-3 text-xs font-mono">
                             {loc.latitude !== null && loc.longitude !== null ? `${loc.latitude}, ${loc.longitude}` : "Não cadastradas"}
                           </td>
-                          <td className="p-3 text-center">
+                          <td className="p-3 text-center font-bold">
                             <div className="flex justify-center gap-1.5">
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 p-1 cursor-pointer"
+                                title="Checar localização no Google Maps"
+                                onClick={() => {
+                                  if (loc.latitude && loc.longitude) {
+                                    window.open(`https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`, '_blank');
+                                  } else {
+                                    toast.warning("Coordenadas não cadastradas para este local.");
+                                  }
+                                }}
+                              >
+                                <MapPin className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 p-1 cursor-pointer"
+                                title="Editar local"
                                 onClick={() => handleEditLocalClick(loc)}
                               >
                                 <Edit className="h-4 w-4" />
@@ -3097,6 +3184,7 @@ function AdminDash() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 p-1 cursor-pointer"
+                                title="Excluir local"
                                 onClick={() => handleDeleteLocal(loc.id)}
                               >
                                 <X className="h-4 w-4" />
