@@ -1653,7 +1653,7 @@ function NovoAgendamento() {
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center py-8 text-center text-xs text-muted-foreground border border-dashed rounded-xl p-4">
-                        <Clock className="h-6 w-6 text-muted-foreground/30 mb-1.5 animate-pulse" />
+                        <Clock3 className="h-6 w-6 text-muted-foreground/30 mb-1.5 animate-pulse" />
                         <span>Escolha um dia no calendário ao lado.</span>
                       </div>
                     )}
@@ -1661,7 +1661,7 @@ function NovoAgendamento() {
                     {dataServico && horarioNaObra && (
                       <div className="rounded-xl bg-muted/30 border border-border/80 p-3 space-y-1.5 text-[11px] text-muted-foreground">
                         <div className="flex items-center gap-1.5 font-bold text-foreground">
-                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <Clock3 className="h-3.5 w-3.5 text-primary" />
                           <span>Jornada: {horarioNaObra} às {horarioFim}</span>
                         </div>
                         <p className="text-[10px] leading-relaxed">
