@@ -48,6 +48,10 @@ export type Database = {
           volume_m3: number
           is_orcamento_manual: boolean
           orcamento_aprovado: boolean
+          qtd_caminhoes_real: number | null
+          horario_saida_real: string | null
+          horas_extras_minutos: number
+          status_horas_extras: string
         }
         Insert: {
           codigo_pedido?: string
@@ -84,6 +88,10 @@ export type Database = {
           volume_m3?: number
           is_orcamento_manual?: boolean
           orcamento_aprovado?: boolean
+          qtd_caminhoes_real?: number | null
+          horario_saida_real?: string | null
+          horas_extras_minutos?: number
+          status_horas_extras?: string
         }
         Update: {
           codigo_pedido?: string
@@ -120,6 +128,10 @@ export type Database = {
           volume_m3?: number
           is_orcamento_manual?: boolean
           orcamento_aprovado?: boolean
+          qtd_caminhoes_real?: number | null
+          horario_saida_real?: string | null
+          horas_extras_minutos?: number
+          status_horas_extras?: string
         }
         Relationships: [
           {
@@ -226,6 +238,7 @@ export type Database = {
           mes_referencia: string
           razao_social: string
           total_servicos_concluidos: number
+          requer_aprovacao_tecnico: boolean
         }
         Insert: {
           cnpj: string
@@ -235,6 +248,7 @@ export type Database = {
           mes_referencia?: string
           razao_social: string
           total_servicos_concluidos?: number
+          requer_aprovacao_tecnico?: boolean
         }
         Update: {
           cnpj?: string
@@ -244,6 +258,7 @@ export type Database = {
           mes_referencia?: string
           razao_social?: string
           total_servicos_concluidos?: number
+          requer_aprovacao_tecnico?: boolean
         }
         Relationships: []
       }
@@ -461,6 +476,7 @@ export type Database = {
           tipo_cobranca: string
           formas_pagamento_aceitas: string[]
           regra_minimo_a_vista: number
+          valor_cp_excedente: number
         }
         Insert: {
           ativo?: boolean
@@ -477,6 +493,7 @@ export type Database = {
           tipo_cobranca?: string
           formas_pagamento_aceitas?: string[]
           regra_minimo_a_vista?: number
+          valor_cp_excedente?: number
         }
         Update: {
           ativo?: boolean
@@ -493,6 +510,7 @@ export type Database = {
           tipo_cobranca?: string
           formas_pagamento_aceitas?: string[]
           regra_minimo_a_vista?: number
+          valor_cp_excedente?: number
         }
         Relationships: []
       }
@@ -611,6 +629,7 @@ export type Database = {
           sku: string | null
           unidade: string | null
           valor_venda_editavel: number | null
+          valor_cp_excedente: number | null
         }
         Insert: {
           ativo?: boolean | null
@@ -621,6 +640,7 @@ export type Database = {
           sku?: string | null
           unidade?: string | null
           valor_venda_editavel?: number | null
+          valor_cp_excedente?: number | null
         }
         Update: {
           ativo?: boolean | null
@@ -631,6 +651,7 @@ export type Database = {
           sku?: string | null
           unidade?: string | null
           valor_venda_editavel?: number | null
+          valor_cp_excedente?: number | null
         }
         Relationships: []
       }
@@ -686,6 +707,7 @@ export type Database = {
     Enums: {
       agendamento_status:
         | "Pendente_Tecnico"
+        | "Pendente_Aprovacao_Gestor"
         | "Confirmado"
         | "Em_Execucao"
         | "Aguardando_Medicao"
@@ -830,6 +852,7 @@ export const Constants = {
     Enums: {
       agendamento_status: [
         "Pendente_Tecnico",
+        "Pendente_Aprovacao_Gestor",
         "Confirmado",
         "Em_Execucao",
         "Aguardando_Medicao",

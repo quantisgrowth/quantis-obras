@@ -565,7 +565,7 @@ export const acceptInvite = createServerFn({ method: "POST" })
 
     const { data: booking } = await supabase
       .from("agendamentos_medicoes")
-      .select("id, tecnico_id, status_agendamento, obra:obras(id, nome_obra, endereco, cidade, latitude, longitude)")
+      .select("id, tecnico_id, status_agendamento, empresa_id, empresa:empresas_clientes(requer_aprovacao_tecnico), obra:obras(id, nome_obra, endereco, cidade, latitude, longitude)")
       .eq("id", input.bookingId)
       .single();
 
@@ -579,10 +579,13 @@ export const acceptInvite = createServerFn({ method: "POST" })
       throw new Error("Este convite já foi respondido ou expirou.");
     }
 
+    const requerAprovacao = (booking as any)?.empresa?.requer_aprovacao_tecnico || false;
+    const novoStatus = requerAprovacao ? "Pendente_Aprovacao_Gestor" : "Confirmado";
+
     const { error } = await supabase
       .from("agendamentos_medicoes")
       .update({
-        status_agendamento: "Confirmado",
+        status_agendamento: novoStatus,
       })
       .eq("id", input.bookingId);
 
@@ -1255,6 +1258,8 @@ export const addMoldingCycle = createServerFn({ method: "POST" })
     notaFiscal: z.string(),
     pecaConcretada: z.string(),
     cpsMoldados: z.number(),
+    horarioMoldagem: z.string(),
+    codigosBarras: z.array(z.string()),
   }).parse(input))
   .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
@@ -1282,6 +1287,8 @@ export const addMoldingCycle = createServerFn({ method: "POST" })
           nota_fiscal: input.notaFiscal,
           peca_concretada: input.pecaConcretada,
           cps_moldados: input.cpsMoldados,
+          horario_moldagem: input.horarioMoldagem,
+          codigos_barras: input.codigosBarras,
           horario_registro: new Date().toISOString(),
         },
       });
@@ -1297,6 +1304,7 @@ export const finalizeExecution = createServerFn({ method: "POST" })
     cpsMoldadosReal: z.number(),
     urlFotoFinal: z.string().nullable().optional(),
     urlFotoRetorno: z.string().nullable().optional(),
+    horarioSaida: z.string().nullable().optional(),
   }).parse(input))
   .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
@@ -1311,6 +1319,24 @@ export const finalizeExecution = createServerFn({ method: "POST" })
     if (!tecnico) {
       throw new Error("Acesso negado: Perfil de técnico não encontrado.");
     }
+
+    // Fetch booking
+    const { data: booking } = await supabase
+      .from("agendamentos_medicoes")
+      .select("id, horario_saida_lab, data_servico")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (!booking) throw new Error("Agendamento não encontrado.");
+
+    // Count actual trucks (number of Ciclo_CP cycles)
+    const { count: cycleCount } = await supabase
+      .from("historico_fotos")
+      .select("id", { count: "exact", head: true })
+      .eq("agendamento_id", input.bookingId)
+      .eq("tipo_foto", "Ciclo_CP");
+
+    const totalCycles = (cycleCount || 0);
 
     // Insert final overview photo if provided
     if (input.urlFotoFinal) {
@@ -1336,12 +1362,40 @@ export const finalizeExecution = createServerFn({ method: "POST" })
         });
     }
 
-    // Update booking status and actual molded CPs count
+    // Calculate overtime if actual checkout is provided
+    let statusHE = "Sem_Horas_Extras";
+    let extraMinutos = 0;
+    const checkoutTime = input.horarioSaida || new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+    if (booking.horario_saida_lab) {
+      const [pH, pM] = booking.horario_saida_lab.split(":").map(Number);
+      const [aH, aM] = checkoutTime.split(":").map(Number);
+      
+      const plannedMin = pH * 60 + pM;
+      let actualMin = aH * 60 + aM;
+      
+      if (actualMin < plannedMin && actualMin < 4 * 60) {
+        // Assume crossed midnight if actual checkout is early morning (e.g. before 4am) and planned was afternoon/evening
+        actualMin += 24 * 60;
+      }
+      
+      const diff = actualMin - plannedMin;
+      if (diff > 0) {
+        extraMinutos = diff;
+        statusHE = "Pendente_Aprovacao";
+      }
+    }
+
+    // Update booking status, actual molded CPs count, real trucks count and overtime
     const { error } = await supabase
       .from("agendamentos_medicoes")
       .update({
         status_agendamento: "Aguardando_Medicao",
         cps_moldados_real: input.cpsMoldadosReal,
+        qtd_caminhoes_real: totalCycles,
+        horario_saida_real: checkoutTime,
+        horas_extras_minutos: extraMinutos,
+        status_horas_extras: statusHE,
         justificativa_reprovacao: null,
       })
       .eq("id", input.bookingId);
@@ -1359,7 +1413,7 @@ export const validateBooking = createServerFn({ method: "POST" })
     // Allow validation by either admin or the client who created the booking
     const { data: booking, error: getErr } = await supabase
       .from("agendamentos_medicoes")
-      .select("id, criado_por")
+      .select("id, criado_por, cps_contratados, cps_moldados_real, valor_total, memoria_calculo, servico:servicos_catalogo(valor_cp_excedente)")
       .eq("id", input.bookingId)
       .single();
 
@@ -1380,11 +1434,30 @@ export const validateBooking = createServerFn({ method: "POST" })
       throw new Error("Acesso negado: Você não tem permissão para validar este agendamento.");
     }
 
+    const molded = booking.cps_moldados_real || 0;
+    const contracted = booking.cps_contratados || 0;
+    let novoTotal = Number(booking.valor_total) || 0;
+
+    if (molded > contracted) {
+      const excessCps = molded - contracted;
+      const rate = Number((booking as any).servico?.valor_cp_excedente) || 0;
+      if (rate > 0) {
+        novoTotal += (excessCps * rate);
+      }
+    }
+
     // Update status to Validado
     const { error } = await supabase
       .from("agendamentos_medicoes")
       .update({
         status_agendamento: "Validado",
+        valor_total: +novoTotal.toFixed(2),
+        memoria_calculo: {
+          ...(typeof booking.memoria_calculo === "object" && booking.memoria_calculo !== null ? booking.memoria_calculo : {}),
+          cpsExcedentesRealizados: molded > contracted ? molded - contracted : 0,
+          custoExcedenteRealizado: molded > contracted ? (molded - contracted) * (Number((booking as any).servico?.valor_cp_excedente) || 0) : 0,
+          valorTotalComExcedente: +novoTotal.toFixed(2),
+        } as any
       })
       .eq("id", input.bookingId);
 
@@ -1857,7 +1930,8 @@ export const saveServico = createServerFn({ method: "POST" })
     descricao: z.string().optional(),
     tipo_cobranca: z.string().default("Por Execucao"),
     formas_pagamento_aceitas: z.array(z.string()).default(["PIX", "Boleto", "Cartao"]),
-    regra_minimo_a_vista: z.number().default(1000.00)
+    regra_minimo_a_vista: z.number().default(1000.00),
+    valor_cp_excedente: z.number().default(0.00)
   }).parse(input))
   .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
@@ -1882,7 +1956,8 @@ export const saveServico = createServerFn({ method: "POST" })
       descricao: input.descricao || null,
       tipo_cobranca: input.tipo_cobranca,
       formas_pagamento_aceitas: input.formas_pagamento_aceitas,
-      regra_minimo_a_vista: input.regra_minimo_a_vista
+      regra_minimo_a_vista: input.regra_minimo_a_vista,
+      valor_cp_excedente: input.valor_cp_excedente
     };
 
     if (input.id) {
@@ -2140,7 +2215,7 @@ export const getFinancialSummary = createServerFn({ method: "POST" })
 
     const { data: bookings, error } = await supabase
       .from("agendamentos_medicoes")
-      .select("valor_total, status_pagamento, empresa:empresas_clientes(id, razao_social)");
+      .select("id, codigo_pedido, data_servico, valor_total, status_pagamento, status_agendamento, servico_id, empresa_id, empresa:empresas_clientes(id, razao_social), servico:servicos_catalogo_pub(id, nome_servico, sku)");
 
     if (error) throw error;
 
@@ -2174,7 +2249,8 @@ export const getFinancialSummary = createServerFn({ method: "POST" })
       success: true,
       totalFaturado,
       totalPendente,
-      porCliente: Object.values(porCliente)
+      porCliente: Object.values(porCliente),
+      bookings: bookings || []
     };
   });
 
@@ -2254,6 +2330,214 @@ export const deleteObra = createServerFn({ method: "POST" })
 
     return { success: true };
   });
+
+export const approveTechnician = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check permissions
+    const { data: booking } = await supabase
+      .from("agendamentos_medicoes")
+      .select("id, status_agendamento, empresa_id")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (!booking) throw new Error("Agendamento não encontrado.");
+    if (booking.status_agendamento !== "Pendente_Aprovacao_Gestor") {
+      throw new Error("Agendamento não está pendente de aprovação do gestor.");
+    }
+
+    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+
+    if (!isAdmin) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("empresa_id")
+        .eq("id", userId)
+        .single();
+      if (!profile || profile.empresa_id !== booking.empresa_id) {
+        throw new Error("Acesso negado: você não tem permissão para aprovar este técnico.");
+      }
+    }
+
+    const { error } = await supabase
+      .from("agendamentos_medicoes")
+      .update({ status_agendamento: "Confirmado" })
+      .eq("id", input.bookingId);
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const reallocateTechnician = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check permissions
+    const { data: booking } = await supabase
+      .from("agendamentos_medicoes")
+      .select("*, servico:servicos_catalogo(*)")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (!booking) throw new Error("Agendamento não encontrado.");
+
+    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+
+    if (!isAdmin) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("empresa_id")
+        .eq("id", userId)
+        .single();
+      if (!profile || profile.empresa_id !== booking.empresa_id) {
+        throw new Error("Acesso negado: você não tem permissão para remanejar este agendamento.");
+      }
+    }
+
+    // Add current technician to rejected lists to avoid inviting them again immediately
+    const currentRejected = booking.tecnicos_rejeitados || [];
+    const newRejected = [...new Set([...currentRejected, booking.tecnico_id])].filter(Boolean);
+
+    const { error } = await supabase
+      .from("agendamentos_medicoes")
+      .update({
+        tecnico_id: null,
+        convidado_em: null,
+        status_agendamento: "Pendente_Tecnico",
+        tecnicos_rejeitados: newRejected,
+      })
+      .eq("id", input.bookingId);
+
+    if (error) throw error;
+
+    // Re-trigger allocation algorithm
+    await selectAndInviteTechnician(
+      supabase,
+      booking.id,
+      booking.data_servico,
+      booking.servico?.categoria || "",
+      newRejected
+    );
+
+    return { success: true };
+  });
+
+export const approveOvertime = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    bookingId: z.string().uuid(),
+    approved: z.boolean(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Check permissions
+    const { data: booking } = await supabase
+      .from("agendamentos_medicoes")
+      .select("*")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (!booking) throw new Error("Agendamento não encontrado.");
+    if (booking.status_horas_extras !== "Pendente_Aprovacao") {
+      throw new Error("Não há solicitação de horas extras pendente de aprovação para este agendamento.");
+    }
+
+    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+
+    if (!isAdmin) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("empresa_id")
+        .eq("id", userId)
+        .single();
+      if (!profile || profile.empresa_id !== booking.empresa_id) {
+        throw new Error("Acesso negado: você não tem permissão para responder a esta solicitação.");
+      }
+    }
+
+    if (input.approved) {
+      // Calculate overtime cost
+      // Weekdays: R$150/h, Saturdays (day 6): R$200/h
+      const serviceDate = new Date(`${booking.data_servico}T00:00:00`);
+      const dow = serviceDate.getDay();
+      const hourlyRate = dow === 6 ? 200 : 150;
+      const extraCost = +( (booking.horas_extras_minutos / 60) * hourlyRate ).toFixed(2);
+
+      const novoTotal = +(Number(booking.valor_total) + extraCost).toFixed(2);
+
+      const { error } = await supabase
+        .from("agendamentos_medicoes")
+        .update({
+          status_horas_extras: "Aprovado",
+          valor_total: novoTotal,
+          memoria_calculo: {
+            ...(booking.memoria_calculo as any),
+            horasExtrasAprovadas: true,
+            custoExtraRealizado: extraCost,
+            valorTotalComExtra: novoTotal,
+          }
+        })
+        .eq("id", input.bookingId);
+
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("agendamentos_medicoes")
+        .update({
+          status_horas_extras: "Reprovado",
+        })
+        .eq("id", input.bookingId);
+
+      if (error) throw error;
+    }
+
+    return { success: true };
+  });
+
+export const updateCompanySettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    empresaId: z.string().uuid(),
+    requerAprovacaoTecnico: z.boolean(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify if user is admin or is manager of the company
+    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+
+    if (!isAdmin) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("empresa_id")
+        .eq("id", userId)
+        .single();
+      if (!profile || profile.empresa_id !== input.empresaId) {
+        throw new Error("Acesso negado: você não tem permissão para alterar as configurações desta empresa.");
+      }
+    }
+
+    const { error } = await supabase
+      .from("empresas_clientes")
+      .update({
+        requer_aprovacao_tecnico: input.requerAprovacaoTecnico,
+      })
+      .eq("id", input.empresaId);
+
+    if (error) throw error;
+    return { success: true };
+  });
+
 
 
 

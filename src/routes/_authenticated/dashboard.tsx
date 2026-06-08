@@ -7,7 +7,7 @@ import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera, Building2,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
   Upload, Eye, EyeOff, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
-  Star, Settings2, LogOut, HardHat
+  Star, Settings2, LogOut, HardHat, Filter, FileDown, Printer
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -142,6 +142,7 @@ async function uploadPhotoOrBase64(file: File): Promise<string> {
 // Status helpers
 const STATUS_COLORS: Record<string, string> = {
   Pendente_Tecnico: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  Pendente_Aprovacao_Gestor: "bg-orange-500/10 text-orange-600 border-orange-500/20",
   Confirmado: "bg-blue-500/10 text-blue-600 border-blue-500/20",
   Em_Execucao: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
   Aguardando_Medicao: "bg-purple-500/10 text-purple-600 border-purple-500/20",
@@ -152,6 +153,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   Pendente_Tecnico: "⏳ Aguardando Técnico",
+  Pendente_Aprovacao_Gestor: "🚨 Pendente sua Aprovação",
   Confirmado: "✅ Confirmado",
   Em_Execucao: "🔧 Em Execução",
   Aguardando_Medicao: "📋 Aguardando Medição",
@@ -167,6 +169,33 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const [agendamentos, setAgendamentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pendentes");
+  const [clientCompany, setClientCompany] = useState<any>(null);
+  const [loadingCompany, setLoadingCompany] = useState(false);
+  const [approvingTec, setApprovingTec] = useState<string | null>(null);
+  const [reallocatingTec, setReallocatingTec] = useState<string | null>(null);
+  const [overtimeActionLoading, setOvertimeActionLoading] = useState(false);
+
+  // Advanced filters state for client panel
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
+  const [filterServiceId, setFilterServiceId] = useState("all");
+  const [filterPiece, setFilterPiece] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [availableServices, setAvailableServices] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function fetchServices() {
+      const { data, error } = await supabase
+        .from("servicos_catalogo_pub")
+        .select("id, nome_servico, sku")
+        .eq("ativo", true)
+        .order("nome_servico", { ascending: true });
+      if (!error && data) {
+        setAvailableServices(data);
+      }
+    }
+    fetchServices();
+  }, []);
 
   // Booking detail modal state
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
@@ -313,6 +342,84 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
     }
   };
 
+  const handleToggleRequerAprovacao = async (checked: boolean) => {
+    if (!clientCompany) return;
+    setLoadingCompany(true);
+    try {
+      const { updateCompanySettings: dynamicUpdateCompanySettings } = await import("@/lib/booking.functions");
+      await dynamicUpdateCompanySettings({
+        data: {
+          empresaId: clientCompany.id,
+          requerAprovacaoTecnico: checked,
+        }
+      });
+      setClientCompany({ ...clientCompany, requer_aprovacao_tecnico: checked });
+      toast.success(checked ? "Aprovação de técnicos ativada!" : "Aprovação de técnicos desativada!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao atualizar configuração.");
+    } finally {
+      setLoadingCompany(false);
+    }
+  };
+
+  const handleApproveTechnician = async (bookingId: string) => {
+    setApprovingTec(bookingId);
+    try {
+      const { approveTechnician: dynamicApprove } = await import("@/lib/booking.functions");
+      await dynamicApprove({ data: { bookingId } });
+      toast.success("Alocação de técnico aprovada com sucesso!");
+      fetchBookings();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao aprovar técnico.");
+    } finally {
+      setApprovingTec(null);
+    }
+  };
+
+  const handleReallocateTechnician = async (bookingId: string) => {
+    if (!confirm("Tem certeza que deseja remanejar este agendamento? O técnico atual será desvinculado e outro será convidado.")) return;
+    setReallocatingTec(bookingId);
+    try {
+      const { reallocateTechnician: dynamicReallocate } = await import("@/lib/booking.functions");
+      await dynamicReallocate({ data: { bookingId } });
+      toast.success("Técnico desvinculado. Nova busca iniciada!");
+      fetchBookings();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao remanejar técnico.");
+    } finally {
+      setReallocatingTec(null);
+    }
+  };
+
+  const handleApproveOvertime = async (bookingId: string, approved: boolean) => {
+    setOvertimeActionLoading(true);
+    try {
+      const { approveOvertime: dynamicApproveOT } = await import("@/lib/booking.functions");
+      await dynamicApproveOT({ data: { bookingId, approved } });
+      toast.success(approved ? "Horas extras aprovadas!" : "Horas extras reprovadas!");
+      
+      // Update selectedBooking details to refresh the modal view
+      if (selectedBooking && selectedBooking.id === bookingId) {
+        const { data: updated } = await supabase
+          .from("agendamentos_medicoes")
+          .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos!agendamentos_medicoes_tecnico_id_fkey(*)")
+          .eq("id", bookingId)
+          .single();
+        if (updated) setSelectedBooking(updated);
+      }
+      
+      fetchBookings();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao processar horas extras.");
+    } finally {
+      setOvertimeActionLoading(false);
+    }
+  };
+
   const fetchBookings = async () => {
     try {
       let { data: profile } = await supabase
@@ -350,7 +457,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 
       let query = supabase
         .from("agendamentos_medicoes")
-        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos!agendamentos_medicoes_tecnico_id_fkey(*)");
+        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos!agendamentos_medicoes_tecnico_id_fkey(*), fotos:historico_fotos(tipo_foto, metadata)");
 
       if (profile?.empresa_id) {
         query = query.or(`criado_por.eq.${userId},empresa_id.eq.${profile.empresa_id}`);
@@ -361,6 +468,15 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
       const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
       if (data) setAgendamentos(data);
+
+      if (profile?.empresa_id) {
+        const { data: comp } = await supabase
+          .from("empresas_clientes")
+          .select("id, requer_aprovacao_tecnico, razao_social, cnpj")
+          .eq("id", profile.empresa_id)
+          .single();
+        if (comp) setClientCompany(comp);
+      }
     } catch (err) {
       console.error("Error fetching bookings:", err);
     } finally {
@@ -490,13 +606,311 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
     }
   };
 
-  const pendentes = agendamentos.filter((a) => a.status_agendamento === "Pendente_Tecnico");
-  const confirmados = agendamentos.filter((a) =>
+  const filteredAgendamentos = agendamentos.filter((a) => {
+    // 1. Period Start Filter
+    if (filterStartDate && a.data_servico < filterStartDate) {
+      return false;
+    }
+    // 2. Period End Filter
+    if (filterEndDate && a.data_servico > filterEndDate) {
+      return false;
+    }
+    // 3. Service ID Filter
+    if (filterServiceId !== "all" && a.servico_id !== filterServiceId) {
+      return false;
+    }
+    // 4. Piece Filter
+    if (filterPiece) {
+      const searchStr = filterPiece.toLowerCase().trim();
+      const inObs = a.observacoes?.toLowerCase().includes(searchStr);
+      const inCycles = a.fotos?.some((f: any) => 
+        f.tipo_foto === "Ciclo_CP" && 
+        f.metadata?.peca_concretada?.toLowerCase().includes(searchStr)
+      );
+      if (!inObs && !inCycles) {
+        return false;
+      }
+    }
+    // 5. Status Filter
+    if (filterStatus !== "all" && a.status_agendamento !== filterStatus) {
+      return false;
+    }
+    return true;
+  });
+
+  const pendentes = filteredAgendamentos.filter((a) => ["Pendente_Tecnico", "Pendente_Aprovacao_Gestor"].includes(a.status_agendamento));
+  const confirmados = filteredAgendamentos.filter((a) =>
     ["Confirmado", "Em_Execucao", "Aguardando_Medicao"].includes(a.status_agendamento)
   );
-  const concluidos = agendamentos.filter((a) =>
+  const concluidos = filteredAgendamentos.filter((a) =>
     ["Validado", "Laboratorio", "Cancelado"].includes(a.status_agendamento)
   );
+
+  const handleExportCSV = () => {
+    if (filteredAgendamentos.length === 0) {
+      toast.error("Nenhum dado filtrado para exportar.");
+      return;
+    }
+
+    const headers = [
+      "Código do Pedido",
+      "Data do Serviço",
+      "Horário",
+      "Obra",
+      "Cidade",
+      "Serviço",
+      "CPs Contratados",
+      "CPs Realizados",
+      "Status do Agendamento",
+      "Forma de Pagamento",
+      "Valor Total (R$)",
+      "Horas Extras (min)",
+      "Caminhões Realizados",
+    ];
+
+    const rows = filteredAgendamentos.map((a) => [
+      a.codigo_pedido,
+      a.data_servico,
+      a.horario_na_obra,
+      a.obra?.nome_obra || "",
+      a.obra?.cidade || "",
+      a.servico?.nome_servico || "",
+      a.cps_contratados,
+      a.cps_moldados_real || 0,
+      STATUS_LABELS[a.status_agendamento] || a.status_agendamento,
+      a.forma_pagamento || "",
+      a.valor_total,
+      a.horas_extras_minutos || 0,
+      a.qtd_caminhoes_real || 0,
+    ]);
+
+    const csvContent =
+      "\uFEFF" +
+      [headers.join(";"), ...rows.map((r) => r.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(";"))].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `relatorio_obras_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrintPDF = () => {
+    if (filteredAgendamentos.length === 0) {
+      toast.error("Nenhum dado filtrado para gerar relatório.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Não foi possível abrir a janela de impressão. Por favor, desative o bloqueador de pop-ups.");
+      return;
+    }
+
+    const totalCps = filteredAgendamentos.reduce((sum, a) => sum + (a.cps_moldados_real || a.cps_contratados || 0), 0);
+    const totalValue = filteredAgendamentos.reduce((sum, a) => sum + Number(a.valor_total || 0), 0);
+
+    const filterDetails = [];
+    if (filterStartDate) filterDetails.push(`Início: ${filterStartDate}`);
+    if (filterEndDate) filterDetails.push(`Fim: ${filterEndDate}`);
+    if (filterServiceId !== "all") {
+      const svc = availableServices.find(s => s.id === filterServiceId);
+      if (svc) filterDetails.push(`Serviço: ${svc.nome_servico}`);
+    }
+    if (filterPiece) filterDetails.push(`Peça: ${filterPiece}`);
+    if (filterStatus !== "all") filterDetails.push(`Status: ${STATUS_LABELS[filterStatus] || filterStatus}`);
+
+    const filterText = filterDetails.length > 0 ? filterDetails.join(" | ") : "Todos os registros";
+
+    const rowsHtml = filteredAgendamentos.map((a) => `
+      <tr>
+        <td style="font-family: monospace; font-size: 11px;">${a.codigo_pedido}</td>
+        <td>${new Date(a.data_servico + "T00:00:00").toLocaleDateString("pt-BR")}</td>
+        <td>${a.obra?.nome_obra || ""}</td>
+        <td>${a.obra?.cidade || ""}</td>
+        <td>${a.servico?.nome_servico || ""}</td>
+        <td style="text-align: center;">${a.cps_moldados_real || a.cps_contratados || 0}</td>
+        <td>${STATUS_LABELS[a.status_agendamento] || a.status_agendamento}</td>
+        <td style="text-align: right; font-weight: bold;">R$ ${Number(a.valor_total).toFixed(2)}</td>
+      </tr>
+    `).join("");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Relatório Executivo - Quantis Obras</title>
+        <style>
+          body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            color: #333;
+            margin: 40px;
+            font-size: 13px;
+            line-height: 1.4;
+          }
+          header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 20px;
+            margin-bottom: 25px;
+          }
+          .logo {
+            font-size: 24px;
+            font-weight: 800;
+            color: #1e3a8a;
+          }
+          .title {
+            text-align: right;
+          }
+          .title h1 {
+            margin: 0;
+            font-size: 20px;
+            color: #1e3a8a;
+          }
+          .title p {
+            margin: 5px 0 0 0;
+            font-size: 11px;
+            color: #666;
+          }
+          .filters {
+            background-color: #f3f4f6;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 11px;
+            color: #4b5563;
+          }
+          .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+          }
+          .summary-card {
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            border-radius: 6px;
+            background-color: #fafafa;
+          }
+          .summary-card p {
+            margin: 0;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #6b7280;
+            font-weight: 600;
+          }
+          .summary-card h2 {
+            margin: 5px 0 0 0;
+            font-size: 18px;
+            color: #111827;
+            font-weight: 700;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+          }
+          th {
+            background-color: #1e3a8a;
+            color: white;
+            font-weight: 600;
+            text-align: left;
+            padding: 10px;
+            font-size: 11px;
+          }
+          td {
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 11px;
+          }
+          tr:nth-child(even) td {
+            background-color: #f9fafb;
+          }
+          footer {
+            text-align: center;
+            font-size: 10px;
+            color: #9ca3af;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 15px;
+            margin-top: 50px;
+          }
+          @media print {
+            body { margin: 20px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <header>
+          <div class="logo">Quantis Obras</div>
+          <div class="title">
+            <h1>Relatório de Agendamentos</h1>
+            <p>Gerado em ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}</p>
+          </div>
+        </header>
+
+        <div class="filters">
+          <strong>Filtros Aplicados:</strong> ${filterText}
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <p>Total Chamados</p>
+            <h2>${filteredAgendamentos.length}</h2>
+          </div>
+          <div class="summary-card">
+            <p>Total CPs Moldados</p>
+            <h2>${totalCps}</h2>
+          </div>
+          <div class="summary-card">
+            <p>Valor Consolidado</p>
+            <h2>R$ ${totalValue.toFixed(2)}</h2>
+          </div>
+          <div class="summary-card">
+            <p>Empresa</p>
+            <h2 style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${clientCompany?.razao_social || "Carregando..."}</h2>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Data</th>
+              <th>Obra</th>
+              <th>Cidade</th>
+              <th>Serviço</th>
+              <th style="text-align: center;">CPs</th>
+              <th>Status</th>
+              <th style="text-align: right;">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <footer>
+          Relatório Executivo Quantis Obras - Rastreabilidade, Controle Tecnológico e Transparência.
+        </footer>
+
+        <script>
+          window.onload = function() {
+            window.print();
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+
 
   return (
     <div className="space-y-8 animate-in fade-in-50 duration-200">
@@ -533,6 +947,115 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
         </Card>
       </div>
 
+      {/* ── Barra de Filtros Avançados & Exportação ── */}
+      <Card className="border border-border bg-card shadow-sm">
+        <CardContent className="p-4 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+            <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+              <Filter className="h-4 w-4 text-primary" /> Filtros Avançados
+            </h4>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCSV}
+                className="text-xs font-bold gap-1.5 h-8 bg-card border-border hover:bg-accent"
+              >
+                <FileDown className="h-3.5 w-3.5" /> Exportar Excel (CSV)
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrintPDF}
+                className="text-xs font-bold gap-1.5 h-8 bg-card border-border hover:bg-accent"
+              >
+                <Printer className="h-3.5 w-3.5" /> Gerar PDF
+              </Button>
+              {(filterStartDate || filterEndDate || filterServiceId !== "all" || filterPiece || filterStatus !== "all") && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => {
+                    setFilterStartDate("");
+                    setFilterEndDate("");
+                    setFilterServiceId("all");
+                    setFilterPiece("");
+                    setFilterStatus("all");
+                  }}
+                  className="text-xs font-bold text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/25 h-8 px-2"
+                >
+                  Limpar Filtros
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+            <div className="space-y-1">
+              <Label htmlFor="filter-start" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Data Inicial</Label>
+              <Input
+                id="filter-start"
+                type="date"
+                value={filterStartDate}
+                onChange={(e) => setFilterStartDate(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="filter-end" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Data Final</Label>
+              <Input
+                id="filter-end"
+                type="date"
+                value={filterEndDate}
+                onChange={(e) => setFilterEndDate(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="filter-service" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Serviço</Label>
+              <select
+                id="filter-service"
+                value={filterServiceId}
+                onChange={(e) => setFilterServiceId(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-foreground"
+              >
+                <option value="all">Todos os Serviços</option>
+                {availableServices.map((svc) => (
+                  <option key={svc.id} value={svc.id}>
+                    {svc.nome_servico}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="filter-piece" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Peça / Estrutura</Label>
+              <Input
+                id="filter-piece"
+                placeholder="Ex: Laje, Pilar..."
+                value={filterPiece}
+                onChange={(e) => setFilterPiece(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="filter-status" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</Label>
+              <select
+                id="filter-status"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-foreground"
+              >
+                <option value="all">Todos os Status</option>
+                {Object.entries(STATUS_LABELS).map(([val, label]) => (
+                  <option key={val} value={val}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* ── Abas do Painel ── */}
       <Tabs defaultValue="pendentes" onValueChange={setActiveTab} className="w-full">
         <TabsList className="flex flex-wrap gap-2 md:gap-3 bg-transparent p-0 h-auto justify-start mb-6">
@@ -559,6 +1082,12 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
             className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
           >
             <CheckCircle2 className="h-4 w-4" /> Realizados ({concluidos.length})
+          </TabsTrigger>
+          <TabsTrigger 
+            value="configuracoes" 
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+          >
+            <Settings className="h-4 w-4" /> Configurações
           </TabsTrigger>
         </TabsList>
 
@@ -642,9 +1171,31 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                           {ag.cps_contratados} CPs · {ag.forma_pagamento}
                         </div>
                       </div>
-                      <div className="text-[10px] text-muted-foreground italic flex items-center gap-1 bg-muted px-2 py-1 rounded">
-                        <Clock className="h-3 w-3" /> Aguardando aceite do técnico
-                      </div>
+                      {ag.status_agendamento === "Pendente_Aprovacao_Gestor" ? (
+                        <div className="flex gap-1.5 w-full sm:w-auto" onClick={(e) => e.stopPropagation()}>
+                          <Button 
+                            size="sm" 
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] h-7 px-2"
+                            onClick={() => handleApproveTechnician(ag.id)}
+                            disabled={approvingTec === ag.id}
+                          >
+                            {approvingTec === ag.id ? "Aprovando..." : "Aprovar"}
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="text-red-500 border-red-200 hover:bg-red-50 text-[10px] h-7 px-2"
+                            onClick={() => handleReallocateTechnician(ag.id)}
+                            disabled={reallocatingTec === ag.id}
+                          >
+                            {reallocatingTec === ag.id ? "Remanejando..." : "Remanejar"}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-muted-foreground italic flex items-center gap-1 bg-muted px-2 py-1 rounded">
+                          <Clock className="h-3 w-3" /> Aguardando aceite do técnico
+                        </div>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -800,6 +1351,43 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
             </div>
           )}
         </TabsContent>
+
+        <TabsContent value="configuracoes">
+          <Card className="border border-border bg-card max-w-xl shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-primary" /> Configurações da Empresa
+              </CardTitle>
+              <CardDescription>
+                Gerencie as regras operacionais da sua empresa na plataforma.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {clientCompany ? (
+                <div className="flex items-center justify-between border-t border-border pt-4">
+                  <div className="space-y-1">
+                    <Label className="font-bold text-foreground">Exigir aprovação de alocação de técnicos</Label>
+                    <p className="text-[11px] text-muted-foreground max-w-sm leading-relaxed">
+                      Se ativado, após o técnico aceitar a oportunidade, ela passará por uma validação do gestor antes de ser confirmada.
+                    </p>
+                  </div>
+                  <div className="flex items-center h-5">
+                    <input
+                      type="checkbox"
+                      id="toggle-aprovacao-tecnico"
+                      className="h-4.5 w-4.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                      checked={clientCompany.requer_aprovacao_tecnico || false}
+                      onChange={(e) => handleToggleRequerAprovacao(e.target.checked)}
+                      disabled={loadingCompany}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Carregando configurações da empresa...</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* ── DETALHES MODAL (LINHA DO TEMPO DOS ENSAIOS E FOTOS CRONOLÓGICA) ── */}
@@ -948,7 +1536,72 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                   </div>
                 )}
               </div>
+
+              {/* Bloco de Medição & Validação (CPs Excedentes e Horas Extras) */}
+              {(selectedBooking.status_agendamento === "Aguardando_Medicao" || selectedBooking.status_agendamento === "Validado") && (
+                <div className="border-t border-border pt-4 mt-6 space-y-3">
+                  <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <BarChart3 className="h-4 w-4 text-primary" />
+                    Resumo Financeiro & Medição Final
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[11px] bg-muted/40 p-3 rounded border border-border">
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground font-semibold">Controle de CPs</p>
+                      <p>Contratados: <strong className="text-foreground">{selectedBooking.cps_contratados} CPs</strong></p>
+                      <p>Moldados Real: <strong className="text-foreground">{selectedBooking.cps_moldados_real || 0} CPs</strong></p>
+                      {selectedBooking.cps_moldados_real > selectedBooking.cps_contratados && (
+                        <p className="text-emerald-600 font-semibold mt-1">
+                          Excedente: +{selectedBooking.cps_moldados_real - selectedBooking.cps_contratados} CPs 
+                          {selectedBooking.servico?.valor_cp_excedente > 0 && (
+                            <span> (Adicional: R$ {((selectedBooking.cps_moldados_real - selectedBooking.cps_contratados) * selectedBooking.servico.valor_cp_excedente).toFixed(2)})</span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground font-semibold">Horas Extras em Campo</p>
+                      <p>Saída Planejada: <strong className="text-foreground">{selectedBooking.horario_saida_lab?.substring(0, 5) || "16:00"}</strong></p>
+                      <p>Saída Real: <strong className="text-foreground">{selectedBooking.horario_saida_real?.substring(0, 5) || "Não registrado"}</strong></p>
+                      {selectedBooking.horas_extras_minutos > 0 ? (
+                        <div className="space-y-1.5 mt-2 bg-card p-2 rounded border border-border">
+                          <p className="font-semibold text-amber-600">
+                            Solicitadas: {Math.floor(selectedBooking.horas_extras_minutos / 60)}h {selectedBooking.horas_extras_minutos % 60}min
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">Status: <strong className="text-foreground">{
+                            selectedBooking.status_horas_extras === "Pendente_Aprovacao" ? "⏳ Pendente Aprovação" :
+                            selectedBooking.status_horas_extras === "Aprovado" ? "✅ Aprovado" : "❌ Reprovado"
+                          }</strong></p>
+                          {selectedBooking.status_horas_extras === "Pendente_Aprovacao" && (
+                            <div className="flex gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
+                              <Button 
+                                size="sm" 
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] h-6 px-2 font-bold"
+                                onClick={() => handleApproveOvertime(selectedBooking.id, true)}
+                                disabled={overtimeActionLoading}
+                              >
+                                Aprovar HE
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="destructive"
+                                className="text-[10px] h-6 px-2 font-bold"
+                                onClick={() => handleApproveOvertime(selectedBooking.id, false)}
+                                disabled={overtimeActionLoading}
+                              >
+                                Recusar
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground italic mt-1 text-[10px]">Sem horas extras registradas.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+
             <DialogFooter className="flex justify-end gap-2 border-t pt-4 mt-6">
               <Button
                 variant="outline"
@@ -1420,6 +2073,21 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const [cpsMoldados, setCpsMoldados] = useState(2);
   const [cyclePhoto, setCyclePhoto] = useState<File | null>(null);
   const [savingCycle, setSavingCycle] = useState(false);
+  const [horarioMoldagem, setHorarioMoldagem] = useState("");
+  const [codigosBarras, setCodigosBarras] = useState<string[]>(["", ""]);
+  const [horarioSaidaReal, setHorarioSaidaReal] = useState("");
+
+  useEffect(() => {
+    setCodigosBarras(prev => {
+      const next = [...prev];
+      if (next.length < cpsMoldados) {
+        while (next.length < cpsMoldados) next.push("");
+      } else if (next.length > cpsMoldados) {
+        next.length = cpsMoldados;
+      }
+      return next;
+    });
+  }, [cpsMoldados]);
 
   // Conclude form states
   const [concludeDialogOpen, setConcludeDialogOpen] = useState(false);
@@ -1837,6 +2505,16 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
       toast.error("A foto do ciclo é obrigatória.");
       return;
     }
+    if (!horarioMoldagem) {
+      toast.error("O horário de moldagem é obrigatório.");
+      return;
+    }
+    const filteredBarcodes = codigosBarras.filter(b => b.trim() !== "");
+    if (filteredBarcodes.length < cpsMoldados) {
+      toast.error("Por favor, preencha o código de barras para todos os CPs.");
+      return;
+    }
+
     setSavingCycle(true);
     try {
       const url = await uploadPhotoOrBase64(cyclePhoto);
@@ -1849,6 +2527,8 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
           notaFiscal,
           pecaConcretada,
           cpsMoldados,
+          horarioMoldagem,
+          codigosBarras: filteredBarcodes,
         }
       });
 
@@ -1860,6 +2540,8 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
       setPecaConcretada("");
       setSlump(100);
       setCpsMoldados(2);
+      setHorarioMoldagem("");
+      setCodigosBarras(["", ""]);
       setCyclePhoto(null);
       // Refetch
       fetchExecPhotos(activeExec.id);
@@ -1897,6 +2579,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
           cpsMoldadosReal: totalCps,
           urlFotoFinal: finalUrl,
           urlFotoRetorno: retornoUrl,
+          horarioSaida: horarioSaidaReal || null,
         }
       });
 
@@ -1904,6 +2587,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
       setConcludeDialogOpen(false);
       setPhotoFinal(null);
       setPhotoRetorno(null);
+      setHorarioSaidaReal("");
       // Refresh whole page scale
       fetchTecnicoData();
     } catch (err: any) {
@@ -2114,7 +2798,12 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                     </p>
                     
                     <div className="space-y-2">
-                      <Dialog open={cycleDialogOpen} onOpenChange={setCycleDialogOpen}>
+                      <Dialog open={cycleDialogOpen} onOpenChange={(open) => {
+                        setCycleDialogOpen(open);
+                        if (open) {
+                          setHorarioMoldagem(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+                        }
+                      }}>
                         <DialogTrigger asChild disabled={!checkinRecord}>
                           <Button className="w-full text-xs font-bold gap-1 h-9" size="sm">
                             <Plus className="h-4 w-4" /> Lançar Novo Caminhão
@@ -2125,7 +2814,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                             <DialogTitle>Lançar Ensaio / Moldagem</DialogTitle>
                             <DialogDescription>Preencha os dados do ensaio de concreto deste ciclo.</DialogDescription>
                           </DialogHeader>
-                          <form onSubmit={handleAddCycle} className="space-y-4 pt-2">
+                          <form onSubmit={handleAddCycle} className="space-y-4 pt-2 text-xs">
                             <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-1">
                                 <Label htmlFor="numCaminhao">Caminhão #</Label>
@@ -2150,6 +2839,32 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                                 <Input id="cps" type="number" required value={cpsMoldados} onChange={(e) => setCpsMoldados(Number(e.target.value))} placeholder="Ex: 2" />
                               </div>
                             </div>
+                            
+                            <div className="space-y-1">
+                              <Label htmlFor="horarioMoldagem">Horário da Moldagem</Label>
+                              <Input id="horarioMoldagem" type="time" required value={horarioMoldagem} onChange={(e) => setHorarioMoldagem(e.target.value)} />
+                            </div>
+
+                            <div className="space-y-2 border-t border-border pt-2">
+                              <p className="font-semibold text-foreground">Códigos de Barras dos CPs</p>
+                              {codigosBarras.map((barcode, idx) => (
+                                <div key={idx} className="space-y-1">
+                                  <Label htmlFor={`barcode-${idx}`}>CP {idx + 1}</Label>
+                                  <Input
+                                    id={`barcode-${idx}`}
+                                    required
+                                    value={barcode}
+                                    onChange={(e) => {
+                                      const newBarcodes = [...codigosBarras];
+                                      newBarcodes[idx] = e.target.value;
+                                      setCodigosBarras(newBarcodes);
+                                    }}
+                                    placeholder="Digite ou escaneie o código de barras"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+
                             <div className="space-y-1">
                               <Label htmlFor="cycle-photo">Foto do Ensaio / Slump (Obrigatório)</Label>
                               <Input id="cycle-photo" type="file" accept="image/*" capture="environment" required onChange={(e) => setCyclePhoto(e.target.files ? e.target.files[0] : null)} />
@@ -2165,9 +2880,16 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                       {cycleRecords.length > 0 && (
                         <div className="text-[10px] text-muted-foreground max-h-24 overflow-y-auto divide-y divide-border border rounded p-1.5 bg-muted/10 font-medium">
                           {cycleRecords.map((c, i) => (
-                            <div key={c.id} className="py-1 flex justify-between">
-                              <span>Cam. {c.metadata?.numero_caminhao} ({c.metadata?.peca_concretada})</span>
-                              <span className="font-bold">{c.metadata?.cps_moldados} CPs · Slump: {c.metadata?.slump}mm</span>
+                            <div key={c.id} className="py-1 flex flex-col gap-0.5">
+                              <div className="flex justify-between">
+                                <span>Cam. {c.metadata?.numero_caminhao} ({c.metadata?.peca_concretada}) · {c.metadata?.horario_moldagem || "S/H"}</span>
+                                <span className="font-bold">{c.metadata?.cps_moldados} CPs · Slump: {c.metadata?.slump}mm</span>
+                              </div>
+                              {c.metadata?.codigos_barras && (
+                                <div className="text-[9px] text-primary/80 truncate">
+                                  Barras: {c.metadata.codigos_barras.join(", ")}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -2187,7 +2909,12 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                       </p>
                     </div>
 
-                    <Dialog open={concludeDialogOpen} onOpenChange={setConcludeDialogOpen}>
+                    <Dialog open={concludeDialogOpen} onOpenChange={(open) => {
+                      setConcludeDialogOpen(open);
+                      if (open) {
+                        setHorarioSaidaReal(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+                      }
+                    }}>
                       <DialogTrigger asChild disabled={cycleRecords.length === 0}>
                         <Button className="w-full text-xs font-bold gap-1 h-9 bg-emerald-600 hover:bg-emerald-700" size="sm">
                           <Check className="h-4 w-4" /> Finalizar e Enviar
@@ -2205,6 +2932,21 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                             <p className="font-semibold text-foreground text-sm">Resumo Coleta</p>
                             <p className="mt-1">CPs Moldados Reais: <strong className="text-primary text-sm">{totalCpsMolded} unidades</strong></p>
                           </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="horarioSaidaReal">Horário de Saída Real (Checkout)</Label>
+                            <Input
+                              id="horarioSaidaReal"
+                              type="time"
+                              required
+                              value={horarioSaidaReal}
+                              onChange={(e) => setHorarioSaidaReal(e.target.value)}
+                            />
+                            <p className="text-[10px] text-muted-foreground">
+                              Preencha com o horário que você está encerrando as moldagens.
+                            </p>
+                          </div>
+
                           <div className="space-y-2">
                             <Label htmlFor="photo-final">Foto Panorâmica dos CPs Organizados (Opcional)</Label>
                             <Input id="photo-final" type="file" accept="image/*" capture="environment" onChange={(e) => setPhotoFinal(e.target.files ? e.target.files[0] : null)} />
@@ -2889,6 +3631,7 @@ function AdminDash() {
   const [servicoTipoCobranca, setServicoTipoCobranca] = useState("Por Execucao");
   const [servicoFormasPagamento, setServicoFormasPagamento] = useState<string[]>(["PIX", "Boleto", "Cartao"]);
   const [servicoRegraMinimo, setServicoRegraMinimo] = useState(1000.00);
+  const [servicoCpExcedente, setServicoCpExcedente] = useState(0);
   const [servicoSaving, setServicoSaving] = useState(false);
 
   // City pricing states
@@ -2916,6 +3659,10 @@ function AdminDash() {
   // Finance states
   const [financeSummary, setFinanceSummary] = useState<any>(null);
   const [loadingFinance, setLoadingFinance] = useState(false);
+  const [adminFinStartDate, setAdminFinStartDate] = useState("");
+  const [adminFinEndDate, setAdminFinEndDate] = useState("");
+  const [adminFinClientId, setAdminFinClientId] = useState("all");
+  const [adminFinServiceId, setAdminFinServiceId] = useState("all");
 
   // Obras Management states
   const [obrasGestor, setObrasGestor] = useState<any[]>([]);
@@ -3390,6 +4137,344 @@ function AdminDash() {
     }
   };
 
+  const handleAdminExportCSV = () => {
+    const adminFiltered = (financeSummary?.bookings || []).filter((b: any) => {
+      if (adminFinStartDate && b.data_servico < adminFinStartDate) return false;
+      if (adminFinEndDate && b.data_servico > adminFinEndDate) return false;
+      if (adminFinClientId !== "all" && b.empresa_id !== adminFinClientId) return false;
+      if (adminFinServiceId !== "all" && b.servico_id !== adminFinServiceId) return false;
+      return true;
+    });
+
+    if (adminFiltered.length === 0) {
+      toast.error("Nenhum dado financeiro para exportar.");
+      return;
+    }
+
+    const headers = [
+      "Código do Pedido",
+      "Data do Serviço",
+      "Cliente",
+      "CNPJ",
+      "Serviço",
+      "Status Execução",
+      "Status Faturamento",
+      "Valor Total (R$)"
+    ];
+
+    const rows = adminFiltered.map((b: any) => [
+      b.codigo_pedido,
+      b.data_servico,
+      b.empresa?.razao_social || "",
+      b.empresa?.cnpj || "",
+      b.servico?.nome_servico || "",
+      STATUS_LABELS[b.status_agendamento] || b.status_agendamento,
+      b.status_pagamento || "",
+      b.valor_total
+    ]);
+
+    const csvContent =
+      "\uFEFF" +
+      [headers.join(";"), ...rows.map((r) => r.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(";"))].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `financeiro_consolidado_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleAdminPrintPDF = () => {
+    const adminFiltered = (financeSummary?.bookings || []).filter((b: any) => {
+      if (adminFinStartDate && b.data_servico < adminFinStartDate) return false;
+      if (adminFinEndDate && b.data_servico > adminFinEndDate) return false;
+      if (adminFinClientId !== "all" && b.empresa_id !== adminFinClientId) return false;
+      if (adminFinServiceId !== "all" && b.servico_id !== adminFinServiceId) return false;
+      return true;
+    });
+
+    if (adminFiltered.length === 0) {
+      toast.error("Nenhum dado financeiro para gerar PDF.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Não foi possível abrir a janela de impressão. Por favor, desative o bloqueador de pop-ups.");
+      return;
+    }
+
+    const filterDetails = [];
+    if (adminFinStartDate) filterDetails.push(`Início: ${adminFinStartDate}`);
+    if (adminFinEndDate) filterDetails.push(`Fim: ${adminFinEndDate}`);
+    if (adminFinClientId !== "all") {
+      const emp = empresasClientes.find(e => e.id === adminFinClientId);
+      if (emp) filterDetails.push(`Cliente: ${emp.razao_social}`);
+    }
+    if (adminFinServiceId !== "all") {
+      const svc = servicos.find(s => s.id === adminFinServiceId);
+      if (svc) filterDetails.push(`Serviço: ${svc.nome_servico}`);
+    }
+
+    const filterText = filterDetails.length > 0 ? filterDetails.join(" | ") : "Todo o histórico financeiro";
+
+    // Recompute client list for report print
+    const adminPorClienteMap: Record<string, { cliente: string; pago: number; pendente: number; total: number }> = {};
+    adminFiltered.forEach((b: any) => {
+      const val = Number(b.valor_total) || 0;
+      const rSocial = b.empresa?.razao_social || "Empresa Desconhecida";
+      const empId = b.empresa_id || "unknown";
+
+      if (!adminPorClienteMap[empId]) {
+        adminPorClienteMap[empId] = { cliente: rSocial, pago: 0, pendente: 0, total: 0 };
+      }
+
+      adminPorClienteMap[empId].total += val;
+      if (b.status_pagamento === "Pago") {
+        adminPorClienteMap[empId].pago += val;
+      } else {
+        adminPorClienteMap[empId].pendente += val;
+      }
+    });
+    const adminPorClienteList = Object.values(adminPorClienteMap);
+
+    let adminTotalAgendado = 0;
+    let adminTotalRealizado = 0;
+    let adminTotalACobrar = 0;
+    let adminTotalAcumulado = 0;
+
+    adminFiltered.forEach((b: any) => {
+      const val = Number(b.valor_total) || 0;
+      adminTotalAcumulado += val;
+
+      if (["Confirmado", "Em_Execucao"].includes(b.status_agendamento)) {
+        adminTotalAgendado += val;
+      }
+      if (["Aguardando_Medicao", "Laboratorio", "Validado"].includes(b.status_agendamento)) {
+        adminTotalRealizado += val;
+      }
+      if (b.status_agendamento === "Validado" && b.status_pagamento !== "Pago") {
+        adminTotalACobrar += val;
+      }
+    });
+
+    const rowsHtml = adminFiltered.map((b: any) => `
+      <tr>
+        <td style="font-family: monospace; font-size: 11px;">${b.codigo_pedido}</td>
+        <td>${new Date(b.data_servico + "T00:00:00").toLocaleDateString("pt-BR")}</td>
+        <td>${b.empresa?.razao_social || ""}</td>
+        <td>${b.servico?.nome_servico || ""}</td>
+        <td>${STATUS_LABELS[b.status_agendamento] || b.status_agendamento}</td>
+        <td>${b.status_pagamento}</td>
+        <td style="text-align: right; font-weight: bold;">R$ ${Number(b.valor_total).toFixed(2)}</td>
+      </tr>
+    `).join("");
+
+    const clientRowsHtml = adminPorClienteList.map((c: any) => `
+      <tr>
+        <td><strong>${c.cliente}</strong></td>
+        <td style="text-align: right; color: #16a34a;">R$ ${Number(c.pago).toFixed(2)}</td>
+        <td style="text-align: right; color: #d97706;">R$ ${Number(c.pendente).toFixed(2)}</td>
+        <td style="text-align: right; font-weight: bold;">R$ ${Number(c.total).toFixed(2)}</td>
+      </tr>
+    `).join("");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Módulo Financeiro - Quantis Obras</title>
+        <style>
+          body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            color: #333;
+            margin: 40px;
+            font-size: 12px;
+            line-height: 1.4;
+          }
+          header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #10b981;
+            padding-bottom: 20px;
+            margin-bottom: 25px;
+          }
+          .logo {
+            font-size: 24px;
+            font-weight: 800;
+            color: #065f46;
+          }
+          .title {
+            text-align: right;
+          }
+          .title h1 {
+            margin: 0;
+            font-size: 20px;
+            color: #065f46;
+          }
+          .title p {
+            margin: 5px 0 0 0;
+            font-size: 11px;
+            color: #666;
+          }
+          .filters {
+            background-color: #f3f4f6;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 11px;
+            color: #4b5563;
+          }
+          .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+          }
+          .summary-card {
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            border-radius: 6px;
+            background-color: #fafafa;
+          }
+          .summary-card p {
+            margin: 0;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #6b7280;
+            font-weight: 600;
+          }
+          .summary-card h2 {
+            margin: 5px 0 0 0;
+            font-size: 16px;
+            color: #111827;
+            font-weight: 700;
+          }
+          h3 {
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 5px;
+            margin-top: 25px;
+            color: #111827;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+          }
+          th {
+            background-color: #065f46;
+            color: white;
+            font-weight: 600;
+            text-align: left;
+            padding: 8px;
+            font-size: 11px;
+          }
+          td {
+            padding: 8px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 11px;
+          }
+          tr:nth-child(even) td {
+            background-color: #f9fafb;
+          }
+          footer {
+            text-align: center;
+            font-size: 10px;
+            color: #9ca3af;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 15px;
+            margin-top: 50px;
+          }
+          @media print {
+            body { margin: 20px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <header>
+          <div class="logo">Quantis Obras</div>
+          <div class="title">
+            <h1>Relatório Financeiro</h1>
+            <p>Gerado em ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}</p>
+          </div>
+        </header>
+
+        <div class="filters">
+          <strong>Filtros Aplicados:</strong> ${filterText}
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card" style="border-left: 4px solid #3b82f6;">
+            <p>Agendado</p>
+            <h2>R$ ${adminTotalAgendado.toFixed(2)}</h2>
+          </div>
+          <div class="summary-card" style="border-left: 4px solid #10b981;">
+            <p>Realizado</p>
+            <h2>R$ ${adminTotalRealizado.toFixed(2)}</h2>
+          </div>
+          <div class="summary-card" style="border-left: 4px solid #f59e0b;">
+            <p>A Cobrar (Validados)</p>
+            <h2>R$ ${adminTotalACobrar.toFixed(2)}</h2>
+          </div>
+          <div class="summary-card" style="border-left: 4px solid #6b7280; background-color: #f3f4f6;">
+            <p>Acumulado Geral</p>
+            <h2>R$ ${adminTotalAcumulado.toFixed(2)}</h2>
+          </div>
+        </div>
+
+        <h3>Faturamento Consolidado por Cliente</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th style="text-align: right;">Pago</th>
+              <th style="text-align: right;">Pendente</th>
+              <th style="text-align: right;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${clientRowsHtml}
+          </tbody>
+        </table>
+
+        <h3>Detalhamento dos Serviços</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Data</th>
+              <th>Cliente</th>
+              <th>Serviço</th>
+              <th>Execução</th>
+              <th>Pagamento</th>
+              <th style="text-align: right;">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <footer>
+          Módulo Financeiro Administrativo - Quantis Obras.
+        </footer>
+
+        <script>
+          window.onload = function() {
+            window.print();
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const fetchAllServicos = async () => {
     setLoadingServicos(true);
     try {
@@ -3434,6 +4519,7 @@ function AdminDash() {
       setServicoTipoCobranca(serv.tipo_cobranca || "Por Execucao");
       setServicoFormasPagamento(serv.formas_pagamento_aceitas || ["PIX", "Boleto", "Cartao"]);
       setServicoRegraMinimo(Number(serv.regra_minimo_a_vista ?? 1000.00));
+      setServicoCpExcedente(Number(serv.valor_cp_excedente ?? 0.00));
     } else {
       setServicoSku("");
       setServicoNome("");
@@ -3446,6 +4532,7 @@ function AdminDash() {
       setServicoTipoCobranca("Por Execucao");
       setServicoFormasPagamento(["PIX", "Boleto", "Cartao"]);
       setServicoRegraMinimo(1000.00);
+      setServicoCpExcedente(0.00);
     }
     setServicoDialogOpen(true);
   };
@@ -3468,7 +4555,8 @@ function AdminDash() {
           descricao: servicoDescricao,
           tipo_cobranca: servicoTipoCobranca,
           formas_pagamento_aceitas: servicoFormasPagamento,
-          regra_minimo_a_vista: servicoRegraMinimo
+          regra_minimo_a_vista: servicoRegraMinimo,
+          valor_cp_excedente: servicoCpExcedente
         }
       });
       if (res.success) {
@@ -5517,7 +6605,11 @@ function AdminDash() {
                       </div>
                       <div>
                         <span className="text-muted-foreground block text-[10px]">Mínimo à Vista</span>
-                        <span className="font-semibold text-foreground">R$ {Number(serv.regra_minimo_a_vista).toFixed(2)}</span>
+                        <span className="font-semibold text-foreground text-[11px]">R$ {Number(serv.regra_minimo_a_vista).toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[10px]">CP Excedente</span>
+                        <span className="font-semibold text-foreground text-[11px]">R$ {Number(serv.valor_cp_excedente ?? 0).toFixed(2)}</span>
                       </div>
                     </div>
 
@@ -5978,82 +7070,238 @@ function AdminDash() {
                   <BarChart3 className="h-4 w-4" /> Carregar Dados Financeiros
                 </Button>
               </div>
-            ) : (
-              <>
-                {/* Cards de resumo */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <Card className="border border-emerald-500/30 bg-emerald-500/5">
-                    <CardContent className="pt-5">
-                      <p className="text-xs text-emerald-600 font-bold uppercase tracking-wide">Receita Confirmada</p>
-                      <p className="text-3xl font-extrabold text-emerald-600 mt-1">
-                        R$ {Number(financeSummary.totalFaturado).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-1">Serviços com status «Pago»</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="border border-amber-500/30 bg-amber-500/5">
-                    <CardContent className="pt-5">
-                      <p className="text-xs text-amber-600 font-bold uppercase tracking-wide">Faturamento Pendente</p>
-                      <p className="text-3xl font-extrabold text-amber-600 mt-1">
-                        R$ {Number(financeSummary.totalPendente).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-1">Serviços realizados aguardando pagamento</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="border border-border bg-card">
-                    <CardContent className="pt-5">
-                      <p className="text-xs text-muted-foreground font-bold uppercase tracking-wide">Total Geral</p>
-                      <p className="text-3xl font-extrabold text-foreground mt-1">
-                        R$ {(Number(financeSummary.totalFaturado) + Number(financeSummary.totalPendente)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-1">Receita total acumulada</p>
-                    </CardContent>
-                  </Card>
-                </div>
+            ) : (() => {
+              const adminFiltered = (financeSummary?.bookings || []).filter((b: any) => {
+                if (adminFinStartDate && b.data_servico < adminFinStartDate) return false;
+                if (adminFinEndDate && b.data_servico > adminFinEndDate) return false;
+                if (adminFinClientId !== "all" && b.empresa_id !== adminFinClientId) return false;
+                if (adminFinServiceId !== "all" && b.servico_id !== adminFinServiceId) return false;
+                return true;
+              });
 
-                {/* Tabela por cliente */}
-                <Card className="border border-border bg-card">
-                  <CardHeader>
-                    <CardTitle className="text-base font-bold">Faturamento por Cliente</CardTitle>
-                    <CardDescription>Receita agrupada por empresa cliente — pago e pendente.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {financeSummary.porCliente.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-4 text-center">Nenhum faturamento registrado ainda.</p>
-                    ) : (
-                      <div className="overflow-x-auto rounded-lg border border-border">
-                        <table className="w-full text-left border-collapse text-sm">
-                          <thead>
-                            <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs">
-                              <th className="p-3">Cliente</th>
-                              <th className="p-3 text-right">Pago (R$)</th>
-                              <th className="p-3 text-right">Pendente (R$)</th>
-                              <th className="p-3 text-right">Total (R$)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border">
-                            {financeSummary.porCliente.map((c: any, i: number) => (
-                              <tr key={i} className="hover:bg-muted/10 transition-all">
-                                <td className="p-3 font-semibold text-foreground">{c.cliente}</td>
-                                <td className="p-3 text-right font-mono text-xs text-emerald-600 font-bold">
-                                  {Number(c.total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="p-3 text-right font-mono text-xs text-amber-600 font-bold">
-                                  {Number(c.pendente).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="p-3 text-right font-mono text-xs font-bold text-foreground">
-                                  {(Number(c.total) + Number(c.pendente)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+              let adminTotalAgendado = 0;
+              let adminTotalRealizado = 0;
+              let adminTotalACobrar = 0;
+              let adminTotalAcumulado = 0;
+
+              adminFiltered.forEach((b: any) => {
+                const val = Number(b.valor_total) || 0;
+                adminTotalAcumulado += val;
+
+                if (["Confirmado", "Em_Execucao"].includes(b.status_agendamento)) {
+                  adminTotalAgendado += val;
+                }
+                if (["Aguardando_Medicao", "Laboratorio", "Validado"].includes(b.status_agendamento)) {
+                  adminTotalRealizado += val;
+                }
+                if (b.status_agendamento === "Validado" && b.status_pagamento !== "Pago") {
+                  adminTotalACobrar += val;
+                }
+              });
+
+              const adminPorClienteMap: Record<string, { cliente: string; pago: number; pendente: number; total: number }> = {};
+              adminFiltered.forEach((b: any) => {
+                const val = Number(b.valor_total) || 0;
+                const rSocial = b.empresa?.razao_social || "Empresa Desconhecida";
+                const empId = b.empresa_id || "unknown";
+
+                if (!adminPorClienteMap[empId]) {
+                  adminPorClienteMap[empId] = { cliente: rSocial, pago: 0, pendente: 0, total: 0 };
+                }
+
+                adminPorClienteMap[empId].total += val;
+                if (b.status_pagamento === "Pago") {
+                  adminPorClienteMap[empId].pago += val;
+                } else {
+                  adminPorClienteMap[empId].pendente += val;
+                }
+              });
+              const adminPorClienteList = Object.values(adminPorClienteMap);
+
+              return (
+                <>
+                  {/* Filtros e Ações */}
+                  <Card className="border border-border bg-card shadow-sm">
+                    <CardContent className="p-4 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <Filter className="h-4 w-4 text-primary" /> Filtros Financeiros
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAdminExportCSV}
+                            className="text-xs font-bold gap-1.5 h-8 bg-card border-border hover:bg-accent"
+                          >
+                            <FileDown className="h-3.5 w-3.5" /> Exportar Excel
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAdminPrintPDF}
+                            className="text-xs font-bold gap-1.5 h-8 bg-card border-border hover:bg-accent"
+                          >
+                            <Printer className="h-3.5 w-3.5" /> Gerar PDF
+                          </Button>
+                          {(adminFinStartDate || adminFinEndDate || adminFinClientId !== "all" || adminFinServiceId !== "all") && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => {
+                                setAdminFinStartDate("");
+                                setAdminFinEndDate("");
+                                setAdminFinClientId("all");
+                                setAdminFinServiceId("all");
+                              }}
+                              className="text-xs font-bold text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/25 h-8 px-2"
+                            >
+                              Limpar Filtros
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </>
-            )}
+                      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+                        <div className="space-y-1">
+                          <Label htmlFor="admin-fin-start" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Data Inicial</Label>
+                          <Input
+                            id="admin-fin-start"
+                            type="date"
+                            value={adminFinStartDate}
+                            onChange={(e) => setAdminFinStartDate(e.target.value)}
+                            className="h-9 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="admin-fin-end" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Data Final</Label>
+                          <Input
+                            id="admin-fin-end"
+                            type="date"
+                            value={adminFinEndDate}
+                            onChange={(e) => setAdminFinEndDate(e.target.value)}
+                            className="h-9 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="admin-fin-client" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cliente</Label>
+                          <select
+                            id="admin-fin-client"
+                            value={adminFinClientId}
+                            onChange={(e) => setAdminFinClientId(e.target.value)}
+                            className="w-full h-9 rounded-md border border-input bg-background px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-foreground"
+                          >
+                            <option value="all">Todos os Clientes</option>
+                            {empresasClientes.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.razao_social}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="admin-fin-service" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Serviço</Label>
+                          <select
+                            id="admin-fin-service"
+                            value={adminFinServiceId}
+                            onChange={(e) => setAdminFinServiceId(e.target.value)}
+                            className="w-full h-9 rounded-md border border-input bg-background px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-foreground"
+                          >
+                            <option value="all">Todos os Serviços</option>
+                            {servicos.map((svc) => (
+                              <option key={svc.id} value={svc.id}>
+                                {svc.nome_servico}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Cards de resumo */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <Card className="border border-blue-500/30 bg-blue-500/5">
+                      <CardContent className="pt-5">
+                        <p className="text-xs text-blue-600 font-bold uppercase tracking-wide">Agendado</p>
+                        <p className="text-3xl font-extrabold text-blue-600 mt-1">
+                          R$ {adminTotalAgendado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1">Confirmados & em execução</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-emerald-500/30 bg-emerald-500/5">
+                      <CardContent className="pt-5">
+                        <p className="text-xs text-emerald-600 font-bold uppercase tracking-wide">Realizado</p>
+                        <p className="text-3xl font-extrabold text-emerald-600 mt-1">
+                          R$ {adminTotalRealizado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1">Aguardando medição, no lab ou validado</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-amber-500/30 bg-amber-500/5">
+                      <CardContent className="pt-5">
+                        <p className="text-xs text-amber-600 font-bold uppercase tracking-wide">A Cobrar</p>
+                        <p className="text-3xl font-extrabold text-amber-600 mt-1">
+                          R$ {adminTotalACobrar.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1">Validados com pagamento pendente</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border border-border bg-card">
+                      <CardContent className="pt-5">
+                        <p className="text-xs text-muted-foreground font-bold uppercase tracking-wide">Acumulado Geral</p>
+                        <p className="text-3xl font-extrabold text-foreground mt-1">
+                          R$ {adminTotalAcumulado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1">Soma de todos os registros filtrados</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Tabela por cliente */}
+                  <Card className="border border-border bg-card">
+                    <CardHeader>
+                      <CardTitle className="text-base font-bold">Faturamento por Cliente</CardTitle>
+                      <CardDescription>Receita agrupada por empresa cliente — pago e pendente.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {adminPorClienteList.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">Nenhum faturamento registrado ainda.</p>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border border-border">
+                          <table className="w-full text-left border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs">
+                                <th className="p-3">Cliente</th>
+                                <th className="p-3 text-right">Pago (R$)</th>
+                                <th className="p-3 text-right">Pendente (R$)</th>
+                                <th className="p-3 text-right">Total (R$)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {adminPorClienteList.map((c: any, i: number) => (
+                                <tr key={i} className="hover:bg-muted/10 transition-all">
+                                  <td className="p-3 font-semibold text-foreground">{c.cliente}</td>
+                                  <td className="p-3 text-right font-mono text-xs text-emerald-600 font-bold">
+                                    {Number(c.pago).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="p-3 text-right font-mono text-xs text-amber-600 font-bold">
+                                    {Number(c.pendente).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="p-3 text-right font-mono text-xs font-bold text-foreground">
+                                    {Number(c.total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -6487,11 +7735,16 @@ function AdminDash() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 border-t pt-3">
+              <div className="grid grid-cols-2 gap-3 border-t pt-3">
                 <div className="space-y-1">
-                  <Label htmlFor="regra_minimo">Faturamento Mínimo para a Vista (R$)</Label>
+                  <Label htmlFor="regra_minimo">Mínimo à Vista (R$)</Label>
                   <Input id="regra_minimo" type="number" required value={servicoRegraMinimo} onChange={(e) => setServicoRegraMinimo(Number(e.target.value))} placeholder="1000.00" />
-                  <p className="text-[10px] text-muted-foreground">Pedidos abaixo deste valor exigirão pagamento à vista imediato.</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Pedidos abaixo exigirão pagamento à vista.</p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="cp_excedente">Preço CP Excedente (R$)</Label>
+                  <Input id="cp_excedente" type="number" required value={servicoCpExcedente} onChange={(e) => setServicoCpExcedente(Number(e.target.value))} placeholder="0.00" />
+                  <p className="text-[9px] text-muted-foreground leading-tight">Cobrado por unidade extra moldada em campo.</p>
                 </div>
               </div>
 
