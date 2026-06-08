@@ -186,6 +186,132 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const [justificativa, setJustificativa] = useState("");
   const [rejectLoading, setRejectLoading] = useState(false);
 
+  // Rescheduling and Cancellation states
+  const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
+  const [rescheduleBooking, setRescheduleBooking] = useState<any | null>(null);
+  const [newDate, setNewDate] = useState("");
+  const [newTime, setNewTime] = useState("08:00");
+  const [savingReschedule, setSavingReschedule] = useState(false);
+  const [rescheduleDatasDisponiveis, setRescheduleDatasDisponiveis] = useState<string[]>([]);
+  const [loadingRescheduleDatas, setLoadingRescheduleDatas] = useState(false);
+  const [calMesReschedule, setCalMesReschedule] = useState<Date>(new Date());
+
+  const fetchRescheduleAvailability = async (categoria: string) => {
+    setLoadingRescheduleDatas(true);
+    try {
+      const catLower = (categoria || "Concreto").toLowerCase();
+
+      // Fetch compatible technicians
+      const { data: tecnicos } = await supabase
+        .from("tecnicos")
+        .select("id, nome, status, certificacoes")
+        .eq("status", "Disponivel");
+
+      const compativeis = (tecnicos || []).filter((t) => {
+        if (!t.certificacoes) return true;
+        const cert = t.certificacoes.toLowerCase();
+        return cert.includes(catLower) || catLower.includes("concreto") || catLower.includes("geral");
+      });
+
+      // Fetch bookings in next 60 days
+      const hoje = new Date();
+      hoje.setHours(0,0,0,0);
+      const limite = new Date();
+      limite.setDate(limite.getDate() + 62);
+
+      const { data: agendados } = await supabase
+        .from("agendamentos_medicoes")
+        .select("data_servico, tecnico_id")
+        .gte("data_servico", hoje.toISOString().split("T")[0])
+        .lte("data_servico", limite.toISOString().split("T")[0])
+        .in("status_agendamento", ["Confirmado", "Em_Execucao", "Pendente_Tecnico"])
+        .in("tecnico_id", compativeis.map((t) => t.id));
+
+      const datasOcupadas = new Set<string>();
+      const contagem: Record<string, number> = {};
+      (agendados || []).forEach((a) => {
+        contagem[a.data_servico] = (contagem[a.data_servico] || 0) + 1;
+      });
+      Object.entries(contagem).forEach(([data, count]) => {
+        if (count >= compativeis.length) datasOcupadas.add(data);
+      });
+
+      const datasOk: string[] = [];
+      const cursor = new Date(hoje);
+      cursor.setDate(cursor.getDate() + 2); // 48h limit
+      while (cursor <= limite) {
+        const dow = cursor.getDay();
+        const iso = cursor.toISOString().split("T")[0];
+        if (dow !== 0 && !datasOcupadas.has(iso)) {
+          datasOk.push(iso);
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      setRescheduleDatasDisponiveis(datasOk);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingRescheduleDatas(false);
+    }
+  };
+
+  const handleOpenReschedule = (booking: any) => {
+    setRescheduleBooking(booking);
+    setNewDate(booking.data_servico);
+    setNewTime(booking.horario_na_obra?.substring(0, 5) || "08:00");
+    setCalMesReschedule(new Date(booking.data_servico + "T00:00:00"));
+    fetchRescheduleAvailability(booking.servico?.categoria || "Concreto");
+    setRescheduleDialogOpen(true);
+  };
+
+  const handleSaveReschedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDate || !newTime) {
+      toast.error("Por favor, preencha todos os campos.");
+      return;
+    }
+    setSavingReschedule(true);
+    try {
+      const { error } = await supabase
+        .from("agendamentos_medicoes")
+        .update({
+          data_servico: newDate,
+          horario_na_obra: newTime + ":00", // Ensure valid time format
+          tecnico_id: null,
+          status_agendamento: "Pendente_Tecnico"
+        })
+        .eq("id", rescheduleBooking.id);
+
+      if (error) throw error;
+      toast.success("Agendamento reagendado com sucesso!");
+      setRescheduleDialogOpen(false);
+      setSelectedBooking(null);
+      fetchBookings();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao reagendar.");
+    } finally {
+      setSavingReschedule(false);
+    }
+  };
+
+  const handleCancelBooking = async (id: string) => {
+    if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return;
+    try {
+      const { error } = await supabase
+        .from("agendamentos_medicoes")
+        .update({ status_agendamento: "Cancelado", tecnico_id: null })
+        .eq("id", id);
+      if (error) throw error;
+      toast.success("Agendamento cancelado com sucesso!");
+      setSelectedBooking(null);
+      fetchBookings();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao cancelar agendamento.");
+    }
+  };
+
   const fetchBookings = async () => {
     try {
       let { data: profile } = await supabase
@@ -848,6 +974,25 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                   </Button>
                 </>
               )}
+              {(selectedBooking.status_agendamento === "Pendente_Tecnico" || selectedBooking.status_agendamento === "Confirmado") && (
+                <>
+                  <Button
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1.5"
+                    onClick={() => handleOpenReschedule(selectedBooking)}
+                  >
+                    <Calendar className="h-4 w-4" />
+                    Reagendar
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="font-bold gap-1.5"
+                    onClick={() => handleCancelBooking(selectedBooking.id)}
+                  >
+                    <X className="h-4 w-4" />
+                    Cancelar Agendamento
+                  </Button>
+                </>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -899,6 +1044,159 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── DIALOG: Reagendar Agendamento ── */}
+      <Dialog open={rescheduleDialogOpen} onOpenChange={setRescheduleDialogOpen}>
+        <DialogContent className="max-w-md border border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+              <Calendar className="h-5 w-5 text-primary" />
+              Reagendar Agendamento
+            </DialogTitle>
+            <DialogDescription>
+              Selecione uma nova data e horário para a realização do serviço.
+            </DialogDescription>
+          </DialogHeader>
+
+          {rescheduleBooking && (
+            <form onSubmit={handleSaveReschedule} className="space-y-4 pt-2">
+              {/* Calendário Visual Redesenhado */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-sm font-bold">Nova Data do Serviço *</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Escolha um dia disponível (marcado com pontos verdes)</p>
+                </div>
+
+                {loadingRescheduleDatas ? (
+                  <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">
+                    Buscando datas disponíveis...
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+                    {/* Cabeçalho do mês */}
+                    <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border">
+                      <button
+                        type="button"
+                        disabled={new Date(calMesReschedule.getFullYear(), calMesReschedule.getMonth(), 1) <= new Date(new Date().getFullYear(), new Date().getMonth(), 1)}
+                        onClick={() => setCalMesReschedule(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                        className="h-8 w-8 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent transition-all disabled:opacity-20 text-sm font-medium"
+                      >
+                        ‹
+                      </button>
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-foreground">
+                          {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][calMesReschedule.getMonth()]}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">{calMesReschedule.getFullYear()}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={(() => { const lim = new Date(); lim.setDate(lim.getDate() + 62); return new Date(calMesReschedule.getFullYear(), calMesReschedule.getMonth() + 1, 1) > new Date(lim.getFullYear(), lim.getMonth(), 1); })()}
+                        onClick={() => setCalMesReschedule(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                        className="h-8 w-8 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent transition-all disabled:opacity-20 text-sm font-medium"
+                      >
+                        ›
+                      </button>
+                    </div>
+
+                    {/* Dias da semana */}
+                    <div className="grid grid-cols-7 bg-muted/20 border-b border-border text-center py-1.5 text-[10px] font-bold">
+                      {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
+                        <span key={i} className={i === 0 ? "text-rose-400" : i === 6 ? "text-blue-400" : "text-foreground/60"}>{d}</span>
+                      ))}
+                    </div>
+
+                    {/* Grade de dias */}
+                    <div className="grid grid-cols-7 p-1 gap-0.5">
+                      {(() => {
+                        const hoje = new Date(); hoje.setHours(0,0,0,0);
+                        const limiteMax = new Date(hoje); limiteMax.setDate(limiteMax.getDate() + 62);
+                        const primeiroDia = new Date(calMesReschedule.getFullYear(), calMesReschedule.getMonth(), 1);
+                        const ultimoDia  = new Date(calMesReschedule.getFullYear(), calMesReschedule.getMonth() + 1, 0);
+                        const cells: (null | Date)[] = [
+                          ...Array(primeiroDia.getDay()).fill(null),
+                          ...Array.from({ length: ultimoDia.getDate() }, (_, i) => new Date(calMesReschedule.getFullYear(), calMesReschedule.getMonth(), i + 1))
+                        ];
+                        while (cells.length % 7 !== 0) cells.push(null);
+                        const isoDate = (d: Date) => d.toISOString().split("T")[0];
+
+                        return cells.map((day, idx) => {
+                          if (!day) return <div key={`e-${idx}`} className="h-9" />;
+
+                          const iso        = isoDate(day);
+                          const isSelected = newDate === iso;
+                          const isToday    = isoDate(hoje) === iso;
+                          const isMin48h   = day < new Date(hoje.getTime() + 2 * 86400000);
+                          const isSun      = day.getDay() === 0;
+                          const isSat      = day.getDay() === 6;
+                          const isFuture   = day > limiteMax;
+                          const hasVaga    = rescheduleDatasDisponiveis.includes(iso);
+                          const isDisabled = isMin48h || isSun || isFuture || (rescheduleDatasDisponiveis.length > 0 && !hasVaga);
+
+                          let wrapClass = "h-9 flex items-center justify-center relative rounded-lg ";
+                          let numClass  = "w-8 h-8 flex items-center justify-center rounded-full text-xs font-medium transition-all relative ";
+
+                          if (isSelected) {
+                            numClass  += "bg-primary text-primary-foreground font-bold shadow-sm ";
+                          } else if (isDisabled) {
+                            wrapClass += "cursor-not-allowed ";
+                            numClass  += "opacity-20 " + (isSun ? "text-rose-400 " : "text-muted-foreground ");
+                          } else if (hasVaga) {
+                            wrapClass += "cursor-pointer hover:scale-105 active:scale-95 ";
+                            numClass  += "text-foreground font-semibold hover:bg-emerald-500 hover:text-white " + (isSat ? "text-blue-500 " : "");
+                          } else {
+                            wrapClass += "cursor-pointer ";
+                            numClass  += "text-muted-foreground hover:bg-muted ";
+                          }
+
+                          return (
+                            <div key={iso} className={wrapClass}>
+                              <button
+                                type="button"
+                                disabled={isDisabled}
+                                onClick={() => setNewDate(iso)}
+                                className={numClass}
+                              >
+                                {isToday && !isSelected && (
+                                  <span className="absolute inset-0 rounded-full ring-2 ring-primary/40" />
+                                )}
+                                <span>{day.getDate()}</span>
+                                {hasVaga && !isDisabled && !isSelected && (
+                                  <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-emerald-500" />
+                                )}
+                              </button>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="reschedule-time" className="font-bold">Horário de Chegada Estimado *</Label>
+                <Input
+                  id="reschedule-time"
+                  type="time"
+                  required
+                  value={newTime}
+                  onChange={(e) => setNewTime(e.target.value)}
+                />
+              </div>
+
+              <DialogFooter className="mt-6 border-t pt-4">
+                <Button type="button" variant="outline" onClick={() => setRescheduleDialogOpen(false)} disabled={savingReschedule}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={savingReschedule || !newDate} className="bg-primary hover:bg-primary/90 font-bold">
+                  {savingReschedule ? "Salvando..." : "Confirmar Reagendamento"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 
