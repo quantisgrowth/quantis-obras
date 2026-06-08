@@ -2178,5 +2178,83 @@ export const getFinancialSummary = createServerFn({ method: "POST" })
     };
   });
 
+export const deleteObra = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ obraId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify if user is admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+
+    // Fetch the obra to verify existence and check company ownership
+    const { data: obra, error: obraErr } = await supabase
+      .from("obras")
+      .select("id, empresa_id")
+      .eq("id", input.obraId)
+      .maybeSingle();
+
+    if (obraErr || !obra) {
+      throw new Error("Obra não encontrada.");
+    }
+
+    if (!isAdmin) {
+      // Check if client belongs to the same company
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("empresa_id")
+        .eq("id", userId)
+        .maybeSingle();
+      if (!profile || profile.empresa_id !== obra.empresa_id) {
+        throw new Error("Acesso negado: você não tem permissão para excluir esta obra.");
+      }
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 1. Check if there are any agendamentos linked to this obra
+    const { data: bookings, error: queryErr } = await supabaseAdmin
+      .from("agendamentos_medicoes")
+      .select("id, status_agendamento")
+      .eq("obra_id", input.obraId);
+
+    if (queryErr) throw queryErr;
+
+    if (bookings && bookings.length > 0) {
+      // Check if there are any active or completed agendamentos
+      const hasActiveOrCompleted = bookings.some(
+        (b: any) => b.status_agendamento !== "Cancelado"
+      );
+
+      if (hasActiveOrCompleted) {
+        throw new Error("Não é possível excluir esta obra pois existem agendamentos ativos ou concluídos vinculados a ela. Reassocie os agendamentos antes de excluí-la.");
+      }
+
+      // If all are Cancelado, delete the cancelled bookings first
+      const bookingIds = bookings.map((b: any) => b.id);
+      const { error: delBookingsErr } = await supabaseAdmin
+        .from("agendamentos_medicoes")
+        .delete()
+        .in("id", bookingIds);
+
+      if (delBookingsErr) throw delBookingsErr;
+    }
+
+    // 2. Now delete the obra
+    const { error: delObraErr } = await supabaseAdmin
+      .from("obras")
+      .delete()
+      .eq("id", input.obraId);
+
+    if (delObraErr) throw delObraErr;
+
+    return { success: true };
+  });
+
+
 
 

@@ -40,7 +40,8 @@ import {
   getAgendamentoSettings,
   saveAgendamentoSettings,
   submitTechnicianRating,
-  getTechnicianRatings
+  getTechnicianRatings,
+  deleteObra
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -3160,43 +3161,7 @@ function AdminDash() {
   const handleDeleteObra = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir esta obra?")) return;
     try {
-      // 1. Check if there are any agendamentos linked to this obra
-      const { data: bookings, error: queryErr } = await supabase
-        .from("agendamentos_medicoes")
-        .select("id, status_agendamento")
-        .eq("obra_id", id);
-      
-      if (queryErr) throw queryErr;
-
-      if (bookings && bookings.length > 0) {
-        // Check if there are any active or completed agendamentos
-        const hasActiveOrCompleted = bookings.some(
-          b => b.status_agendamento !== "Cancelado"
-        );
-
-        if (hasActiveOrCompleted) {
-          toast.error("Não é possível excluir esta obra pois existem agendamentos ativos ou concluídos vinculados a ela. Reassocie os agendamentos antes de excluí-la.");
-          return;
-        }
-
-        // If all are Cancelado, delete the cancelled bookings first
-        const bookingIds = bookings.map(b => b.id);
-        const { error: delBookingsErr } = await supabase
-          .from("agendamentos_medicoes")
-          .delete()
-          .in("id", bookingIds);
-
-        if (delBookingsErr) throw delBookingsErr;
-      }
-
-      // 2. Now delete the obra
-      const { error: delObraErr } = await supabase
-        .from("obras")
-        .delete()
-        .eq("id", id);
-      
-      if (delObraErr) throw delObraErr;
-
+      await deleteObra({ data: { obraId: id } });
       toast.success("Obra excluída com sucesso!");
       fetchObrasGestor();
     } catch (err: any) {
