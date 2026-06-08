@@ -1479,44 +1479,60 @@ function NovoAgendamento() {
                 </div>
               )}
 
-              {/* ── CALENDÁRIO VISUAL ── */}
-              <div className="space-y-2">
-                <Label className="text-base font-bold">Data do Serviço</Label>
-                <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden w-full">
-                  {/* Header do mês */}
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+              {/* ── CALENDÁRIO VISUAL REDESENHADO ── */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-base font-bold">Data do Serviço</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Selecione um dia disponível (pontos verdes) para o serviço</p>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+
+                  {/* ── Cabeçalho do mês ── */}
+                  <div className="flex items-center justify-between px-5 py-4 bg-muted/40 border-b border-border">
                     <button
                       type="button"
                       disabled={new Date(calMes.getFullYear(), calMes.getMonth(), 1) <= new Date(new Date().getFullYear(), new Date().getMonth(), 1)}
                       onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                      className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold"
+                      className="h-8 w-8 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-20 disabled:cursor-not-allowed text-base font-medium shadow-sm"
                     >
                       ‹
                     </button>
-                    <span className="text-sm font-bold text-foreground">
-                      {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][calMes.getMonth()]} {calMes.getFullYear()}
-                    </span>
+                    <div className="text-center">
+                      <p className="text-base font-bold text-foreground">
+                        {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][calMes.getMonth()]}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{calMes.getFullYear()}</p>
+                    </div>
                     <button
                       type="button"
                       disabled={(() => { const lim = new Date(); lim.setDate(lim.getDate() + 62); return new Date(calMes.getFullYear(), calMes.getMonth() + 1, 1) > new Date(lim.getFullYear(), lim.getMonth(), 1); })()}
                       onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                      className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold"
+                      className="h-8 w-8 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-20 disabled:cursor-not-allowed text-base font-medium shadow-sm"
                     >
                       ›
                     </button>
                   </div>
 
-                  {/* Cabeçalho dias da semana */}
-                  <div className="grid grid-cols-7 border-b border-border">
-                    {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map((d, i) => (
-                      <div key={d} className={`py-2 text-center text-[11px] font-bold uppercase tracking-wide ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-muted-foreground"}`}>
-                        {d}
+                  {/* ── Cabeçalho dias da semana ── */}
+                  <div className="grid grid-cols-7 bg-muted/20 border-b border-border">
+                    {[
+                      { label: "D", color: "text-rose-400" },
+                      { label: "S", color: "text-foreground/60" },
+                      { label: "T", color: "text-foreground/60" },
+                      { label: "Q", color: "text-foreground/60" },
+                      { label: "Q", color: "text-foreground/60" },
+                      { label: "S", color: "text-foreground/60" },
+                      { label: "S", color: "text-blue-400" },
+                    ].map((d, i) => (
+                      <div key={i} className={`py-2.5 text-center text-xs font-bold ${d.color}`}>
+                        {d.label}
                       </div>
                     ))}
                   </div>
 
-                  {/* Grade de dias */}
-                  <div className="grid grid-cols-7">
+                  {/* ── Grade de dias ── */}
+                  <div className="grid grid-cols-7 p-2 gap-0.5">
                     {(() => {
                       const hoje = new Date(); hoje.setHours(0,0,0,0);
                       const limiteMax = new Date(hoje); limiteMax.setDate(limiteMax.getDate() + 62);
@@ -1530,60 +1546,95 @@ function NovoAgendamento() {
                       const isoDate = (d: Date) => d.toISOString().split("T")[0];
 
                       return cells.map((day, idx) => {
-                        if (!day) return <div key={`empty-${idx}`} className="h-12 sm:h-14" />;
+                        if (!day) return <div key={`e-${idx}`} className="h-11 sm:h-12" />;
+
                         const iso        = isoDate(day);
                         const isSelected = dataServico === iso;
                         const isToday    = isoDate(hoje) === iso;
                         const isMin48h   = day < new Date(hoje.getTime() + 2 * 86400000);
                         const isSun      = day.getDay() === 0;
+                        const isSat      = day.getDay() === 6;
                         const isFuture   = day > limiteMax;
                         const hasVaga    = datasDisponiveis.includes(iso);
                         const isDisabled = isMin48h || isSun || isFuture || (datasDisponiveis.length > 0 && !hasVaga);
-                        let cellClass = "h-12 sm:h-14 flex flex-col items-center justify-center relative transition-all duration-150 select-none ";
+
+                        // Classes por estado
+                        let wrapClass = "h-11 sm:h-12 flex items-center justify-center relative transition-all duration-200 rounded-xl ";
+                        let numClass  = "w-9 h-9 flex flex-col items-center justify-center rounded-full text-sm font-medium transition-all duration-200 relative ";
+
                         if (isSelected) {
-                          cellClass += "bg-primary text-primary-foreground font-bold rounded-lg m-0.5 shadow-md ";
+                          wrapClass += "";
+                          numClass  += "bg-primary text-primary-foreground font-bold shadow-md scale-105 ";
                         } else if (isDisabled) {
-                          cellClass += "text-muted-foreground/30 cursor-not-allowed ";
+                          wrapClass += "cursor-not-allowed ";
+                          numClass  += "opacity-20 " + (isSun ? "text-rose-400 " : "text-muted-foreground ");
+                        } else if (hasVaga) {
+                          wrapClass += "cursor-pointer hover:scale-105 active:scale-95 ";
+                          numClass  += "text-foreground font-semibold hover:bg-emerald-500 hover:text-white " + (isSat ? "text-blue-500 " : "");
                         } else {
-                          cellClass += "cursor-pointer hover:bg-accent hover:text-foreground rounded-lg m-0.5 ";
-                          if (hasVaga) cellClass += "text-foreground font-semibold ";
+                          wrapClass += "cursor-pointer ";
+                          numClass  += "text-muted-foreground hover:bg-muted ";
                         }
+
                         return (
-                          <button
-                            key={iso}
-                            type="button"
-                            disabled={isDisabled}
-                            onClick={() => setDataServico(iso)}
-                            className={cellClass}
-                          >
-                            <span className={`text-sm ${isToday && !isSelected ? "underline decoration-dotted" : ""}`}>
-                              {day.getDate()}
-                            </span>
-                            {hasVaga && !isDisabled && !isSelected && (
-                              <span className="absolute bottom-1 h-1 w-1 rounded-full bg-emerald-500" />
-                            )}
-                          </button>
+                          <div key={iso} className={wrapClass}>
+                            <button
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => setDataServico(iso)}
+                              className={numClass}
+                            >
+                              {/* Anel de hoje */}
+                              {isToday && !isSelected && (
+                                <span className="absolute inset-0 rounded-full ring-2 ring-primary/40 ring-offset-1" />
+                              )}
+                              <span>{day.getDate()}</span>
+                              {/* Ponto de disponível */}
+                              {hasVaga && !isDisabled && !isSelected && (
+                                <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              )}
+                            </button>
+                          </div>
                         );
                       });
                     })()}
                   </div>
 
-                  {/* Legenda */}
-                  <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-t border-border bg-muted/20 text-[11px] text-muted-foreground">
-                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />Data disponível</span>
-                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" />Selecionada</span>
-                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-muted-foreground/30" />Indisponível</span>
+                  {/* ── Legenda ── */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3 border-t border-border bg-muted/10 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm" />
+                      Disponível
+                    </span>
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <span className="h-2.5 w-2.5 rounded-full bg-primary shadow-sm" />
+                      Selecionada
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-foreground/10 ring-1 ring-foreground/10" />
+                      Indisponível
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full ring-2 ring-primary/40" />
+                      Hoje
+                    </span>
                   </div>
                 </div>
 
-                {/* Data selecionada — leitura */}
-                {dataServico && (
-                  <p className="text-sm font-semibold text-emerald-700 mt-1">
-                    ✅ {new Date(dataServico + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
-                  </p>
+                {/* Data selecionada — confirmação */}
+                {dataServico && datasDisponiveis.includes(dataServico) && (
+                  <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
+                    <span className="text-emerald-600 text-lg">✓</span>
+                    <div>
+                      <p className="text-sm font-bold text-emerald-700 capitalize">
+                        {new Date(dataServico + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
+                      </p>
+                      <p className="text-xs text-emerald-600">Data com técnico disponível</p>
+                    </div>
+                  </div>
                 )}
                 {dataServico && !datasDisponiveis.includes(dataServico) && datasDisponiveis.length > 0 && (
-                  <p className="text-xs text-red-500">⚠️ Data sem técnico disponível — escolha outra.</p>
+                  <p className="text-xs text-red-500 font-medium">⚠️ Data sem técnico disponível — escolha outra.</p>
                 )}
               </div>
 
