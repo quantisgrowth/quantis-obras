@@ -181,11 +181,38 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 
   const fetchBookings = async () => {
     try {
-      const { data: profile } = await supabase
+      let { data: profile } = await supabase
         .from("profiles")
         .select("empresa_id")
         .eq("id", userId)
         .single();
+
+      // Self-healing: if profile has no company linked, associate them with the default test company
+      if (profile && !profile.empresa_id) {
+        const { data: empresa } = await supabase
+          .from("empresas_clientes")
+          .select("id")
+          .eq("cnpj", "12.345.678/0001-99")
+          .maybeSingle();
+
+        let newEmpresaId = empresa?.id;
+        if (!newEmpresaId) {
+          const { data: newEmpresa } = await supabase
+            .from("empresas_clientes")
+            .insert({ razao_social: "Geraltest Cliente Padrão Ltda", cnpj: "12.345.678/0001-99" })
+            .select("id")
+            .single();
+          newEmpresaId = newEmpresa?.id;
+        }
+
+        if (newEmpresaId) {
+          await supabase
+            .from("profiles")
+            .update({ empresa_id: newEmpresaId })
+            .eq("id", userId);
+          profile.empresa_id = newEmpresaId;
+        }
+      }
 
       let query = supabase
         .from("agendamentos_medicoes")
