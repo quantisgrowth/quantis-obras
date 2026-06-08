@@ -216,7 +216,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 
       let query = supabase
         .from("agendamentos_medicoes")
-        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos(*)");
+        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos!agendamentos_medicoes_tecnico_id_fkey(*)");
 
       if (profile?.empresa_id) {
         query = query.or(`criado_por.eq.${userId},empresa_id.eq.${profile.empresa_id}`);
