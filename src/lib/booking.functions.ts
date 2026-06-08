@@ -2006,4 +2006,158 @@ export const calculateBookingPrice = createServerFn({ method: "POST" })
     };
   });
 
+export const saveCidadeAtendida = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    id: z.string().uuid().optional(),
+    nomeCidade: z.string().min(1),
+    mobilizacaoBase: z.number().min(0),
+    pedagioEstimado: z.number().min(0),
+    minutosDeslocamento: z.number().int().min(0),
+    isBase: z.boolean().default(false)
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem gerenciar cidades.");
+
+    const row = {
+      nome_cidade: input.nomeCidade,
+      mobilizacao_base: input.mobilizacaoBase,
+      pedagio_estimado: input.pedagioEstimado,
+      minutos_deslocamento: input.minutosDeslocamento,
+      is_base: input.isBase
+    };
+
+    if (input.id) {
+      const { error } = await supabase
+        .from("cidades_atendidas")
+        .update(row)
+        .eq("id", input.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("cidades_atendidas")
+        .insert(row);
+      if (error) throw error;
+    }
+
+    return { success: true };
+  });
+
+export const deleteCidadeAtendida = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    cidadeId: z.string().uuid()
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem gerenciar cidades.");
+
+    const { error } = await supabase
+      .from("cidades_atendidas")
+      .delete()
+      .eq("id", input.cidadeId);
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const saveGlobalSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    eficiencia_cp: z.number().min(0).max(100),
+    coeficiente_he: z.number().min(1).max(5),
+    prazo_faturamento_dias: z.number().int().min(1)
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem alterar configurações globais.");
+
+    const { error } = await supabase
+      .from("app_settings")
+      .upsert({
+        key: "configuracoes_globais",
+        value: input as any,
+        descricao: "Configurações globais da plataforma (eficiência CPs, HE e faturamento)"
+      }, { onConflict: "key" });
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const getFinancialSummary = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+
+    // Verify admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem ver dados financeiros.");
+
+    const { data: bookings, error } = await supabase
+      .from("agendamentos_medicoes")
+      .select("valor_total, status_pagamento, empresa:empresas_clientes(id, razao_social)");
+
+    if (error) throw error;
+
+    let totalFaturado = 0;
+    let totalPendente = 0;
+    const porCliente: Record<string, { cliente: string; total: number; pendente: number }> = {};
+
+    (bookings || []).forEach((b: any) => {
+      const val = Number(b.valor_total) || 0;
+      const rSocial = b.empresa?.razao_social || "Empresa Desconhecida";
+      const empId = b.empresa?.id || "unknown";
+
+      if (b.status_pagamento === "Pago") {
+        totalFaturado += val;
+      } else {
+        totalPendente += val;
+      }
+
+      if (!porCliente[empId]) {
+        porCliente[empId] = { cliente: rSocial, total: 0, pendente: 0 };
+      }
+
+      if (b.status_pagamento === "Pago") {
+        porCliente[empId].total += val;
+      } else {
+        porCliente[empId].pendente += val;
+      }
+    });
+
+    return {
+      success: true,
+      totalFaturado,
+      totalPendente,
+      porCliente: Object.values(porCliente)
+    };
+  });
+
+
 

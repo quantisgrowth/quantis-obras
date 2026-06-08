@@ -2597,6 +2597,211 @@ function AdminDash() {
   const [pricingCityRates, setPricingCityRates] = useState<{ [cidadeId: string]: { valorFixo: number; limiteUnidades: number; id?: string } }>({});
   const [savingCityRates, setSavingCityRates] = useState<string | null>(null);
 
+  // Sidebar navigation and modular features states
+  const [activeTab, setActiveTab] = useState("tecnicos");
+
+  // Global Configs states
+  const [globalConfigs, setGlobalConfigs] = useState({ eficiencia_cp: 95, coeficiente_he: 1.5, prazo_faturamento_dias: 28 });
+  const [savingGlobalConfigs, setSavingGlobalConfigs] = useState(false);
+
+  // City form states
+  const [cidadeId, setCidadeId] = useState("");
+  const [cidadeNome, setCidadeNome] = useState("");
+  const [cidadeMobilizacao, setCidadeMobilizacao] = useState(0);
+  const [cidadePedagio, setCidadePedagio] = useState(0);
+  const [cidadeMinutos, setCidadeMinutos] = useState(60);
+  const [cidadeIsBase, setCidadeIsBase] = useState(false);
+  const [cidadeDialogOpen, setCidadeDialogOpen] = useState(false);
+  const [cidadeSaving, setCidadeSaving] = useState(false);
+
+  // Finance states
+  const [financeSummary, setFinanceSummary] = useState<any>(null);
+  const [loadingFinance, setLoadingFinance] = useState(false);
+
+  // Scale alerts states
+  const [scaleAlerts, setScaleAlerts] = useState<any[]>([]);
+  const [loadingScaleAlerts, setLoadingScaleAlerts] = useState(false);
+
+  const fetchScaleAlerts = async () => {
+    setLoadingScaleAlerts(true);
+    try {
+      // Buscar todos os agendamentos confirmados/em execução ordenados por técnico e data
+      const { data, error } = await supabase
+        .from("agendamentos_medicoes")
+        .select("id, codigo_pedido, data_servico, horario_na_obra, duracao_estimada_horas, tecnico_id, tecnico:tecnicos(nome)")
+        .in("status_agendamento", ["Confirmado", "Em_Execucao", "Aguardando_Medicao"])
+        .order("tecnico_id", { ascending: true })
+        .order("data_servico", { ascending: true });
+
+      if (error) throw error;
+
+      const violations: any[] = [];
+      const DESCANSO_MINIMO_H = 11;
+
+      // Agrupar por técnico
+      const byTecnico: Record<string, any[]> = {};
+      (data || []).forEach((ag: any) => {
+        const tid = ag.tecnico_id;
+        if (!tid) return;
+        if (!byTecnico[tid]) byTecnico[tid] = [];
+        byTecnico[tid].push(ag);
+      });
+
+      Object.values(byTecnico).forEach((agendamentos) => {
+        for (let i = 0; i < agendamentos.length - 1; i++) {
+          const ag1 = agendamentos[i];
+          const ag2 = agendamentos[i + 1];
+
+          // Calcular horário de término do 1º serviço
+          const duracao1 = Number(ag1.duracao_estimada_horas ?? 8);
+          const inicio1Str = `${ag1.data_servico}T${ag1.horario_na_obra ?? "07:00:00"}`;
+          const inicio1 = new Date(inicio1Str);
+          if (isNaN(inicio1.getTime())) return;
+          const fim1 = new Date(inicio1.getTime() + duracao1 * 3600 * 1000);
+
+          // Calcular horário de início do 2º serviço
+          const inicio2Str = `${ag2.data_servico}T${ag2.horario_na_obra ?? "07:00:00"}`;
+          const inicio2 = new Date(inicio2Str);
+          if (isNaN(inicio2.getTime())) return;
+
+          const descansoMs = inicio2.getTime() - fim1.getTime();
+          const descansoH = descansoMs / 3600 / 1000;
+
+          if (descansoH < DESCANSO_MINIMO_H) {
+            violations.push({
+              tecnicoNome: ag1.tecnico?.nome ?? "Técnico",
+              pedido1: ag1.codigo_pedido,
+              data1: new Date(ag1.data_servico + "T00:00:00").toLocaleDateString("pt-BR"),
+              horaFim1: fim1.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+              pedido2: ag2.codigo_pedido,
+              data2: new Date(ag2.data_servico + "T00:00:00").toLocaleDateString("pt-BR"),
+              horaInicio2: inicio2.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+              descansoHoras: descansoH.toFixed(1),
+            });
+          }
+        }
+      });
+
+      setScaleAlerts(violations);
+    } catch (err) {
+      console.error("Erro ao calcular alertas de escala:", err);
+    } finally {
+      setLoadingScaleAlerts(false);
+    }
+  };
+
+  const handleLoadGlobalConfigs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "configuracoes_globais")
+        .maybeSingle();
+      if (data && data.value) {
+        setGlobalConfigs(data.value as any);
+      }
+      await fetchAllCidades();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveGlobalConfigs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingGlobalConfigs(true);
+    try {
+      const { saveGlobalSettings } = await import("@/lib/booking.functions");
+      const res = await saveGlobalSettings({
+        data: globalConfigs
+      });
+      if (res.success) {
+        toast.success("Configurações globais atualizadas com sucesso!");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao salvar configurações globais.");
+    } finally {
+      setSavingGlobalConfigs(false);
+    }
+  };
+
+  const handleOpenCidadeDialog = (cid: any | null = null) => {
+    if (cid) {
+      setCidadeId(cid.id);
+      setCidadeNome(cid.nome_cidade);
+      setCidadeMobilizacao(Number(cid.mobilizacao_base));
+      setCidadePedagio(Number(cid.pedagio_estimado));
+      setCidadeMinutos(Number(cid.minutos_deslocamento));
+      setCidadeIsBase(cid.is_base);
+    } else {
+      setCidadeId("");
+      setCidadeNome("");
+      setCidadeMobilizacao(0);
+      setCidadePedagio(0);
+      setCidadeMinutos(60);
+      setCidadeIsBase(false);
+    }
+    setCidadeDialogOpen(true);
+  };
+
+  const handleSaveCidade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCidadeSaving(true);
+    try {
+      const { saveCidadeAtendida } = await import("@/lib/booking.functions");
+      const res = await saveCidadeAtendida({
+        data: {
+          id: cidadeId || undefined,
+          nomeCidade: cidadeNome,
+          mobilizacaoBase: cidadeMobilizacao,
+          pedagioEstimado: cidadePedagio,
+          minutosDeslocamento: cidadeMinutos,
+          isBase: cidadeIsBase
+        }
+      });
+      if (res.success) {
+        toast.success("Cidade salva com sucesso!");
+        setCidadeDialogOpen(false);
+        fetchAllCidades();
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao salvar cidade.");
+    } finally {
+      setCidadeSaving(false);
+    }
+  };
+
+  const handleDeleteCidade = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta cidade?")) return;
+    try {
+      const { deleteCidadeAtendida } = await import("@/lib/booking.functions");
+      const res = await deleteCidadeAtendida({
+        data: { cidadeId: id }
+      });
+      if (res.success) {
+        toast.success("Cidade excluída!");
+        fetchAllCidades();
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao excluir cidade.");
+    }
+  };
+
+  const fetchFinancialSummary = async () => {
+    setLoadingFinance(true);
+    try {
+      const { getFinancialSummary } = await import("@/lib/booking.functions");
+      const res = await getFinancialSummary();
+      if (res.success) {
+        setFinanceSummary(res);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao carregar dados financeiros.");
+    } finally {
+      setLoadingFinance(false);
+    }
+  };
+
   const fetchAllServicos = async () => {
     setLoadingServicos(true);
     try {
@@ -3624,59 +3829,68 @@ function AdminDash() {
     }
   };
 
+  // Sidebar nav items definition
+  const sidebarItems = [
+    { id: "tecnicos",        label: "Gestão de Técnicos",      icon: Users,        onClick: () => { setActiveTab("tecnicos"); } },
+    { id: "locais",          label: "Locais de Check-in",      icon: MapPin,        onClick: () => { setActiveTab("locais"); fetchLocais(); } },
+    { id: "alertas",         label: "Alertas de Escopo",       icon: AlertTriangle, onClick: () => { setActiveTab("alertas"); fetchAlertas(); }, badge: alertas.length > 0 ? alertas.length : undefined },
+    { id: "alertas-escala",  label: "Alertas de Escala",       icon: Clock,         onClick: () => { setActiveTab("alertas-escala"); fetchScaleAlerts(); } },
+    { id: "bloqueios",       label: "Bloqueios e Folgas",      icon: Settings2,    onClick: () => { setActiveTab("bloqueios"); fetchBlockerRequests(); }, badge: blockerRequests.filter(b => b.status === "Pendente").length || undefined },
+    { id: "meus-dados",      label: "Meus Dados",              icon: Building2,    onClick: () => { setActiveTab("meus-dados"); fetchEmpresaPlataforma(); } },
+    { id: "configuracoes",   label: "Configurações Globais",   icon: Settings,     onClick: () => { setActiveTab("configuracoes"); handleLoadGlobalConfigs(); } },
+    { id: "produtos",        label: "Produtos e Serviços",     icon: FlaskConical,  onClick: () => { setActiveTab("produtos"); fetchAllServicos(); } },
+    { id: "financeiro",      label: "Módulo Financeiro",       icon: BarChart3,    onClick: () => { setActiveTab("financeiro"); fetchFinancialSummary(); } },
+  ];
+
   return (
-    <div className="space-y-8 animate-in fade-in-50 duration-200">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <SectionTitle title="Painel do Gestor" subtitle="Gerenciamento de técnicos, escala e configurações." />
-      </div>
+    <div className="flex -mx-4 -mt-8 min-h-[calc(100vh-4rem)] animate-in fade-in-50 duration-200">
 
-      <Tabs defaultValue="tecnicos" className="w-full">
-        <TabsList className="flex flex-wrap gap-2 bg-transparent p-0 h-auto justify-start mb-6">
-          <TabsTrigger
-            value="tecnicos"
-            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
-          >
-            <Users className="h-4 w-4" /> Gestão de Técnicos
-          </TabsTrigger>
-          <TabsTrigger
-            value="locais"
-            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
-            onClick={fetchLocais}
-          >
-            <MapPin className="h-4 w-4" /> Locais de Check-in
-          </TabsTrigger>
-          <TabsTrigger
-            value="alertas"
-            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
-            onClick={fetchAlertas}
-          >
-            <Bell className="h-4 w-4" /> Alertas de Escopo ({alertas.length})
-          </TabsTrigger>
-          <TabsTrigger
-            value="bloqueios"
-            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
-            onClick={fetchBlockerRequests}
-          >
-            <Clock className="h-4 w-4" /> Bloqueios e Folgas ({blockerRequests.filter(b => b.status === "Pendente").length})
-          </TabsTrigger>
-          <TabsTrigger
-            value="meus-dados"
-            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
-            onClick={fetchEmpresaPlataforma}
-          >
-            <Building2 className="h-4 w-4" /> Meus Dados
-          </TabsTrigger>
-          <TabsTrigger
-            value="produtos"
-            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
-            onClick={fetchAllServicos}
-          >
-            <FlaskConical className="h-4 w-4" /> Produtos & Serviços
-          </TabsTrigger>
-        </TabsList>
+      {/* ══ SIDEBAR ESQUERDA FIXA ══ */}
+      <aside className="w-64 shrink-0 border-r border-border bg-card flex flex-col sticky top-0 h-screen overflow-y-auto z-10">
+        <div className="p-5 border-b border-border bg-gradient-to-br from-primary/10 to-primary/5">
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="h-8 w-8 rounded-lg bg-primary/20 grid place-items-center">
+              <Settings className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-bold text-sm text-foreground leading-tight">Painel do Gestor</h2>
+              <p className="text-[10px] text-muted-foreground">Administração</p>
+            </div>
+          </div>
+        </div>
 
-        {/* ── ABA: GESTÃO DE TÉCNICOS ── */}
-        <TabsContent value="tecnicos" className="space-y-6">
+        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+          {sidebarItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                id={`sidebar-${item.id}`}
+                onClick={() => { item.onClick(); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left group ${
+                  isActive
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                }`}
+              >
+                <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"}`} />
+                <span className="flex-1 truncate">{item.label}</span>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                    isActive ? "bg-primary-foreground/20 text-primary-foreground" : "bg-red-500 text-white"
+                  }`}>{item.badge}</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* ══ CONTEÚDO PRINCIPAL ══ */}
+      <main className="flex-1 min-w-0 p-8 overflow-y-auto">
+        {/* ── PAINEL: GESTÃO DE TÉCNICOS ── */}
+        {activeTab === "tecnicos" && <div className="space-y-6">
           <div className="flex justify-end gap-2 mb-4">
             {/* Modal Técnico */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -3982,10 +4196,10 @@ function AdminDash() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>}
 
-        {/* ── ABA: LOCAIS DE CHECK-IN ── */}
-        <TabsContent value="locais" className="space-y-6">
+        {/* ── PAINEL: LOCAIS DE CHECK-IN ── */}
+        {activeTab === "locais" && <div className="space-y-6">
           <div className="flex justify-end mb-4">
             <Dialog open={showLocalDialog} onOpenChange={setShowLocalDialog}>
               <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold cursor-pointer" onClick={handleAddLocalClick}>
@@ -4209,10 +4423,10 @@ function AdminDash() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>}
 
-        {/* ── ABA: ALERTAS DE ESCOPO ── */}
-        <TabsContent value="alertas" className="space-y-6">
+        {/* ── PAINEL: ALERTAS DE ESCOPO ── */}
+        {activeTab === "alertas" && <div className="space-y-6">
           <Card className="border border-border bg-card">
             <CardHeader>
               <CardTitle className="text-lg font-bold">Alertas de Escopo Técnico</CardTitle>
@@ -4348,10 +4562,10 @@ function AdminDash() {
               </form>
             </DialogContent>
           </Dialog>
-        </TabsContent>
+        </div>}
 
-        {/* ── ABA: FOLGAS E BLOQUEIOS ── */}
-        <TabsContent value="bloqueios" className="space-y-6">
+        {/* ── PAINEL: FOLGAS E BLOQUEIOS ── */}
+        {activeTab === "bloqueios" && <div className="space-y-6">
           <div className="flex justify-end mb-4">
             <Dialog open={showBlockerDialog} onOpenChange={setShowBlockerDialog}>
               <Button className="gap-2 bg-primary hover:bg-primary/90 font-bold cursor-pointer" onClick={() => {
@@ -4581,10 +4795,10 @@ function AdminDash() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-        
-        {/* ── ABA: MEUS DADOS ── */}
-        <TabsContent value="meus-dados" className="space-y-6">
+        </div>}
+
+        {/* ── PAINEL: MEUS DADOS ── */}
+        {activeTab === "meus-dados" && <div className="space-y-6">
           <Card className="border border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="text-xl font-bold flex items-center gap-2">
@@ -4658,10 +4872,10 @@ function AdminDash() {
               )}
             </CardContent>
           </Card>
-         </TabsContent>
+        </div>}
 
-        {/* ── ABA: PRODUTOS & SERVIÇOS ── */}
-        <TabsContent value="produtos" className="space-y-6">
+        {/* ── PAINEL: PRODUTOS & SERVIÇOS ── */}
+        {activeTab === "produtos" && <div className="space-y-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-bold text-foreground">Catálogo de Serviços</h3>
             <Button
@@ -4739,8 +4953,323 @@ function AdminDash() {
               ))}
             </div>
           )}
-        </TabsContent>
-      </Tabs>
+        </div>}
+
+        {/* ── PAINEL: CONFIGURAÇÕES GLOBAIS ── */}
+        {activeTab === "configuracoes" && (
+          <div className="space-y-8">
+            <div>
+              <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+                <Settings className="h-5 w-5 text-primary" /> Configurações Globais
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">Parâmetros de operação, cidades atendidas e coeficientes técnicos.</p>
+            </div>
+
+            {/* Parâmetros Globais */}
+            <Card className="border border-border bg-card shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base font-bold flex items-center gap-2"><Settings2 className="h-4 w-4 text-primary" /> Parâmetros Técnicos Globais</CardTitle>
+                <CardDescription>Coeficientes usados nos cálculos de produção e horas extras de toda a plataforma.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSaveGlobalConfigs} className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="gc-eficiencia">Eficiência de CP (%)</Label>
+                      <Input
+                        id="gc-eficiencia" type="number" min={50} max={100} step={1}
+                        value={globalConfigs.eficiencia_cp}
+                        onChange={(e) => setGlobalConfigs({ ...globalConfigs, eficiencia_cp: Number(e.target.value) })}
+                      />
+                      <p className="text-[10px] text-muted-foreground">% de aproveitamento médio dos CPs moldados por diária.</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="gc-he">Coeficiente de Horas Extras</Label>
+                      <Input
+                        id="gc-he" type="number" min={1} max={5} step={0.1}
+                        value={globalConfigs.coeficiente_he}
+                        onChange={(e) => setGlobalConfigs({ ...globalConfigs, coeficiente_he: Number(e.target.value) })}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Multiplicador para horas extras (ex: 1.5 = 50% adicional).</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="gc-prazo">Prazo de Faturamento (dias)</Label>
+                      <Input
+                        id="gc-prazo" type="number" min={1} max={90} step={1}
+                        value={globalConfigs.prazo_faturamento_dias}
+                        onChange={(e) => setGlobalConfigs({ ...globalConfigs, prazo_faturamento_dias: Number(e.target.value) })}
+                      />
+                      <p className="text-[10px] text-muted-foreground">Prazo padrão para faturamento após realização do serviço.</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button type="submit" disabled={savingGlobalConfigs} className="bg-primary hover:bg-primary/90 font-bold">
+                      {savingGlobalConfigs ? "Salvando..." : "Salvar Parâmetros"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+
+            {/* CRUD Cidades Atendidas */}
+            <Card className="border border-border bg-card shadow-sm">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-base font-bold flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" /> Cidades Atendidas</CardTitle>
+                    <CardDescription>Regiões cobertas pelos técnicos com parâmetros de mobilização e deslocamento.</CardDescription>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="gap-1.5 bg-primary hover:bg-primary/90 font-bold"
+                    onClick={() => handleOpenCidadeDialog(null)}
+                  >
+                    <Plus className="h-4 w-4" /> Nova Cidade
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {cidades.length === 0 ? (
+                  <div className="text-center py-8 border border-dashed rounded-lg text-muted-foreground text-sm">
+                    Nenhuma cidade cadastrada ainda.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs">
+                          <th className="p-3">Cidade</th>
+                          <th className="p-3 text-right">Mobilização (R$)</th>
+                          <th className="p-3 text-right">Pedágio Est. (R$)</th>
+                          <th className="p-3 text-right">Deslocamento</th>
+                          <th className="p-3 text-center">Base</th>
+                          <th className="p-3 text-center">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {cidades.map((cid) => (
+                          <tr key={cid.id} className="hover:bg-muted/10 transition-all text-foreground">
+                            <td className="p-3 font-semibold">{cid.nome_cidade}</td>
+                            <td className="p-3 text-right font-mono text-xs">R$ {Number(cid.mobilizacao_base).toFixed(2)}</td>
+                            <td className="p-3 text-right font-mono text-xs">R$ {Number(cid.pedagio_estimado).toFixed(2)}</td>
+                            <td className="p-3 text-right text-xs">{cid.minutos_deslocamento} min</td>
+                            <td className="p-3 text-center">
+                              {cid.is_base ? <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Base</Badge> : <span className="text-muted-foreground text-xs">—</span>}
+                            </td>
+                            <td className="p-3 text-center">
+                              <div className="flex justify-center gap-1">
+                                <Button variant="ghost" size="sm" className="p-1 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/20" onClick={() => handleOpenCidadeDialog(cid)}>
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20" onClick={() => handleDeleteCidade(cid.id)}>
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* ── PAINEL: ALERTAS DE ESCALA ── */}
+        {activeTab === "alertas-escala" && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+                <Clock className="h-5 w-5 text-amber-500" /> Alertas de Escala
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">Verificação de interjornada mínima de 11 horas entre atendimentos sequenciais de cada técnico.</p>
+            </div>
+            <Card className="border border-border bg-card shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base font-bold">Verificação de Interjornada (Regra das 11h)</CardTitle>
+                <CardDescription>Técnicos com menos de 11 horas de descanso entre serviços consecutivos são listados abaixo.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingScaleAlerts ? (
+                  <div className="py-8 text-center text-muted-foreground text-sm animate-pulse">Verificando escalas...</div>
+                ) : scaleAlerts.length === 0 ? (
+                  <div className="text-center py-10 border border-dashed rounded-lg bg-muted/10">
+                    <CheckCircle2 className="h-10 w-10 text-green-500/40 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-foreground">Nenhuma violação de interjornada detectada!</p>
+                    <p className="text-xs text-muted-foreground mt-1">Todos os técnicos têm ao menos 11h de descanso entre atendimentos consecutivos.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {scaleAlerts.map((al: any, i: number) => (
+                      <div key={i} className="border-2 border-amber-500/20 bg-amber-500/5 rounded-lg p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold">⚠️ Interjornada insuficiente</Badge>
+                              <span className="text-xs font-bold text-foreground">{al.tecnicoNome}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Serviço 1: <strong className="text-foreground">{al.pedido1}</strong> em {al.data1} — encerra às {al.horaFim1}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Serviço 2: <strong className="text-foreground">{al.pedido2}</strong> em {al.data2} — inicia às {al.horaInicio2}
+                            </p>
+                            <p className="text-xs font-bold text-amber-600">
+                              ⏱ Descanso calculado: {al.descansoHoras}h (mínimo exigido: 11h)
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* ── PAINEL: MÓDULO FINANCEIRO ── */}
+        {activeTab === "financeiro" && (
+          <div className="space-y-8">
+            <div>
+              <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-emerald-500" /> Módulo Financeiro
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">Resumo de receita confirmada, faturamento pendente e agrupamento por cliente.</p>
+            </div>
+
+            {loadingFinance ? (
+              <div className="py-12 text-center text-muted-foreground animate-pulse">Carregando dados financeiros...</div>
+            ) : !financeSummary ? (
+              <div className="py-12 text-center">
+                <Button onClick={fetchFinancialSummary} className="gap-2 font-bold">
+                  <BarChart3 className="h-4 w-4" /> Carregar Dados Financeiros
+                </Button>
+              </div>
+            ) : (
+              <>
+                {/* Cards de resumo */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Card className="border border-emerald-500/30 bg-emerald-500/5">
+                    <CardContent className="pt-5">
+                      <p className="text-xs text-emerald-600 font-bold uppercase tracking-wide">Receita Confirmada</p>
+                      <p className="text-3xl font-extrabold text-emerald-600 mt-1">
+                        R$ {Number(financeSummary.totalFaturado).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Serviços com status «Pago»</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border border-amber-500/30 bg-amber-500/5">
+                    <CardContent className="pt-5">
+                      <p className="text-xs text-amber-600 font-bold uppercase tracking-wide">Faturamento Pendente</p>
+                      <p className="text-3xl font-extrabold text-amber-600 mt-1">
+                        R$ {Number(financeSummary.totalPendente).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Serviços realizados aguardando pagamento</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border border-border bg-card">
+                    <CardContent className="pt-5">
+                      <p className="text-xs text-muted-foreground font-bold uppercase tracking-wide">Total Geral</p>
+                      <p className="text-3xl font-extrabold text-foreground mt-1">
+                        R$ {(Number(financeSummary.totalFaturado) + Number(financeSummary.totalPendente)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Receita total acumulada</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Tabela por cliente */}
+                <Card className="border border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-base font-bold">Faturamento por Cliente</CardTitle>
+                    <CardDescription>Receita agrupada por empresa cliente — pago e pendente.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {financeSummary.porCliente.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4 text-center">Nenhum faturamento registrado ainda.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-lg border border-border">
+                        <table className="w-full text-left border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs">
+                              <th className="p-3">Cliente</th>
+                              <th className="p-3 text-right">Pago (R$)</th>
+                              <th className="p-3 text-right">Pendente (R$)</th>
+                              <th className="p-3 text-right">Total (R$)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {financeSummary.porCliente.map((c: any, i: number) => (
+                              <tr key={i} className="hover:bg-muted/10 transition-all">
+                                <td className="p-3 font-semibold text-foreground">{c.cliente}</td>
+                                <td className="p-3 text-right font-mono text-xs text-emerald-600 font-bold">
+                                  {Number(c.total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="p-3 text-right font-mono text-xs text-amber-600 font-bold">
+                                  {Number(c.pendente).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="p-3 text-right font-mono text-xs font-bold text-foreground">
+                                  {(Number(c.total) + Number(c.pendente)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </div>
+        )}
+
+      {/* ── DIALOG: Nova / Edição de Cidade Atendida ── */}
+      <Dialog open={cidadeDialogOpen} onOpenChange={setCidadeDialogOpen}>
+        <DialogContent className="max-w-md border border-border bg-card">
+          <DialogHeader>
+            <DialogTitle>{cidadeId ? "Editar Cidade" : "Nova Cidade Atendida"}</DialogTitle>
+            <DialogDescription>Configure os parâmetros logísticos para a cidade selecionada.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveCidade} className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <Label htmlFor="cid-nome">Nome da Cidade</Label>
+              <Input id="cid-nome" required value={cidadeNome} onChange={(e) => setCidadeNome(e.target.value)} placeholder="Ex: Sorocaba" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="cid-mob">Mobilização Base (R$)</Label>
+                <Input id="cid-mob" type="number" step="0.01" min={0} value={cidadeMobilizacao} onChange={(e) => setCidadeMobilizacao(Number(e.target.value))} placeholder="0.00" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="cid-ped">Pedágio Estimado (R$)</Label>
+                <Input id="cid-ped" type="number" step="0.01" min={0} value={cidadePedagio} onChange={(e) => setCidadePedagio(Number(e.target.value))} placeholder="0.00" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="cid-min">Tempo de Deslocamento (min)</Label>
+              <Input id="cid-min" type="number" min={0} value={cidadeMinutos} onChange={(e) => setCidadeMinutos(Number(e.target.value))} placeholder="60" />
+            </div>
+            <div className="flex items-center gap-2 border-t pt-3">
+              <input
+                type="checkbox" id="cid-base" checked={cidadeIsBase}
+                onChange={(e) => setCidadeIsBase(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="cid-base" className="cursor-pointer">Esta cidade é uma Base de Operações</Label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCidadeDialogOpen(false)} disabled={cidadeSaving}>Cancelar</Button>
+              <Button type="submit" disabled={cidadeSaving} className="bg-primary hover:bg-primary/90 font-bold">
+                {cidadeSaving ? "Salvando..." : "Salvar Cidade"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Configuração de Preço por Cidade */}
       {precosCidadeOpen && selectedServico && (
@@ -5273,12 +5802,7 @@ function AdminDash() {
         </Dialog>
       )}
       
-      {/* Cards adicionais da Fase 2 */}
-      <div className="grid gap-4 md:grid-cols-3 border-t border-border pt-8">
-        <PlaceholderCard icon={Bell} title="Alertas de escala" desc="Risco de banco de horas e descanso 11h." badge="Fase 2" />
-        <PlaceholderCard icon={Settings} title="Configurações globais" desc="Eficiência CP, coef. HE, preços, cidades." badge="Fase 2" />
-        <PlaceholderCard icon={BarChart3} title="Financeiro" desc="Previsão de receita e cobranças mensais." badge="Fase 2" />
-      </div>
+      </main>{/* fim do conteúdo principal */}
     </div>
   );
 }
