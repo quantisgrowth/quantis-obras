@@ -637,10 +637,19 @@ export const rejectInvite = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+let lastTimeoutProcess = 0;
+
 export const processTimeouts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase } = context;
+    
+    // Cooldown of 5 minutes to prevent heavy database queries on every page load
+    if (Date.now() - lastTimeoutProcess < 5 * 60 * 1000) {
+      return { processed: 0, skipped: true };
+    }
+    lastTimeoutProcess = Date.now();
+
     const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
 
     let processedCount = 0;
