@@ -234,7 +234,7 @@ export const createBooking = createServerFn({ method: "POST" })
       }
 
       // Load service details
-      const { data: servicoCatalog } = await supabase
+      const { data: servicoCatalog } = await supabaseAdmin
         .from("servicos_catalogo")
         .select("*")
         .eq("id", selectedSvc.servico_id)
@@ -387,7 +387,7 @@ export const createBooking = createServerFn({ method: "POST" })
     const { data: agendamentos, error: bookingErr } = await supabase
       .from("agendamentos_medicoes")
       .insert(bookingsToInsert)
-      .select("id, codigo_pedido, valor_total, servico:servicos_catalogo(categoria)");
+      .select("id, codigo_pedido, valor_total, servico:servicos_catalogo_pub(categoria)");
 
     if (bookingErr || !agendamentos || agendamentos.length === 0) {
       throw new Error(bookingErr?.message || "Erro ao criar agendamento.");
@@ -662,7 +662,7 @@ export const rejectInvite = createServerFn({ method: "POST" })
 
     const { data: booking } = await supabase
       .from("agendamentos_medicoes")
-      .select("*, servico:servicos_catalogo(*)")
+      .select("*, servico:servicos_catalogo_pub(*)")
       .eq("id", input.bookingId)
       .single();
 
@@ -716,7 +716,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
     // 1. Process timed-out bookings
     const { data: timedOutBookings } = await supabase
       .from("agendamentos_medicoes")
-      .select("*, servico:servicos_catalogo(*)")
+      .select("*, servico:servicos_catalogo_pub(*)")
       .eq("status_agendamento", "Pendente_Tecnico")
       .not("tecnico_id", "is", null)
       .lt("convidado_em", threeHoursAgo);
@@ -749,7 +749,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
     // 2. Process unassigned pending bookings
     const { data: unassignedBookings } = await supabase
       .from("agendamentos_medicoes")
-      .select("*, servico:servicos_catalogo(*)")
+      .select("*, servico:servicos_catalogo_pub(*)")
       .eq("status_agendamento", "Pendente_Tecnico")
       .is("tecnico_id", null);
 
@@ -1413,7 +1413,7 @@ export const validateBooking = createServerFn({ method: "POST" })
     // Allow validation by either admin or the client who created the booking
     const { data: booking, error: getErr } = await supabase
       .from("agendamentos_medicoes")
-      .select("id, criado_por, cps_contratados, cps_moldados_real, valor_total, memoria_calculo, servico:servicos_catalogo(valor_cp_excedente)")
+      .select("id, criado_por, cps_contratados, cps_moldados_real, valor_total, memoria_calculo, servico:servicos_catalogo_pub(valor_cp_excedente)")
       .eq("id", input.bookingId)
       .single();
 
@@ -2035,7 +2035,7 @@ export const calculateBookingPrice = createServerFn({ method: "POST" })
 
     // 1. Fetch service details
     const { data: servico, error: sError } = await supabase
-      .from("servicos_catalogo")
+      .from("servicos_catalogo_pub")
       .select("*")
       .eq("id", input.servicoId)
       .single();
@@ -2381,7 +2381,7 @@ export const reallocateTechnician = createServerFn({ method: "POST" })
     // Check permissions
     const { data: booking } = await supabase
       .from("agendamentos_medicoes")
-      .select("*, servico:servicos_catalogo(*)")
+      .select("*, servico:servicos_catalogo_pub(*)")
       .eq("id", input.bookingId)
       .single();
 
