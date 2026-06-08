@@ -2627,6 +2627,92 @@ function AdminDash() {
   const [obraDialogOpen, setObraDialogOpen] = useState(false);
   const [obraSaving, setObraSaving] = useState(false);
 
+  // Clientes/Empresas Management states
+  const [loadingClientes, setLoadingClientes] = useState(false);
+  const [clientesSearch, setClientesSearch] = useState("");
+  const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
+  const [clienteSaving, setClienteSaving] = useState(false);
+
+  // Form states for Cliente/Empresa
+  const [clienteId, setClienteId] = useState<string | null>(null);
+  const [clienteRazaoSocial, setClienteRazaoSocial] = useState("");
+  const [clienteCnpj, setClienteCnpj] = useState("");
+
+  const handleSaveCliente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clienteRazaoSocial || !clienteCnpj) {
+      toast.error("Por favor, preencha todos os campos obrigatórios.");
+      return;
+    }
+    setClienteSaving(true);
+    try {
+      const payload = {
+        razao_social: clienteRazaoSocial,
+        cnpj: clienteCnpj
+      };
+
+      if (clienteId) {
+        const { error } = await supabase
+          .from("empresas_clientes")
+          .update(payload)
+          .eq("id", clienteId);
+        if (error) throw error;
+        toast.success("Empresa cliente atualizada com sucesso!");
+      } else {
+        const { error } = await supabase
+          .from("empresas_clientes")
+          .insert(payload);
+        if (error) throw error;
+        toast.success("Empresa cliente cadastrada com sucesso!");
+      }
+      setClienteDialogOpen(false);
+      fetchEmpresasClientes();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao salvar empresa cliente.");
+    } finally {
+      setClienteSaving(false);
+    }
+  };
+
+  const handleDeleteCliente = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta empresa cliente? Isso pode afetar usuários vinculados.")) return;
+    try {
+      const { error } = await supabase
+        .from("empresas_clientes")
+        .delete()
+        .eq("id", id);
+      
+      if (error) {
+        if (error.code === "23503") {
+          toast.error("Não é possível excluir esta empresa pois existem perfis de usuários, obras ou agendamentos vinculados a ela.");
+        } else {
+          throw error;
+        }
+      } else {
+        toast.success("Empresa cliente excluída com sucesso!");
+        fetchEmpresasClientes();
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao excluir empresa cliente.");
+    }
+  };
+
+  const handleOpenNewCliente = () => {
+    setClienteId(null);
+    setClienteRazaoSocial("");
+    setClienteCnpj("");
+    setClienteDialogOpen(true);
+  };
+
+  const handleOpenEditCliente = (emp: any) => {
+    setClienteId(emp.id);
+    setClienteRazaoSocial(emp.razao_social);
+    setClienteCnpj(emp.cnpj);
+    setClienteDialogOpen(true);
+  };
+
   // Form states for Obra
   const [obraId, setObraId] = useState<string | null>(null);
   const [obraEmpresaId, setObraEmpresaId] = useState("");
@@ -4027,6 +4113,7 @@ function AdminDash() {
   const sidebarItems = [
     { id: "tecnicos",        label: "Gestão de Técnicos",      icon: Users,        onClick: () => { setActiveTab("tecnicos"); } },
     { id: "obras",           label: "Gestão de Obras",         icon: HardHat,      onClick: () => { setActiveTab("obras"); fetchObrasGestor(); fetchEmpresasClientes(); } },
+    { id: "clientes",        label: "Gestão de Clientes",      icon: Building2,    onClick: () => { setActiveTab("clientes"); fetchEmpresasClientes(); } },
     { id: "locais",          label: "Locais de Check-in",      icon: MapPin,        onClick: () => { setActiveTab("locais"); fetchLocais(); } },
     { id: "alertas",         label: "Alertas de Escopo",       icon: AlertTriangle, onClick: () => { setActiveTab("alertas"); fetchAlertas(); }, badge: alertas.length > 0 ? alertas.length : undefined },
     { id: "alertas-escala",  label: "Alertas de Escala",       icon: Clock,         onClick: () => { setActiveTab("alertas-escala"); fetchScaleAlerts(); } },
@@ -5325,6 +5412,109 @@ function AdminDash() {
           </div>
         )}
 
+        {/* ── PAINEL: GESTÃO DE CLIENTES ── */}
+        {activeTab === "clientes" && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-primary" /> Gestão de Clientes
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Gerencie o cadastro de empresas clientes da plataforma, remova duplicidades e adicione novas empresas.
+                </p>
+              </div>
+              <Button onClick={handleOpenNewCliente} className="gap-2 font-bold bg-primary hover:bg-primary/90">
+                <Plus className="h-4 w-4" /> Cadastrar Cliente
+              </Button>
+            </div>
+
+            {/* Filtros */}
+            <Card className="border border-border bg-card">
+              <CardContent className="py-4">
+                <Label htmlFor="search-clientes" className="sr-only">Buscar Clientes</Label>
+                <Input
+                  id="search-clientes"
+                  placeholder="Buscar por razão social ou CNPJ..."
+                  value={clientesSearch}
+                  onChange={(e) => setClientesSearch(e.target.value)}
+                  className="w-full"
+                />
+              </CardContent>
+            </Card>
+
+            {/* Listagem */}
+            {loadingClientes ? (
+              <div className="py-12 text-center text-muted-foreground animate-pulse">
+                Carregando clientes...
+              </div>
+            ) : (() => {
+              const filteredClientes = empresasClientes.filter(c => {
+                return (
+                  c.razao_social?.toLowerCase().includes(clientesSearch.toLowerCase()) ||
+                  c.cnpj?.toLowerCase().includes(clientesSearch.toLowerCase())
+                );
+              });
+
+              if (filteredClientes.length === 0) {
+                return (
+                  <Card className="border border-border bg-card p-12 text-center">
+                    <p className="text-muted-foreground">Nenhuma empresa cliente encontrada.</p>
+                  </Card>
+                );
+              }
+
+              return (
+                <Card className="border border-border bg-card overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                          <th className="p-4">Razão Social</th>
+                          <th className="p-4">CNPJ</th>
+                          <th className="p-4 text-center">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {filteredClientes.map((emp) => (
+                          <tr key={emp.id} className="hover:bg-muted/10 transition-colors">
+                            <td className="p-4 font-bold text-foreground">
+                              {emp.razao_social}
+                            </td>
+                            <td className="p-4 text-muted-foreground font-mono text-xs">
+                              {emp.cnpj}
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenEditCliente(emp)}
+                                  className="h-8 px-2 text-xs font-bold"
+                                >
+                                  Editar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDeleteCliente(emp.id)}
+                                  className="h-8 px-2 text-xs font-bold"
+                                >
+                                  Excluir
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              );
+            })()}
+          </div>
+        )}
+
         {/* ── PAINEL: GESTÃO DE OBRAS ── */}
         {activeTab === "obras" && (
           <div className="space-y-6">
@@ -5558,6 +5748,54 @@ function AdminDash() {
             )}
           </div>
         )}
+
+      {/* ── DIALOG: Nova / Edição de Cliente ── */}
+      <Dialog open={clienteDialogOpen} onOpenChange={setClienteDialogOpen}>
+        <DialogContent className="max-w-md border border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+              <Building2 className="h-5 w-5 text-primary" />
+              {clienteId ? "Editar Cliente" : "Cadastrar Novo Cliente"}
+            </DialogTitle>
+            <DialogDescription>
+              Insira a Razão Social e o CNPJ da empresa cliente.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveCliente} className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <Label htmlFor="cli-razao" className="font-bold">Razão Social *</Label>
+              <Input
+                id="cli-razao"
+                required
+                value={clienteRazaoSocial}
+                onChange={(e) => setClienteRazaoSocial(e.target.value)}
+                placeholder="Ex: Construtora Alfa S.A."
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="cli-cnpj" className="font-bold">CNPJ *</Label>
+              <Input
+                id="cli-cnpj"
+                required
+                value={clienteCnpj}
+                onChange={(e) => setClienteCnpj(e.target.value)}
+                placeholder="00.000.000/0001-00"
+              />
+            </div>
+
+            <DialogFooter className="mt-6 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => setClienteDialogOpen(false)} disabled={clienteSaving}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={clienteSaving} className="bg-primary hover:bg-primary/90 font-bold">
+                {clienteSaving ? "Salvando..." : "Salvar Cliente"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* ── DIALOG: Nova / Edição de Obra ── */}
       <Dialog open={obraDialogOpen} onOpenChange={setObraDialogOpen}>
