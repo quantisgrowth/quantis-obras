@@ -259,6 +259,11 @@ function NovoAgendamento() {
   const [datasDisponiveis, setDatasDisponiveis] = useState<string[]>([]);
   const [loadingDatas, setLoadingDatas] = useState(false);
   const [tecnicosDisponiveis, setTecnicosDisponiveis] = useState<any[]>([]);
+  const [calMes, setCalMes] = useState<Date>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
 
   // Jornada calculada
   const JORNADA_PADRAO_H = 8;
@@ -1477,140 +1482,99 @@ function NovoAgendamento() {
               {/* ── CALENDÁRIO VISUAL ── */}
               <div className="space-y-2">
                 <Label className="text-base font-bold">Data do Serviço</Label>
-                {(() => {
-                  // Gera o calendário interativo
-                  const hoje = new Date();
-                  hoje.setHours(0,0,0,0);
+                <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden w-full">
+                  {/* Header do mês */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+                    <button
+                      type="button"
+                      disabled={new Date(calMes.getFullYear(), calMes.getMonth(), 1) <= new Date(new Date().getFullYear(), new Date().getMonth(), 1)}
+                      onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                      className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold"
+                    >
+                      ‹
+                    </button>
+                    <span className="text-sm font-bold text-foreground">
+                      {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][calMes.getMonth()]} {calMes.getFullYear()}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={(() => { const lim = new Date(); lim.setDate(lim.getDate() + 62); return new Date(calMes.getFullYear(), calMes.getMonth() + 1, 1) > new Date(lim.getFullYear(), lim.getMonth(), 1); })()}
+                      onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                      className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold"
+                    >
+                      ›
+                    </button>
+                  </div>
 
-                  const [calMes, setCalMes] = React.useState(() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 2);
-                    return new Date(d.getFullYear(), d.getMonth(), 1);
-                  });
-
-                  const diasSemana = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-                  const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-
-                  // Primeiro e último dia do mês exibido
-                  const primeiroDia = new Date(calMes.getFullYear(), calMes.getMonth(), 1);
-                  const ultimoDia  = new Date(calMes.getFullYear(), calMes.getMonth() + 1, 0);
-                  const diasNoMes  = ultimoDia.getDate();
-                  const offsetInicio = primeiroDia.getDay(); // 0=Dom
-
-                  // Limite de exibição: hoje + 62 dias
-                  const limiteMax = new Date(hoje);
-                  limiteMax.setDate(limiteMax.getDate() + 62);
-
-                  const prevMesDisabled = new Date(calMes.getFullYear(), calMes.getMonth(), 1) <= new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-                  const nextMesDisabled = new Date(calMes.getFullYear(), calMes.getMonth() + 1, 1) > new Date(limiteMax.getFullYear(), limiteMax.getMonth(), 1);
-
-                  const cells: (null | Date)[] = [
-                    ...Array(offsetInicio).fill(null),
-                    ...Array.from({ length: diasNoMes }, (_, i) => new Date(calMes.getFullYear(), calMes.getMonth(), i + 1))
-                  ];
-                  // Preencher até múltiplo de 7
-                  while (cells.length % 7 !== 0) cells.push(null);
-
-                  const isoDate = (d: Date) => d.toISOString().split("T")[0];
-
-                  return (
-                    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden w-full">
-                      {/* Header do mês */}
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-                        <button
-                          type="button"
-                          disabled={prevMesDisabled}
-                          onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                          className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          ‹
-                        </button>
-                        <span className="text-sm font-bold text-foreground">
-                          {MESES[calMes.getMonth()]} {calMes.getFullYear()}
-                        </span>
-                        <button
-                          type="button"
-                          disabled={nextMesDisabled}
-                          onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                          className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          ›
-                        </button>
+                  {/* Cabeçalho dias da semana */}
+                  <div className="grid grid-cols-7 border-b border-border">
+                    {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map((d, i) => (
+                      <div key={d} className={`py-2 text-center text-[11px] font-bold uppercase tracking-wide ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-muted-foreground"}`}>
+                        {d}
                       </div>
+                    ))}
+                  </div>
 
-                      {/* Cabeçalho dias da semana */}
-                      <div className="grid grid-cols-7 border-b border-border">
-                        {diasSemana.map((d, i) => (
-                          <div key={d} className={`py-2 text-center text-[11px] font-bold uppercase tracking-wide ${
-                            i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-muted-foreground"
-                          }`}>
-                            {d}
-                          </div>
-                        ))}
-                      </div>
+                  {/* Grade de dias */}
+                  <div className="grid grid-cols-7">
+                    {(() => {
+                      const hoje = new Date(); hoje.setHours(0,0,0,0);
+                      const limiteMax = new Date(hoje); limiteMax.setDate(limiteMax.getDate() + 62);
+                      const primeiroDia = new Date(calMes.getFullYear(), calMes.getMonth(), 1);
+                      const ultimoDia  = new Date(calMes.getFullYear(), calMes.getMonth() + 1, 0);
+                      const cells: (null | Date)[] = [
+                        ...Array(primeiroDia.getDay()).fill(null),
+                        ...Array.from({ length: ultimoDia.getDate() }, (_, i) => new Date(calMes.getFullYear(), calMes.getMonth(), i + 1))
+                      ];
+                      while (cells.length % 7 !== 0) cells.push(null);
+                      const isoDate = (d: Date) => d.toISOString().split("T")[0];
 
-                      {/* Grade de dias */}
-                      <div className="grid grid-cols-7">
-                        {cells.map((day, idx) => {
-                          if (!day) return <div key={idx} className="h-12 sm:h-14" />;
+                      return cells.map((day, idx) => {
+                        if (!day) return <div key={`empty-${idx}`} className="h-12 sm:h-14" />;
+                        const iso        = isoDate(day);
+                        const isSelected = dataServico === iso;
+                        const isToday    = isoDate(hoje) === iso;
+                        const isMin48h   = day < new Date(hoje.getTime() + 2 * 86400000);
+                        const isSun      = day.getDay() === 0;
+                        const isFuture   = day > limiteMax;
+                        const hasVaga    = datasDisponiveis.includes(iso);
+                        const isDisabled = isMin48h || isSun || isFuture || (datasDisponiveis.length > 0 && !hasVaga);
+                        let cellClass = "h-12 sm:h-14 flex flex-col items-center justify-center relative transition-all duration-150 select-none ";
+                        if (isSelected) {
+                          cellClass += "bg-primary text-primary-foreground font-bold rounded-lg m-0.5 shadow-md ";
+                        } else if (isDisabled) {
+                          cellClass += "text-muted-foreground/30 cursor-not-allowed ";
+                        } else {
+                          cellClass += "cursor-pointer hover:bg-accent hover:text-foreground rounded-lg m-0.5 ";
+                          if (hasVaga) cellClass += "text-foreground font-semibold ";
+                        }
+                        return (
+                          <button
+                            key={iso}
+                            type="button"
+                            disabled={isDisabled}
+                            onClick={() => setDataServico(iso)}
+                            className={cellClass}
+                          >
+                            <span className={`text-sm ${isToday && !isSelected ? "underline decoration-dotted" : ""}`}>
+                              {day.getDate()}
+                            </span>
+                            {hasVaga && !isDisabled && !isSelected && (
+                              <span className="absolute bottom-1 h-1 w-1 rounded-full bg-emerald-500" />
+                            )}
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
 
-                          const iso        = isoDate(day);
-                          const isSelected = dataServico === iso;
-                          const isToday    = isoDate(hoje) === iso;
-                          const isPast     = day < hoje;
-                          const isMin48h   = day < new Date(hoje.getTime() + 2 * 86400000);
-                          const isSun      = day.getDay() === 0;
-                          const isFuture   = day > limiteMax;
-                          const hasVaga    = datasDisponiveis.includes(iso);
-                          const isDisabled = isPast || isMin48h || isSun || isFuture || (datasDisponiveis.length > 0 && !hasVaga);
-
-                          let cellClass = "h-12 sm:h-14 flex flex-col items-center justify-center relative transition-all duration-150 select-none ";
-                          if (isSelected) {
-                            cellClass += "bg-primary text-primary-foreground font-bold rounded-lg m-0.5 shadow-md ";
-                          } else if (isDisabled) {
-                            cellClass += "text-muted-foreground/30 cursor-not-allowed ";
-                          } else {
-                            cellClass += "cursor-pointer hover:bg-accent hover:text-foreground rounded-lg m-0.5 ";
-                            if (hasVaga) cellClass += "text-foreground font-semibold ";
-                          }
-
-                          return (
-                            <button
-                              key={iso}
-                              type="button"
-                              disabled={isDisabled}
-                              onClick={() => setDataServico(iso)}
-                              className={cellClass}
-                            >
-                              <span className={`text-sm ${isToday && !isSelected ? "underline decoration-dotted" : ""}`}>
-                                {day.getDate()}
-                              </span>
-                              {hasVaga && !isDisabled && !isSelected && (
-                                <span className="absolute bottom-1 h-1 w-1 rounded-full bg-emerald-500" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Legenda */}
-                      <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-t border-border bg-muted/20 text-[11px] text-muted-foreground">
-                        <span className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                          Data disponível
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full bg-primary" />
-                          Selecionada
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full bg-muted-foreground/30" />
-                          Indisponível
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
+                  {/* Legenda */}
+                  <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-t border-border bg-muted/20 text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />Data disponível</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" />Selecionada</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-muted-foreground/30" />Indisponível</span>
+                  </div>
+                </div>
 
                 {/* Data selecionada — leitura */}
                 {dataServico && (
