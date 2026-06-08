@@ -1286,6 +1286,7 @@ export const finalizeExecution = createServerFn({ method: "POST" })
       .update({
         status_agendamento: "Aguardando_Medicao",
         cps_moldados_real: input.cpsMoldadosReal,
+        justificativa_reprovacao: null,
       })
       .eq("id", input.bookingId);
 
@@ -1328,6 +1329,49 @@ export const validateBooking = createServerFn({ method: "POST" })
       .from("agendamentos_medicoes")
       .update({
         status_agendamento: "Validado",
+      })
+      .eq("id", input.bookingId);
+
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const rejectBookingMedicao = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ bookingId: z.string().uuid(), justificativa: z.string().min(1) }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Allow rejection by either admin or the client who created the booking
+    const { data: booking, error: getErr } = await supabase
+      .from("agendamentos_medicoes")
+      .select("id, criado_por")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (getErr || !booking) {
+      throw new Error("Agendamento não encontrado.");
+    }
+
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    const userRoles = (roles || []).map((r: any) => r.role);
+    const isAdmin = userRoles.includes("admin");
+    const isOwner = booking.criado_por === userId;
+
+    if (!isAdmin && !isOwner) {
+      throw new Error("Acesso negado: Você não tem permissão para reprovar este agendamento.");
+    }
+
+    // Update status to Em_Execucao and save the rejection justification
+    const { error } = await supabase
+      .from("agendamentos_medicoes")
+      .update({
+        status_agendamento: "Em_Execucao",
+        justificativa_reprovacao: input.justificativa,
       })
       .eq("id", input.bookingId);
 

@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   validateBooking,
   acceptInvite,
@@ -179,6 +180,12 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const [clientPreviewUrl, setClientPreviewUrl] = useState<string | null>(null);
   const [clientPreviewType, setClientPreviewType] = useState<string | null>(null);
 
+  // Rejection states
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectBookingId, setRejectBookingId] = useState<string | null>(null);
+  const [justificativa, setJustificativa] = useState("");
+  const [rejectLoading, setRejectLoading] = useState(false);
+
   const fetchBookings = async () => {
     try {
       let { data: profile } = await supabase
@@ -308,17 +315,51 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
     fetchPhotos();
   }, [selectedBooking]);
 
-  const handleValidate = async (bookingId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent opening detail modal
+  const handleValidate = async (bookingId: string) => {
     if (!confirm("Deseja confirmar a conclusão e validar as medições deste serviço?")) return;
     try {
       const res = await validateBooking({ data: { bookingId } });
       if (res.success) {
         toast.success("Medições validadas e serviço concluído com sucesso!");
+        setSelectedBooking(null); // Fecha modal de detalhes se estiver aberto
         fetchBookings();
       }
     } catch (err: any) {
       toast.error(err?.message || "Erro ao validar agendamento.");
+    }
+  };
+
+  const handleOpenRejectDialog = (bookingId: string) => {
+    setRejectBookingId(bookingId);
+    setJustificativa("");
+    setRejectDialogOpen(true);
+  };
+
+  const handleReject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectBookingId || !justificativa.trim()) {
+      toast.error("A justificativa é obrigatória.");
+      return;
+    }
+    setRejectLoading(true);
+    try {
+      const { rejectBookingMedicao } = await import("@/lib/booking.functions");
+      const res = await rejectBookingMedicao({
+        data: {
+          bookingId: rejectBookingId,
+          justificativa: justificativa.trim()
+        }
+      });
+      if (res.success) {
+        toast.success("Medição reprovada com sucesso. O atendimento retornou para execução.");
+        setRejectDialogOpen(false);
+        setSelectedBooking(null); // Fecha modal de detalhes se estiver aberto
+        fetchBookings();
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao reprovar agendamento.");
+    } finally {
+      setRejectLoading(false);
     }
   };
 
@@ -536,14 +577,31 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                       </div>
 
                       {ag.status_agendamento === "Aguardando_Medicao" ? (
-                        <Button
-                          size="sm"
-                          className="bg-purple-600 hover:bg-purple-700 text-white font-bold gap-1 self-stretch sm:self-auto"
-                          onClick={(e) => handleValidate(ag.id, e)}
-                        >
-                          <Check className="h-4 w-4" />
-                          Validar Medições
-                        </Button>
+                        <div className="flex gap-2 self-stretch sm:self-auto">
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 flex-1 sm:flex-initial"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleValidate(ag.id);
+                            }}
+                          >
+                            <Check className="h-4 w-4" />
+                            Aceitar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="font-bold gap-1 flex-1 sm:flex-initial"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenRejectDialog(ag.id);
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                            Reprovar
+                          </Button>
+                        </div>
                       ) : (
                         <div className="text-[10px] text-muted-foreground italic flex items-center gap-1 bg-muted px-2 py-1 rounded">
                           <Eye className="h-3 w-3" /> Clique para ver técnico e acompanhar
@@ -764,9 +822,85 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                 )}
               </div>
             </div>
+            <DialogFooter className="flex justify-end gap-2 border-t pt-4 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setSelectedBooking(null)}
+              >
+                Fechar
+              </Button>
+              {selectedBooking.status_agendamento === "Aguardando_Medicao" && (
+                <>
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1"
+                    onClick={() => handleValidate(selectedBooking.id)}
+                  >
+                    <Check className="h-4 w-4" />
+                    Aceitar Medição
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="font-bold gap-1"
+                    onClick={() => handleOpenRejectDialog(selectedBooking.id)}
+                  >
+                    <X className="h-4 w-4" />
+                    Reprovar Medição
+                  </Button>
+                </>
+              )}
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Modal de Reprovação de Medição */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="max-w-md border border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Reprovar Medição
+            </DialogTitle>
+            <DialogDescription>
+              Insira a justificativa para a reprovação. O atendimento retornará para o status "Em Execução" e o técnico poderá visualizar este motivo para realizar os ajustes.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleReject} className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <label htmlFor="justificativa" className="text-sm font-medium text-foreground">
+                Justificativa (Obrigatória)
+              </label>
+              <Textarea
+                id="justificativa"
+                placeholder="Descreva o motivo da reprovação (ex: fotos ilegíveis, dados de slump divergentes...)"
+                value={justificativa}
+                onChange={(e) => setJustificativa(e.target.value)}
+                required
+                className="min-h-[100px] bg-background border-border text-foreground"
+              />
+            </div>
+
+            <DialogFooter className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRejectDialogOpen(false)}
+                disabled={rejectLoading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={rejectLoading || !justificativa.trim()}
+              >
+                {rejectLoading ? "Reprovando..." : "Confirmar Reprovação"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Visualizador de Técnico para o Cliente */}
       {clientViewTecnico && (
@@ -976,6 +1110,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const [activePhotos, setActivePhotos] = useState<any[]>([]);
   const [loadingExecPhotos, setLoadingExecPhotos] = useState(false);
   const [uploadingCheckin, setUploadingCheckin] = useState(false);
+  const [uploadingMultiple, setUploadingMultiple] = useState(false);
   
   // Molding cycle form states
   const [cycleDialogOpen, setCycleDialogOpen] = useState(false);
@@ -1344,6 +1479,58 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
     }
   };
 
+  const handleUploadMultiplePhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !activeExec) return;
+
+    const additionalPhotosCount = activePhotos.filter(p => p.tipo_foto !== "Checkin_QR").length;
+    const remainingSlots = 15 - additionalPhotosCount;
+
+    if (files.length > remainingSlots) {
+      toast.error(`Você só pode enviar mais ${remainingSlots} foto(s). Limite máximo é 15.`);
+      return;
+    }
+
+    setUploadingMultiple(true);
+    let successCount = 0;
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const url = await uploadPhotoOrBase64(file);
+        
+        const { error } = await supabase
+          .from("historico_fotos")
+          .insert({
+            agendamento_id: activeExec.id,
+            tipo_foto: "Final_Panoramica",
+            url_foto: url,
+            metadata: { 
+              horario_registro: new Date().toISOString(),
+              nome_arquivo: file.name
+            }
+          });
+
+        if (error) {
+          console.error("Erro ao salvar foto de campo:", error);
+        } else {
+          successCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount} foto(s) de campo enviada(s) com sucesso!`);
+        fetchExecPhotos(activeExec.id);
+      }
+    } catch (err: any) {
+      toast.error("Ocorreu um erro no upload das fotos.");
+      console.error(err);
+    } finally {
+      setUploadingMultiple(false);
+      e.target.value = "";
+    }
+  };
+
   // Step 2: Add Molding Cycle
   const handleAddCycle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1535,6 +1722,24 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                 </div>
               </CardHeader>
               <CardContent className="pt-5 space-y-6">
+                {activeExec.justificativa_reprovacao && (
+                  <div className="bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-start gap-3 animate-in fade-in-50 duration-200">
+                    <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-bold text-sm">Medição Reprovada pelo Cliente</h4>
+                      <p className="text-xs mt-1 text-muted-foreground">
+                        O cliente solicitou correções com a seguinte justificativa:
+                      </p>
+                      <p className="text-sm font-semibold mt-2 italic text-foreground bg-card/65 p-2 rounded border border-red-500/20">
+                        "{activeExec.justificativa_reprovacao}"
+                      </p>
+                      <p className="text-[11px] mt-2 text-muted-foreground">
+                        Por favor, adicione as fotos ou refaça as medições necessárias e finalize novamente.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Infos do pedido e Rota GPS */}
                 <div className="grid gap-4 md:grid-cols-2 bg-muted/20 p-3 rounded-lg border">
                   <div className="text-xs text-muted-foreground space-y-1">
@@ -1720,6 +1925,75 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                     </Dialog>
                   </Card>
                 </div>
+
+                {/* Seção de upload de fotos de campo */}
+                {checkinRecord && (
+                  <Card className="border border-border bg-card p-5 mt-6">
+                    <CardHeader className="p-0 pb-3">
+                      <CardTitle className="text-base font-bold flex items-center gap-2">
+                        <Camera className="h-5 w-5 text-indigo-500" />
+                        Fotos de Campo (Slump, CPs Moldados, etc.)
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Você pode enviar até 15 fotos por atendimento em andamento para comprovação do serviço.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0 pt-3 space-y-4">
+                      {/* Input para upload de múltiplas fotos */}
+                      <div className="space-y-2">
+                        <Label htmlFor="multiple-photos-input" className={`flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/30 rounded-lg p-6 cursor-pointer hover:bg-muted/30 transition-all ${uploadingMultiple ? "opacity-60 pointer-events-none" : ""}`}>
+                          <Upload className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                          <span className="text-xs font-semibold text-foreground">
+                            {uploadingMultiple ? "Fazendo upload das fotos..." : "Selecionar Fotos de Campo"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/75 mt-1">
+                            Envie fotos do ensaio de slump, CPs moldados, etc. (Máx. 15 fotos)
+                          </span>
+                        </Label>
+                        <Input
+                          id="multiple-photos-input"
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleUploadMultiplePhotos}
+                          disabled={uploadingMultiple || activePhotos.filter(p => p.tipo_foto !== "Checkin_QR").length >= 15}
+                        />
+                      </div>
+
+                      {/* Progresso ou contador de fotos */}
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-muted-foreground">
+                          Fotos enviadas: <strong className="text-foreground">{activePhotos.filter(p => p.tipo_foto !== "Checkin_QR").length} de 15</strong>
+                        </span>
+                        {activePhotos.filter(p => p.tipo_foto !== "Checkin_QR").length >= 15 && (
+                          <span className="text-red-500 font-bold text-[10px]">Limite máximo de 15 fotos atingido.</span>
+                        )}
+                      </div>
+
+                      {/* Grid de miniaturas das fotos enviadas */}
+                      {activePhotos.filter(p => p.tipo_foto !== "Checkin_QR").length > 0 && (
+                        <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-3 pt-2">
+                          {activePhotos
+                            .filter(p => p.tipo_foto !== "Checkin_QR")
+                            .map((p, idx) => (
+                              <div key={p.id} className="relative group aspect-square rounded-md overflow-hidden border border-border shadow-sm bg-muted/40">
+                                <img src={p.url_foto} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-200 flex flex-col justify-end p-1">
+                                  <span className="text-[8px] text-white truncate font-medium">
+                                    {p.metadata?.nome_arquivo || `Foto ${idx + 1}`}
+                                  </span>
+                                  <span className="text-[7px] text-white/70 font-mono">
+                                    {new Date(p.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </CardContent>
             </Card>
           ) : (
