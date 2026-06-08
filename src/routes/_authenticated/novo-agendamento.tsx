@@ -315,11 +315,8 @@ function NovoAgendamento() {
     const totalMinutes = h * 60 + m;
 
     if (dow === 0) return false; // Sunday
-    if (dow === 6) { // Saturday
-      return totalMinutes >= 7 * 60 && totalMinutes <= 12 * 60;
-    }
-    // Monday to Friday
-    return totalMinutes >= 7 * 60 && totalMinutes <= 17 * 60;
+    // Permitido das 07:00 às 12:00 (tanto para dias de semana quanto sábado)
+    return totalMinutes >= 7 * 60 && totalMinutes <= 12 * 60;
   };
 
   // Step 4 — Pagamento
@@ -1449,12 +1446,12 @@ function NovoAgendamento() {
 
           {/* ── STEP 3: AGENDA ───────────────────────────────────── */}
           {step === 3 && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-in fade-in-50 duration-200">
 
               {/* Status de técnicos disponíveis */}
               {loadingDatas ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 rounded-lg p-3">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin animate-spin-slow" />
                   Verificando disponibilidade de técnicos especializados...
                 </div>
               ) : tecnicosDisponiveis.length === 0 ? (
@@ -1479,212 +1476,209 @@ function NovoAgendamento() {
                 </div>
               )}
 
-              {/* ── CALENDÁRIO VISUAL REDESENHADO ── */}
-              <div className="space-y-3">
+              {/* ── CALENDÁRIO E HORÁRIOS SIDE-BY-SIDE (Estilo OnceHub) ── */}
+              <div className="space-y-4">
                 <div>
-                  <Label className="text-base font-bold">Data do Serviço</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Selecione um dia disponível (pontos verdes) para o serviço</p>
+                  <Label className="text-base font-bold text-foreground">Agenda do Serviço</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Selecione uma data disponível e o horário de chegada do técnico.</p>
                 </div>
 
-                <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-
-                  {/* ── Cabeçalho do mês ── */}
-                  <div className="flex items-center justify-between px-5 py-4 bg-muted/40 border-b border-border">
-                    <button
-                      type="button"
-                      disabled={new Date(calMes.getFullYear(), calMes.getMonth(), 1) <= new Date(new Date().getFullYear(), new Date().getMonth(), 1)}
-                      onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                      className="h-8 w-8 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-20 disabled:cursor-not-allowed text-base font-medium shadow-sm"
-                    >
-                      ‹
-                    </button>
-                    <div className="text-center">
-                      <p className="text-base font-bold text-foreground">
-                        {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][calMes.getMonth()]}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{calMes.getFullYear()}</p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={(() => { const lim = new Date(); lim.setDate(lim.getDate() + 62); return new Date(calMes.getFullYear(), calMes.getMonth() + 1, 1) > new Date(lim.getFullYear(), lim.getMonth(), 1); })()}
-                      onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                      className="h-8 w-8 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-20 disabled:cursor-not-allowed text-base font-medium shadow-sm"
-                    >
-                      ›
-                    </button>
-                  </div>
-
-                  {/* ── Cabeçalho dias da semana ── */}
-                  <div className="grid grid-cols-7 bg-muted/20 border-b border-border">
-                    {[
-                      { label: "D", color: "text-rose-400" },
-                      { label: "S", color: "text-foreground/60" },
-                      { label: "T", color: "text-foreground/60" },
-                      { label: "Q", color: "text-foreground/60" },
-                      { label: "Q", color: "text-foreground/60" },
-                      { label: "S", color: "text-foreground/60" },
-                      { label: "S", color: "text-blue-400" },
-                    ].map((d, i) => (
-                      <div key={i} className={`py-2.5 text-center text-xs font-bold ${d.color}`}>
-                        {d.label}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-card border border-border rounded-2xl p-5 shadow-sm">
+                  {/* Calendário (Esquerda) */}
+                  <div className="md:col-span-7 space-y-4">
+                    {/* Cabeçalho do mês */}
+                    <div className="flex items-center justify-between px-2 py-1 bg-transparent border-b border-border/60 pb-3">
+                      <button
+                        type="button"
+                        disabled={new Date(calMes.getFullYear(), calMes.getMonth(), 1) <= new Date(new Date().getFullYear(), new Date().getMonth(), 1)}
+                        onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                        className="h-8 w-8 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground transition-all disabled:opacity-20 disabled:cursor-not-allowed shadow-sm"
+                      >
+                        ‹
+                      </button>
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-foreground">
+                          {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][calMes.getMonth()]}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">{calMes.getFullYear()}</p>
                       </div>
-                    ))}
+                      <button
+                        type="button"
+                        disabled={(() => { const lim = new Date(); lim.setDate(lim.getDate() + 62); return new Date(calMes.getFullYear(), calMes.getMonth() + 1, 1) > new Date(lim.getFullYear(), lim.getMonth(), 1); })()}
+                        onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                        className="h-8 w-8 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground transition-all disabled:opacity-20 disabled:cursor-not-allowed shadow-sm"
+                      >
+                        ›
+                      </button>
+                    </div>
+
+                    {/* Cabeçalho dias da semana */}
+                    <div className="grid grid-cols-7 text-center">
+                      {[
+                        { label: "D", color: "text-rose-400 font-bold" },
+                        { label: "S", color: "text-foreground/60 font-semibold" },
+                        { label: "T", color: "text-foreground/60 font-semibold" },
+                        { label: "Q", color: "text-foreground/60 font-semibold" },
+                        { label: "Q", color: "text-foreground/60 font-semibold" },
+                        { label: "S", color: "text-foreground/60 font-semibold" },
+                        { label: "S", color: "text-blue-400 font-bold" },
+                      ].map((d, i) => (
+                        <div key={i} className={`py-1 text-[11px] ${d.color}`}>
+                          {d.label}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Grade de dias */}
+                    <div className="grid grid-cols-7 gap-1">
+                      {(() => {
+                        const hoje = new Date(); hoje.setHours(0,0,0,0);
+                        const limiteMax = new Date(hoje); limiteMax.setDate(limiteMax.getDate() + 62);
+                        const primeiroDia = new Date(calMes.getFullYear(), calMes.getMonth(), 1);
+                        const ultimoDia  = new Date(calMes.getFullYear(), calMes.getMonth() + 1, 0);
+                        const cells: (null | Date)[] = [
+                          ...Array(primeiroDia.getDay()).fill(null),
+                          ...Array.from({ length: ultimoDia.getDate() }, (_, i) => new Date(calMes.getFullYear(), calMes.getMonth(), i + 1))
+                        ];
+                        while (cells.length % 7 !== 0) cells.push(null);
+                        const isoDate = (d: Date) => d.toISOString().split("T")[0];
+
+                        return cells.map((day, idx) => {
+                          if (!day) return <div key={`e-${idx}`} className="h-9 w-9 sm:h-10 sm:w-10" />;
+
+                          const iso        = isoDate(day);
+                          const isSelected = dataServico === iso;
+                          const isToday    = isoDate(hoje) === iso;
+                          const isMin48h   = day < new Date(hoje.getTime() + 2 * 86400000);
+                          const isSun      = day.getDay() === 0;
+                          const isSat      = day.getDay() === 6;
+                          const isFuture   = day > limiteMax;
+                          const hasVaga    = datasDisponiveis.includes(iso);
+                          const isDisabled = isMin48h || isSun || isFuture || (datasDisponiveis.length > 0 && !hasVaga);
+
+                          let wrapClass = "h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center mx-auto transition-all duration-200 rounded-full ";
+                          let btnClass  = "w-8 h-8 flex flex-col items-center justify-center rounded-full text-xs font-semibold transition-all duration-200 relative ";
+
+                          if (isSelected) {
+                            wrapClass += "bg-primary/10";
+                            btnClass  += "bg-primary text-primary-foreground font-bold shadow-sm scale-105";
+                          } else if (isDisabled) {
+                            wrapClass += "cursor-not-allowed";
+                            btnClass  += "opacity-25 " + (isSun ? "text-rose-400 " : "text-muted-foreground ");
+                          } else if (hasVaga) {
+                            wrapClass += "cursor-pointer hover:scale-105 active:scale-95";
+                            btnClass  += "text-foreground hover:bg-emerald-500 hover:text-white " + (isSat ? "text-blue-500 " : "");
+                          } else {
+                            wrapClass += "cursor-pointer";
+                            btnClass  += "text-muted-foreground hover:bg-muted";
+                          }
+
+                          return (
+                            <div key={iso} className={wrapClass} onClick={() => { if (!isDisabled) setDataServico(iso); }}>
+                              <button
+                                type="button"
+                                disabled={isDisabled}
+                                className={btnClass}
+                              >
+                                {isToday && !isSelected && (
+                                  <span className="absolute inset-0 rounded-full ring-2 ring-primary/40 ring-offset-0" />
+                                )}
+                                <span>{day.getDate()}</span>
+                                {hasVaga && !isDisabled && !isSelected && (
+                                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-emerald-500" />
+                                )}
+                              </button>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {/* Legenda */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-3 border-t border-border/60 text-[10px] text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        Disponível
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-primary" />
+                        Selecionada
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-foreground/15" />
+                        Indisponível
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full ring-1 ring-primary/40" />
+                        Hoje
+                      </span>
+                    </div>
                   </div>
 
-                  {/* ── Grade de dias ── */}
-                  <div className="grid grid-cols-7 p-2 gap-0.5">
-                    {(() => {
-                      const hoje = new Date(); hoje.setHours(0,0,0,0);
-                      const limiteMax = new Date(hoje); limiteMax.setDate(limiteMax.getDate() + 62);
-                      const primeiroDia = new Date(calMes.getFullYear(), calMes.getMonth(), 1);
-                      const ultimoDia  = new Date(calMes.getFullYear(), calMes.getMonth() + 1, 0);
-                      const cells: (null | Date)[] = [
-                        ...Array(primeiroDia.getDay()).fill(null),
-                        ...Array.from({ length: ultimoDia.getDate() }, (_, i) => new Date(calMes.getFullYear(), calMes.getMonth(), i + 1))
-                      ];
-                      while (cells.length % 7 !== 0) cells.push(null);
-                      const isoDate = (d: Date) => d.toISOString().split("T")[0];
+                  {/* Linha divisória no Desktop */}
+                  <div className="hidden md:block w-px bg-border/80 self-stretch" />
 
-                      return cells.map((day, idx) => {
-                        if (!day) return <div key={`e-${idx}`} className="h-11 sm:h-12" />;
-
-                        const iso        = isoDate(day);
-                        const isSelected = dataServico === iso;
-                        const isToday    = isoDate(hoje) === iso;
-                        const isMin48h   = day < new Date(hoje.getTime() + 2 * 86400000);
-                        const isSun      = day.getDay() === 0;
-                        const isSat      = day.getDay() === 6;
-                        const isFuture   = day > limiteMax;
-                        const hasVaga    = datasDisponiveis.includes(iso);
-                        const isDisabled = isMin48h || isSun || isFuture || (datasDisponiveis.length > 0 && !hasVaga);
-
-                        // Classes por estado
-                        let wrapClass = "h-11 sm:h-12 flex items-center justify-center relative transition-all duration-200 rounded-xl ";
-                        let numClass  = "w-9 h-9 flex flex-col items-center justify-center rounded-full text-sm font-medium transition-all duration-200 relative ";
-
-                        if (isSelected) {
-                          wrapClass += "";
-                          numClass  += "bg-primary text-primary-foreground font-bold shadow-md scale-105 ";
-                        } else if (isDisabled) {
-                          wrapClass += "cursor-not-allowed ";
-                          numClass  += "opacity-20 " + (isSun ? "text-rose-400 " : "text-muted-foreground ");
-                        } else if (hasVaga) {
-                          wrapClass += "cursor-pointer hover:scale-105 active:scale-95 ";
-                          numClass  += "text-foreground font-semibold hover:bg-emerald-500 hover:text-white " + (isSat ? "text-blue-500 " : "");
-                        } else {
-                          wrapClass += "cursor-pointer ";
-                          numClass  += "text-muted-foreground hover:bg-muted ";
-                        }
-
-                        return (
-                          <div key={iso} className={wrapClass}>
-                            <button
-                              type="button"
-                              disabled={isDisabled}
-                              onClick={() => setDataServico(iso)}
-                              className={numClass}
-                            >
-                              {/* Anel de hoje */}
-                              {isToday && !isSelected && (
-                                <span className="absolute inset-0 rounded-full ring-2 ring-primary/40 ring-offset-1" />
-                              )}
-                              <span>{day.getDate()}</span>
-                              {/* Ponto de disponível */}
-                              {hasVaga && !isDisabled && !isSelected && (
-                                <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              )}
-                            </button>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-
-                  {/* ── Legenda ── */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3 border-t border-border bg-muted/10 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm" />
-                      Disponível
-                    </span>
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <span className="h-2.5 w-2.5 rounded-full bg-primary shadow-sm" />
-                      Selecionada
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-foreground/10 ring-1 ring-foreground/10" />
-                      Indisponível
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full ring-2 ring-primary/40" />
-                      Hoje
-                    </span>
-                  </div>
-                </div>
-
-                {/* Data selecionada — confirmação */}
-                {dataServico && datasDisponiveis.includes(dataServico) && (
-                  <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
-                    <span className="text-emerald-600 text-lg">✓</span>
+                  {/* Horários (Direita) */}
+                  <div className="md:col-span-4 flex flex-col justify-between space-y-4">
                     <div>
-                      <p className="text-sm font-bold text-emerald-700 capitalize">
-                        {new Date(dataServico + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
-                      </p>
-                      <p className="text-xs text-emerald-600">Data com técnico disponível</p>
+                      <Label className="text-xs font-bold block text-foreground uppercase tracking-wider">
+                        {dataServico ? (
+                          <>{new Date(dataServico + "T00:00:00").toLocaleDateString("pt-BR", { weekday: 'long', day: 'numeric', month: 'short' })}</>
+                        ) : (
+                          <>Selecione uma data</>
+                        )}
+                      </Label>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Selecione o horário de chegada na obra</p>
                     </div>
-                  </div>
-                )}
-                {dataServico && !datasDisponiveis.includes(dataServico) && datasDisponiveis.length > 0 && (
-                  <p className="text-xs text-red-500 font-medium">⚠️ Data sem técnico disponível — escolha outra.</p>
-                )}
-              </div>
 
-              {/* Horário de Chegada */}
-              <div className="space-y-2">
-                <Label htmlFor="hora-servico" className="text-base font-bold">Horário de Chegada na Obra</Label>
-                <input
-                  id="hora-servico"
-                  type="time"
-                  required
-                  value={horarioNaObra}
-                  onChange={(e) => setHorarioNaObra(e.target.value)}
-                  style={{ fontSize: "1.1rem", padding: "0.6rem 0.75rem", minHeight: "3rem" }}
-                  className="flex w-full rounded-md border border-input bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-                {horarioNaObra && !isHorarioValido(dataServico, horarioNaObra) && (
-                  <p className="text-xs text-red-500 font-semibold mt-1">
-                    ⚠️ Horário de chegada inválido. Permitido das 07:00 às 17:00 (Seg-Sex) e das 07:00 às 12:00 (Sáb).
-                  </p>
-                )}
+                    {dataServico ? (
+                      <div className="grid grid-cols-3 md:grid-cols-2 gap-1.5 max-h-[200px] md:max-h-[240px] overflow-y-auto pr-1">
+                        {["07:00", "07:30", "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"].map((time) => {
+                          const isSelected = horarioNaObra === time;
+                          return (
+                            <button
+                              key={time}
+                              type="button"
+                              onClick={() => setHorarioNaObra(time)}
+                              className={`py-2 px-2.5 rounded-lg border text-xs font-bold transition-all ${
+                                isSelected
+                                  ? "bg-primary border-primary text-primary-foreground shadow-sm scale-105"
+                                  : "border-border bg-card text-foreground hover:bg-accent hover:border-primary/30 active:scale-[0.98]"
+                              }`}
+                            >
+                              {time}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-8 text-center text-xs text-muted-foreground border border-dashed rounded-xl p-4">
+                        <Clock className="h-6 w-6 text-muted-foreground/30 mb-1.5 animate-pulse" />
+                        <span>Escolha um dia no calendário ao lado.</span>
+                      </div>
+                    )}
 
-                {/* Jornada calculada */}
-                {horarioNaObra && isHorarioValido(dataServico, horarioNaObra) && (
-                  <div className="rounded-lg bg-muted/40 border border-border p-3 space-y-1.5 mt-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                      <Clock3 className="h-3.5 w-3.5 text-primary" />
-                      <span>Entrada: <strong className="text-foreground">{horarioNaObra}</strong></span>
-                      <span className="text-border">|</span>
-                      <span>Almoço: <strong className="text-foreground">1h</strong></span>
-                      <span className="text-border">|</span>
-                      <span>Saída estimada: <strong className="text-foreground">{horarioFim}</strong></span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Jornada padrão: 8h trabalho + 1h almoço = 9h total</p>
-
-                    {/* Horas extras */}
-                    {horasExtras > 0 && (
-                      <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5 mt-2">
-                        <p className="text-xs font-semibold text-amber-700">
-                          ⚠️ {horasExtras}h extra{horasExtras > 1 ? "s" : ""} após {dataServico && new Date(dataServico + "T00:00:00").getDay() === 6 ? "12:00" : "17:00"}
+                    {dataServico && horarioNaObra && (
+                      <div className="rounded-xl bg-muted/30 border border-border/80 p-3 space-y-1.5 text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-1.5 font-bold text-foreground">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <span>Jornada: {horarioNaObra} às {horarioFim}</span>
+                        </div>
+                        <p className="text-[10px] leading-relaxed">
+                          Jornada mínima de 8h + 1h de almoço. Saída às {horarioFim}.
                         </p>
-                        <p className="text-xs text-amber-600 mt-0.5">
-                          Custo adicional: <strong>R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
-                          {" "}(R$ {valorHoraExtra.toFixed(2)}/h)
-                        </p>
-                        <p className="text-[10px] text-amber-500 mt-0.5">Este valor será adicionado ao total do pedido.</p>
+                        {horasExtras > 0 && (
+                          <div className="rounded bg-amber-500/10 border border-amber-500/20 p-2 text-amber-700 font-medium text-[10px]">
+                            ⚠️ {horasExtras}h extra{horasExtras > 1 ? "s" : ""} inclusa{horasExtras > 1 ? "s" : ""} (+ R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })})
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
+                </div>
               </div>
+
+              {/* Observações */}
               <div className="space-y-2">
                 <Label htmlFor="obs" className="text-base font-bold">Observações / Recomendações Especiais</Label>
                 <textarea
