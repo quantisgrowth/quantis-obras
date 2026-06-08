@@ -170,7 +170,6 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pendentes");
   const [clientCompany, setClientCompany] = useState<any>(null);
-  const [loadingCompany, setLoadingCompany] = useState(false);
   const [approvingTec, setApprovingTec] = useState<string | null>(null);
   const [reallocatingTec, setReallocatingTec] = useState<string | null>(null);
   const [overtimeActionLoading, setOvertimeActionLoading] = useState(false);
@@ -342,26 +341,6 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
     }
   };
 
-  const handleToggleRequerAprovacao = async (checked: boolean) => {
-    if (!clientCompany) return;
-    setLoadingCompany(true);
-    try {
-      const { updateCompanySettings: dynamicUpdateCompanySettings } = await import("@/lib/booking.functions");
-      await dynamicUpdateCompanySettings({
-        data: {
-          empresaId: clientCompany.id,
-          requerAprovacaoTecnico: checked,
-        }
-      });
-      setClientCompany({ ...clientCompany, requer_aprovacao_tecnico: checked });
-      toast.success(checked ? "Aprovação de técnicos ativada!" : "Aprovação de técnicos desativada!");
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || "Erro ao atualizar configuração.");
-    } finally {
-      setLoadingCompany(false);
-    }
-  };
 
   const handleApproveTechnician = async (bookingId: string) => {
     setApprovingTec(bookingId);
@@ -1083,12 +1062,6 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
           >
             <CheckCircle2 className="h-4 w-4" /> Realizados ({concluidos.length})
           </TabsTrigger>
-          <TabsTrigger 
-            value="configuracoes" 
-            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
-          >
-            <Settings className="h-4 w-4" /> Configurações
-          </TabsTrigger>
         </TabsList>
 
         {/* ── TAB: SOLICITAÇÃO ── */}
@@ -1352,42 +1325,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
           )}
         </TabsContent>
 
-        <TabsContent value="configuracoes">
-          <Card className="border border-border bg-card max-w-xl shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-primary" /> Configurações da Empresa
-              </CardTitle>
-              <CardDescription>
-                Gerencie as regras operacionais da sua empresa na plataforma.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {clientCompany ? (
-                <div className="flex items-center justify-between border-t border-border pt-4">
-                  <div className="space-y-1">
-                    <Label className="font-bold text-foreground">Exigir aprovação de alocação de técnicos</Label>
-                    <p className="text-[11px] text-muted-foreground max-w-sm leading-relaxed">
-                      Se ativado, após o técnico aceitar a oportunidade, ela passará por uma validação do gestor antes de ser confirmada.
-                    </p>
-                  </div>
-                  <div className="flex items-center h-5">
-                    <input
-                      type="checkbox"
-                      id="toggle-aprovacao-tecnico"
-                      className="h-4.5 w-4.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
-                      checked={clientCompany.requer_aprovacao_tecnico || false}
-                      onChange={(e) => handleToggleRequerAprovacao(e.target.checked)}
-                      disabled={loadingCompany}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">Carregando configurações da empresa...</p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+
       </Tabs>
 
       {/* ── DETALHES MODAL (LINHA DO TEMPO DOS ENSAIOS E FOTOS CRONOLÓGICA) ── */}
@@ -3683,6 +3621,7 @@ function AdminDash() {
   const [clienteId, setClienteId] = useState<string | null>(null);
   const [clienteRazaoSocial, setClienteRazaoSocial] = useState("");
   const [clienteCnpj, setClienteCnpj] = useState("");
+  const [clienteRequerAprovacaoTecnico, setClienteRequerAprovacaoTecnico] = useState(false);
 
   const handleSaveCliente = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3694,7 +3633,8 @@ function AdminDash() {
     try {
       const payload = {
         razao_social: clienteRazaoSocial,
-        cnpj: clienteCnpj
+        cnpj: clienteCnpj,
+        requer_aprovacao_tecnico: clienteRequerAprovacaoTecnico
       };
 
       if (clienteId) {
@@ -3749,6 +3689,7 @@ function AdminDash() {
     setClienteId(null);
     setClienteRazaoSocial("");
     setClienteCnpj("");
+    setClienteRequerAprovacaoTecnico(false);
     setClienteDialogOpen(true);
   };
 
@@ -3756,6 +3697,7 @@ function AdminDash() {
     setClienteId(emp.id);
     setClienteRazaoSocial(emp.razao_social);
     setClienteCnpj(emp.cnpj);
+    setClienteRequerAprovacaoTecnico(emp.requer_aprovacao_tecnico || false);
     setClienteDialogOpen(true);
   };
 
@@ -6872,6 +6814,7 @@ function AdminDash() {
                         <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs uppercase tracking-wider">
                           <th className="p-4">Razão Social</th>
                           <th className="p-4">CNPJ</th>
+                          <th className="p-4 text-center">Aprovação Alocação</th>
                           <th className="p-4 text-center">Ações</th>
                         </tr>
                       </thead>
@@ -6883,6 +6826,13 @@ function AdminDash() {
                             </td>
                             <td className="p-4 text-muted-foreground font-mono text-xs">
                               {emp.cnpj}
+                            </td>
+                            <td className="p-4 text-center">
+                              {emp.requer_aprovacao_tecnico ? (
+                                <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-bold text-[10px]">Ativa</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-muted-foreground font-medium text-[10px]">Inativa</Badge>
+                              )}
                             </td>
                             <td className="p-4 text-center">
                               <div className="flex items-center justify-center gap-2">
@@ -7339,6 +7289,24 @@ function AdminDash() {
                 onChange={(e) => setClienteCnpj(e.target.value)}
                 placeholder="00.000.000/0001-00"
               />
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border pt-4 mt-4">
+              <div className="space-y-1">
+                <Label htmlFor="cli-aprovacao-req" className="font-bold text-foreground cursor-pointer">Exigir aprovação de alocação de técnicos</Label>
+                <p className="text-[11px] text-muted-foreground leading-relaxed pr-4">
+                  Se ativado, quando um técnico aceitar um serviço desta empresa, a alocação precisará de aprovação de um gestor da plataforma.
+                </p>
+              </div>
+              <div className="flex items-center h-5">
+                <input
+                  type="checkbox"
+                  id="cli-aprovacao-req"
+                  className="h-4.5 w-4.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                  checked={clienteRequerAprovacaoTecnico}
+                  onChange={(e) => setClienteRequerAprovacaoTecnico(e.target.checked)}
+                />
+              </div>
             </div>
 
             <DialogFooter className="mt-6 border-t pt-4">
