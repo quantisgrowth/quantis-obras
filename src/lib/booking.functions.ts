@@ -91,28 +91,47 @@ export const createBooking = createServerFn({ method: "POST" })
     let cidadeObra: string | null = null;
 
     if (!finalObraId && data.nova_obra) {
-      const { data: newObra, error: obraErr } = await supabase
+      // Check for duplicate work (same nome_obra, endereco, cep for this company)
+      const cleanCep = data.nova_obra.cep?.replace(/\D/g, "") || "";
+      const { data: existingObras } = await supabase
         .from("obras")
-        .insert({
-          empresa_id: empresaId,
-          nome_obra: data.nova_obra.nome_obra,
-          cno: data.nova_obra.cno,
-          responsavel: data.nova_obra.responsavel,
-          cargo_responsavel: data.nova_obra.cargo_responsavel,
-          endereco: data.nova_obra.endereco,
-          numero: data.nova_obra.numero,
-          bairro: data.nova_obra.bairro,
-          estado: data.nova_obra.estado,
-          cidade: data.nova_obra.cidade,
-          cep: data.nova_obra.cep || null,
-          latitude: data.nova_obra.latitude ?? null,
-          longitude: data.nova_obra.longitude ?? null,
-        })
-        .select("id, cidade, empresa_id")
-        .single();
-      if (obraErr || !newObra) throw new Error(obraErr?.message || "Erro ao criar obra.");
-      finalObraId = newObra.id;
-      cidadeObra = newObra.cidade;
+        .select("id, cidade, cep")
+        .eq("empresa_id", empresaId)
+        .ilike("nome_obra", data.nova_obra.nome_obra.trim())
+        .ilike("endereco", data.nova_obra.endereco.trim());
+
+      const duplicate = (existingObras || []).find(o => {
+        const oCepClean = o.cep?.replace(/\D/g, "") || "";
+        return oCepClean === cleanCep;
+      });
+
+      if (duplicate) {
+        finalObraId = duplicate.id;
+        cidadeObra = duplicate.cidade;
+      } else {
+        const { data: newObra, error: obraErr } = await supabase
+          .from("obras")
+          .insert({
+            empresa_id: empresaId,
+            nome_obra: data.nova_obra.nome_obra.trim(),
+            cno: data.nova_obra.cno,
+            responsavel: data.nova_obra.responsavel,
+            cargo_responsavel: data.nova_obra.cargo_responsavel,
+            endereco: data.nova_obra.endereco.trim(),
+            numero: data.nova_obra.numero,
+            bairro: data.nova_obra.bairro,
+            estado: data.nova_obra.estado,
+            cidade: data.nova_obra.cidade,
+            cep: data.nova_obra.cep || null,
+            latitude: data.nova_obra.latitude ?? null,
+            longitude: data.nova_obra.longitude ?? null,
+          })
+          .select("id, cidade, empresa_id")
+          .single();
+        if (obraErr || !newObra) throw new Error(obraErr?.message || "Erro ao criar obra.");
+        finalObraId = newObra.id;
+        cidadeObra = newObra.cidade;
+      }
     } else if (finalObraId) {
       const { data: obra, error: obraErr } = await supabase
         .from("obras")

@@ -3096,11 +3096,32 @@ function AdminDash() {
     }
     setObraSaving(true);
     try {
+      // Check for duplicate work (same nome_obra, endereco, cep for this company)
+      const cleanCep = (obraCep || "").replace(/\D/g, "");
+      const { data: existingObras } = await supabase
+        .from("obras")
+        .select("id, cep")
+        .eq("empresa_id", obraEmpresaId)
+        .ilike("nome_obra", obraNome.trim())
+        .ilike("endereco", obraEndereco.trim());
+
+      const duplicate = (existingObras || []).find(o => {
+        if (obraId && o.id === obraId) return false; // Ignore current work being edited
+        const oCepClean = o.cep?.replace(/\D/g, "") || "";
+        return oCepClean === cleanCep;
+      });
+
+      if (duplicate) {
+        toast.error("Já existe outra obra cadastrada com este mesmo nome, endereço e CEP para esta empresa.");
+        setObraSaving(false);
+        return;
+      }
+
       const payload = {
         empresa_id: obraEmpresaId,
-        nome_obra: obraNome,
+        nome_obra: obraNome.trim(),
         cep: obraCep || null,
-        endereco: obraEndereco,
+        endereco: obraEndereco.trim(),
         numero: obraNumero || null,
         bairro: obraBairro || null,
         cidade: obraCidade,
@@ -3139,21 +3160,45 @@ function AdminDash() {
   const handleDeleteObra = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir esta obra?")) return;
     try {
-      const { error } = await supabase
+      // 1. Check if there are any agendamentos linked to this obra
+      const { data: bookings, error: queryErr } = await supabase
+        .from("agendamentos_medicoes")
+        .select("id, status_agendamento")
+        .eq("obra_id", id);
+      
+      if (queryErr) throw queryErr;
+
+      if (bookings && bookings.length > 0) {
+        // Check if there are any active or completed agendamentos
+        const hasActiveOrCompleted = bookings.some(
+          b => b.status_agendamento !== "Cancelado"
+        );
+
+        if (hasActiveOrCompleted) {
+          toast.error("Não é possível excluir esta obra pois existem agendamentos ativos ou concluídos vinculados a ela. Reassocie os agendamentos antes de excluí-la.");
+          return;
+        }
+
+        // If all are Cancelado, delete the cancelled bookings first
+        const bookingIds = bookings.map(b => b.id);
+        const { error: delBookingsErr } = await supabase
+          .from("agendamentos_medicoes")
+          .delete()
+          .in("id", bookingIds);
+
+        if (delBookingsErr) throw delBookingsErr;
+      }
+
+      // 2. Now delete the obra
+      const { error: delObraErr } = await supabase
         .from("obras")
         .delete()
         .eq("id", id);
       
-      if (error) {
-        if (error.code === "23503") {
-          toast.error("Não é possível excluir esta obra pois existem agendamentos/medições vinculados a ela. Reassocie os agendamentos antes de excluí-la.");
-        } else {
-          throw error;
-        }
-      } else {
-        toast.success("Obra excluída com sucesso!");
-        fetchObrasGestor();
-      }
+      if (delObraErr) throw delObraErr;
+
+      toast.success("Obra excluída com sucesso!");
+      fetchObrasGestor();
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Erro ao excluir obra.");
