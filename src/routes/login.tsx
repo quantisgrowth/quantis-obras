@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { FlaskConical, Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Entrar — Geraltest Brasil" }] }),
+  head: () => ({ meta: [{ title: "Entrar — Quantis Obras" }] }),
   component: LoginPage,
 });
 
@@ -113,11 +113,11 @@ function LoginPage() {
           <div
             onClick={handleLogoClick}
             className="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-primary text-primary-foreground animate-pulse cursor-pointer active:scale-95 transition-transform select-none"
-            title="Geraltest Brasil"
+            title="Quantis Obras"
           >
             <FlaskConical className="h-6 w-6" />
           </div>
-          <CardTitle>Entrar na Geraltest</CardTitle>
+          <CardTitle>Entrar na Quantis Obras</CardTitle>
           <CardDescription>
             {loginType === "cliente"
               ? "Acesse seu painel de agendamentos e obras."

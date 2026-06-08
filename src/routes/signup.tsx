@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { FlaskConical, Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/signup")({
-  head: () => ({ meta: [{ title: "Criar conta — Geraltest Brasil" }] }),
+  head: () => ({ meta: [{ title: "Criar conta — Quantis Obras" }] }),
   component: SignupPage,
 });
 

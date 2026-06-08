@@ -30,7 +30,7 @@ function AuthLayout() {
               <FlaskConical className="h-5 w-5" />
             </div>
             <div className="leading-tight">
-              <div className="text-sm font-bold text-foreground">Geraltest Brasil</div>
+              <div className="text-sm font-bold text-foreground">Quantis Obras</div>
               <div className="text-xs text-muted-foreground">{roleLabel}</div>
             </div>
           </Link>

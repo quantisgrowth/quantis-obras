@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ShieldCheck, ChevronLeft, Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/admin-login")({
-  head: () => ({ meta: [{ title: "Acesso Administrativo — Geraltest Brasil" }] }),
+  head: () => ({ meta: [{ title: "Acesso Administrativo — Quantis Obras" }] }),
   component: AdminLoginPage,
 });
 
@@ -123,7 +123,7 @@ function AdminLoginPage() {
             <div className="space-y-1">
               <CardTitle className="text-xl font-bold text-zinc-100">Painel Administrativo</CardTitle>
               <CardDescription className="text-zinc-500 text-xs">
-                Área de acesso restrito para gerenciamento e auditoria da Geraltest.
+                Área de acesso restrito para gerenciamento e auditoria da Quantis Obras.
               </CardDescription>
             </div>
           </CardHeader>
@@ -137,7 +137,7 @@ function AdminLoginPage() {
                   id="email"
                   type="email"
                   required
-                  placeholder="admin@geraltest.com.br"
+                  placeholder="admin@quantis.com.br"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-amber-500 focus-visible:border-amber-500"

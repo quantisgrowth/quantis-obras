@@ -6,7 +6,7 @@ import { HardHat, FlaskConical, ShieldCheck, Truck } from "lucide-react";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Geraltest Brasil — Controle Tecnológico de Materiais" },
+      { title: "Quantis Obras — Controle Tecnológico de Materiais" },
       { name: "description", content: "Agende ensaios e moldagens com técnicos certificados em Sorocaba, Votorantim, Itu e região." },
     ],
   }),
@@ -22,7 +22,7 @@ function Index() {
             <div className="grid h-9 w-9 place-items-center rounded-md bg-primary text-primary-foreground">
               <FlaskConical className="h-5 w-5" />
             </div>
-            <span className="text-lg font-bold text-foreground">Geraltest Brasil</span>
+            <span className="text-lg font-bold text-foreground">Quantis Obras</span>
           </div>
           <nav className="flex items-center gap-2">
             <Button asChild variant="ghost"><Link to="/login">Entrar</Link></Button>
@@ -74,7 +74,7 @@ function Index() {
       </section>
 
       <footer className="border-t border-border py-8 text-center text-sm text-muted-foreground">
-        © {new Date().getFullYear()} Geraltest Brasil. Sorocaba · Votorantim · Itu · Salto · Boituva.
+        © {new Date().getFullYear()} Quantis Obras. Sorocaba · Votorantim · Itu · Salto · Boituva.
       </footer>
     </div>
   );

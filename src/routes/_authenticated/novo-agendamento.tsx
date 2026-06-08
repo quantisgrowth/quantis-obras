@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/novo-agendamento")({
-  head: () => ({ meta: [{ title: "Novo Agendamento — Geraltest Brasil" }] }),
+  head: () => ({ meta: [{ title: "Novo Agendamento — Quantis Obras" }] }),
   component: NovoAgendamento,
 });
 
@@ -276,7 +276,7 @@ function NovoAgendamento() {
           let { data: empresa } = await supabase.from("empresas_clientes").select("id").eq("cnpj", "12.345.678/0001-99").single();
           let newEmpresaId = empresa?.id;
           if (!newEmpresaId) {
-            const { data: newEmpresa } = await supabase.from("empresas_clientes").insert({ razao_social: "Geraltest Cliente Padrão Ltda", cnpj: "12.345.678/0001-99" }).select("id").single();
+            const { data: newEmpresa } = await supabase.from("empresas_clientes").insert({ razao_social: "Quantis Cliente Padrão Ltda", cnpj: "12.345.678/0001-99" }).select("id").single();
             newEmpresaId = newEmpresa?.id;
           }
           if (newEmpresaId) {
@@ -661,7 +661,7 @@ function NovoAgendamento() {
           data: {
             number: phoneToNotify,
             text:
-            `🛠️ *Geraltest Brasil - Confirmação de Agendamento*\n\n` +
+            `🛠️ *Quantis Obras - Confirmação de Agendamento*\n\n` +
             `Olá, *${userProfile?.nome_completo || user?.email}*!\n` +
             `Seu pedido de controle tecnológico foi criado com sucesso.\n\n` +
             `📝 *Código do Pedido:* ${agendamento.codigo_pedido}\n` +
@@ -1537,7 +1537,7 @@ function NovoAgendamento() {
                 <div className="flex flex-col sm:flex-row gap-3">
                   {/* Botão Falar com Vendedor */}
                   <a
-                    href="https://wa.me/5515981103345?text=Olá%2C%20preciso%20de%20ajuda%20com%20um%20agendamento%20na%20Geraltest%20Brasil!"
+                    href="https://wa.me/5515981103345?text=Olá%2C%20preciso%20de%20ajuda%20com%20um%20agendamento%20na%20Quantis%20Obras!"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-500 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 font-semibold px-4 py-2 text-sm transition-all"

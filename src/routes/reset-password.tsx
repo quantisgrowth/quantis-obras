@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { FlaskConical, Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/reset-password")({
-  head: () => ({ meta: [{ title: "Redefinir Senha — Geraltest Brasil" }] }),
+  head: () => ({ meta: [{ title: "Redefinir Senha — Quantis Obras" }] }),
   component: ResetPasswordPage,
 });
 

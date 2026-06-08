@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera,
+  CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera, Building2,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
   Upload, Eye, EyeOff, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
   Star, Settings2, LogOut
@@ -43,7 +43,7 @@ import {
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  head: () => ({ meta: [{ title: "Painel — Geraltest Brasil" }] }),
+  head: () => ({ meta: [{ title: "Painel — Quantis Obras" }] }),
   component: Dashboard,
 });
 
@@ -199,7 +199,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
         if (!newEmpresaId) {
           const { data: newEmpresa } = await supabase
             .from("empresas_clientes")
-            .insert({ razao_social: "Geraltest Cliente Padrão Ltda", cnpj: "12.345.678/0001-99" })
+            .insert({ razao_social: "Quantis Cliente Padrão Ltda", cnpj: "12.345.678/0001-99" })
             .select("id")
             .single();
           newEmpresaId = newEmpresa?.id;
@@ -954,6 +954,7 @@ function InvitationCountdown({ convidadoEm, onTimeout }: { convidadoEm: string |
 
 function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   const [tecnico, setTecnico] = useState<any>(null);
+  const [empresaVinculada, setEmpresaVinculada] = useState<string>("Quantis Obras");
   const [convites, setConvites] = useState<any[]>([]);
   const [agenda, setAgenda] = useState<any[]>([]);
   const [activeExec, setActiveExec] = useState<any>(null);
@@ -1028,6 +1029,31 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
         return;
       }
       setTecnico(tec);
+
+      // Get the profile (with client company details)
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*, empresas_clientes(razao_social)")
+        .eq("id", userId)
+        .maybeSingle();
+
+      // Get the platform settings
+      const { data: settingsData } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "empresa_plataforma")
+        .maybeSingle();
+
+      let companyName = "Quantis Obras";
+      if (profile?.empresas_clientes?.razao_social) {
+        companyName = profile.empresas_clientes.razao_social;
+      } else if (settingsData?.value) {
+        const val = settingsData.value as any;
+        if (val.razao_social) {
+          companyName = val.razao_social;
+        }
+      }
+      setEmpresaVinculada(companyName);
 
       // Get invitations
       const { data: invList, error: invErr } = await supabase
@@ -1427,10 +1453,16 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
   return (
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <SectionTitle
-          title={`Painel do Técnico — ${tecnico.nome}`}
-          subtitle={`Bem-vindo, ${email}. Gerencie seus convites de serviço e sua escala.`}
-        />
+        <div>
+          <SectionTitle
+            title={`Painel do Técnico — ${tecnico.nome}`}
+            subtitle={`Bem-vindo, ${email}. Gerencie seus convites de serviço e sua escala.`}
+          />
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+            <Building2 className="h-3.5 w-3.5 text-primary" />
+            <span>Empresa Vinculada: <strong className="text-foreground">{empresaVinculada}</strong></span>
+          </div>
+        </div>
         <div className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-emerald-700 dark:text-emerald-500 text-sm font-semibold self-start sm:self-center">
           ⭐ Score de Avaliação: {tecnico.ranking_score ? Number(tecnico.ranking_score).toFixed(1) : "0.0"}
         </div>
@@ -2254,6 +2286,69 @@ function AdminDash() {
   const [selectedSkills, setSelectedSkills] = useState<{ servico_id: string; nivel: number }[]>([]);
   const [submitLoading, setSubmitLoading] = useState(false);
 
+  // Form states for "Meus Dados" (contracting company settings)
+  const [empresaPlataforma, setEmpresaPlataforma] = useState({
+    razao_social: "Quantis Tecnologia Ltda",
+    cnpj: "12.345.678/0001-99",
+    telefone: "(15) 98110-3345",
+    email: "contato@quantis.com.br",
+    endereco: "Av. Paulista, 1000 - São Paulo/SP"
+  });
+  const [loadingEmpresa, setLoadingEmpresa] = useState(false);
+  const [savingEmpresa, setSavingEmpresa] = useState(false);
+
+  const fetchEmpresaPlataforma = async () => {
+    setLoadingEmpresa(true);
+    try {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "empresa_plataforma")
+        .maybeSingle();
+
+      if (error) {
+        console.error("Erro ao buscar dados da empresa:", error);
+      } else if (data && data.value) {
+        const val = data.value as any;
+        setEmpresaPlataforma({
+          razao_social: val.razao_social || "",
+          cnpj: val.cnpj || "",
+          telefone: val.telefone || "",
+          email: val.email || "",
+          endereco: val.endereco || ""
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingEmpresa(false);
+    }
+  };
+
+  const handleSaveEmpresaPlataforma = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingEmpresa(true);
+    try {
+      const { error } = await supabase
+        .from("app_settings")
+        .upsert({
+          key: "empresa_plataforma",
+          value: empresaPlataforma,
+          descricao: "Dados da Empresa contratante da plataforma"
+        });
+
+      if (error) {
+        toast.error(`Erro ao salvar dados: ${error.message}`);
+      } else {
+        toast.success("Dados da empresa salvos com sucesso!");
+      }
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+    } finally {
+      setSavingEmpresa(false);
+    }
+  };
+
   // Form states for admin creation
   const [adminDialogOpen, setAdminDialogOpen] = useState(false);
   const [adminNome, setAdminNome] = useState("");
@@ -2512,6 +2607,7 @@ function AdminDash() {
     fetchLocais();
     fetchAlertas();
     fetchBlockerRequests();
+    fetchEmpresaPlataforma();
   }, []);
 
   useEffect(() => {
@@ -3095,6 +3191,13 @@ function AdminDash() {
           >
             <Clock className="h-4 w-4" /> Bloqueios e Folgas ({blockerRequests.filter(b => b.status === "Pendente").length})
           </TabsTrigger>
+          <TabsTrigger
+            value="meus-dados"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+            onClick={fetchEmpresaPlataforma}
+          >
+            <Building2 className="h-4 w-4" /> Meus Dados
+          </TabsTrigger>
         </TabsList>
 
         {/* ── ABA: GESTÃO DE TÉCNICOS ── */}
@@ -3120,7 +3223,7 @@ function AdminDash() {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="email">E-mail</Label>
-                    <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="joao.tecnico@geraltest.com" />
+                    <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="joao.tecnico@quantisobras.com.br" />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="password">Senha de Acesso (mínimo 6 caracteres)</Label>
@@ -3255,7 +3358,7 @@ function AdminDash() {
                     <ShieldCheck className="h-5 w-5 text-amber-500" />
                     Novo Administrador
                   </DialogTitle>
-                  <DialogDescription>Cadastre as credenciais de acesso para um novo administrador da Geraltest.</DialogDescription>
+                  <DialogDescription>Cadastre as credenciais de acesso para um novo administrador da Quantis Obras.</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateAdmin} className="space-y-4 pt-2">
                   <div className="space-y-1">
@@ -4000,6 +4103,83 @@ function AdminDash() {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        {/* ── ABA: MEUS DADOS ── */}
+        <TabsContent value="meus-dados" className="space-y-6">
+          <Card className="border border-border bg-card shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-primary" /> Dados da Empresa Contratante
+              </CardTitle>
+              <CardDescription>
+                Configure os dados oficiais da empresa que utiliza e contrata a plataforma. Esses dados serão exibidos nos painéis dos técnicos e clientes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingEmpresa ? (
+                <div className="py-8 text-center text-muted-foreground">Carregando dados da empresa...</div>
+              ) : (
+                <form onSubmit={handleSaveEmpresaPlataforma} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="empresa-razao">Razão Social</Label>
+                      <Input
+                        id="empresa-razao"
+                        required
+                        value={empresaPlataforma.razao_social}
+                        onChange={(e) => setEmpresaPlataforma({ ...empresaPlataforma, razao_social: e.target.value })}
+                        placeholder="Ex: Quantis Tecnologia Ltda"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="empresa-cnpj">CNPJ</Label>
+                      <Input
+                        id="empresa-cnpj"
+                        required
+                        value={empresaPlataforma.cnpj}
+                        onChange={(e) => setEmpresaPlataforma({ ...empresaPlataforma, cnpj: e.target.value })}
+                        placeholder="Ex: 00.000.000/0000-00"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="empresa-telefone">Telefone / WhatsApp Comercial</Label>
+                      <Input
+                        id="empresa-telefone"
+                        value={empresaPlataforma.telefone}
+                        onChange={(e) => setEmpresaPlataforma({ ...empresaPlataforma, telefone: e.target.value })}
+                        placeholder="Ex: (15) 99999-9999"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="empresa-email">E-mail Comercial</Label>
+                      <Input
+                        id="empresa-email"
+                        type="email"
+                        value={empresaPlataforma.email}
+                        onChange={(e) => setEmpresaPlataforma({ ...empresaPlataforma, email: e.target.value })}
+                        placeholder="Ex: contato@empresa.com"
+                      />
+                    </div>
+                    <div className="space-y-1 md:col-span-2">
+                      <Label htmlFor="empresa-endereco">Endereço Principal</Label>
+                      <Input
+                        id="empresa-endereco"
+                        value={empresaPlataforma.endereco}
+                        onChange={(e) => setEmpresaPlataforma({ ...empresaPlataforma, endereco: e.target.value })}
+                        placeholder="Ex: Av. Paulista, 1000 - São Paulo/SP"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-4">
+                    <Button type="submit" disabled={savingEmpresa} className="bg-primary hover:bg-primary/90 font-bold">
+                      {savingEmpresa ? "Salvando..." : "Salvar Alterações"}
+                    </Button>
+                  </div>
+                </form>
               )}
             </CardContent>
           </Card>
