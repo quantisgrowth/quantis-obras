@@ -7,7 +7,7 @@ import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera, Building2,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
   Upload, Eye, EyeOff, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
-  Star, Settings2, LogOut
+  Star, Settings2, LogOut, HardHat
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -2618,6 +2618,200 @@ function AdminDash() {
   const [financeSummary, setFinanceSummary] = useState<any>(null);
   const [loadingFinance, setLoadingFinance] = useState(false);
 
+  // Obras Management states
+  const [obrasGestor, setObrasGestor] = useState<any[]>([]);
+  const [empresasClientes, setEmpresasClientes] = useState<any[]>([]);
+  const [loadingObras, setLoadingObras] = useState(false);
+  const [obrasSearch, setObrasSearch] = useState("");
+  const [selectedEmpresaFiltro, setSelectedEmpresaFiltro] = useState("all");
+  const [obraDialogOpen, setObraDialogOpen] = useState(false);
+  const [obraSaving, setObraSaving] = useState(false);
+
+  // Form states for Obra
+  const [obraId, setObraId] = useState<string | null>(null);
+  const [obraEmpresaId, setObraEmpresaId] = useState("");
+  const [obraNome, setObraNome] = useState("");
+  const [obraCep, setObraCep] = useState("");
+  const [obraEndereco, setObraEndereco] = useState("");
+  const [obraNumero, setObraNumero] = useState("");
+  const [obraBairro, setObraBairro] = useState("");
+  const [obraCidade, setObraCidade] = useState("");
+  const [obraEstado, setObraEstado] = useState("");
+  const [obraCno, setObraCno] = useState("");
+  const [obraResponsavel, setObraResponsavel] = useState("");
+  const [obraCargoResponsavel, setObraCargoResponsavel] = useState("");
+  const [obraLat, setObraLat] = useState("");
+  const [obraLng, setObraLng] = useState("");
+  const [fetchingObraCep, setFetchingObraCep] = useState(false);
+
+  const fetchObrasGestor = async () => {
+    setLoadingObras(true);
+    try {
+      const { data, error } = await supabase
+        .from("obras")
+        .select("*, empresa:empresas_clientes(razao_social)")
+        .order("nome_obra", { ascending: true });
+      if (!error && data) {
+        setObrasGestor(data);
+      }
+    } catch (err) {
+      console.error("Error fetching Obras:", err);
+      toast.error("Erro ao carregar obras.");
+    } finally {
+      setLoadingObras(false);
+    }
+  };
+
+  const fetchEmpresasClientes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("empresas_clientes")
+        .select("id, razao_social")
+        .order("razao_social", { ascending: true });
+      if (!error && data) {
+        setEmpresasClientes(data);
+      }
+    } catch (err) {
+      console.error("Error fetching empresas:", err);
+    }
+  };
+
+  const handleObraCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    const clean = rawVal.replace(/\D/g, "");
+    setObraCep(rawVal);
+    
+    if (clean.length === 8) {
+      setFetchingObraCep(true);
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+        const data = await res.json();
+        if (data.erro) {
+          toast.error("CEP não encontrado.");
+        } else {
+          setObraEndereco(data.logradouro || "");
+          setObraBairro(data.bairro || "");
+          setObraCidade(data.localidade || "");
+          setObraEstado(data.uf || "");
+          toast.success("Endereço preenchido com sucesso pelo CEP!");
+        }
+      } catch (err) {
+        console.error("Erro ao buscar CEP:", err);
+        toast.error("Erro ao buscar endereço pelo CEP.");
+      } finally {
+        setFetchingObraCep(false);
+      }
+    }
+  };
+
+  const handleSaveObra = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!obraEmpresaId || !obraNome || !obraEndereco || !obraCidade) {
+      toast.error("Por favor, preencha os campos obrigatórios.");
+      return;
+    }
+    setObraSaving(true);
+    try {
+      const payload = {
+        empresa_id: obraEmpresaId,
+        nome_obra: obraNome,
+        cep: obraCep || null,
+        endereco: obraEndereco,
+        numero: obraNumero || null,
+        bairro: obraBairro || null,
+        cidade: obraCidade,
+        estado: obraEstado || null,
+        cno: obraCno || null,
+        responsavel: obraResponsavel || null,
+        cargo_responsavel: obraCargoResponsavel || null,
+        latitude: obraLat ? Number(obraLat) : null,
+        longitude: obraLng ? Number(obraLng) : null
+      };
+
+      if (obraId) {
+        const { error } = await supabase
+          .from("obras")
+          .update(payload)
+          .eq("id", obraId);
+        if (error) throw error;
+        toast.success("Obra atualizada com sucesso!");
+      } else {
+        const { error } = await supabase
+          .from("obras")
+          .insert(payload);
+        if (error) throw error;
+        toast.success("Obra cadastrada com sucesso!");
+      }
+      setObraDialogOpen(false);
+      fetchObrasGestor();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao salvar obra.");
+    } finally {
+      setObraSaving(false);
+    }
+  };
+
+  const handleDeleteObra = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta obra?")) return;
+    try {
+      const { error } = await supabase
+        .from("obras")
+        .delete()
+        .eq("id", id);
+      
+      if (error) {
+        if (error.code === "23503") {
+          toast.error("Não é possível excluir esta obra pois existem agendamentos/medições vinculados a ela. Reassocie os agendamentos antes de excluí-la.");
+        } else {
+          throw error;
+        }
+      } else {
+        toast.success("Obra excluída com sucesso!");
+        fetchObrasGestor();
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao excluir obra.");
+    }
+  };
+
+  const handleOpenNewObra = () => {
+    setObraId(null);
+    setObraEmpresaId(empresasClientes[0]?.id || "");
+    setObraNome("");
+    setObraCep("");
+    setObraEndereco("");
+    setObraNumero("");
+    setObraBairro("");
+    setObraCidade("");
+    setObraEstado("");
+    setObraCno("");
+    setObraResponsavel("");
+    setObraCargoResponsavel("");
+    setObraLat("");
+    setObraLng("");
+    setObraDialogOpen(true);
+  };
+
+  const handleOpenEditObra = (obra: any) => {
+    setObraId(obra.id);
+    setObraEmpresaId(obra.empresa_id);
+    setObraNome(obra.nome_obra);
+    setObraCep(obra.cep || "");
+    setObraEndereco(obra.endereco);
+    setObraNumero(obra.numero || "");
+    setObraBairro(obra.bairro || "");
+    setObraCidade(obra.cidade);
+    setObraEstado(obra.estado || "");
+    setObraCno(obra.cno || "");
+    setObraResponsavel(obra.responsavel || "");
+    setObraCargoResponsavel(obra.cargo_responsavel || "");
+    setObraLat(obra.latitude?.toString() || "");
+    setObraLng(obra.longitude?.toString() || "");
+    setObraDialogOpen(true);
+  };
+
   // Scale alerts states
   const [scaleAlerts, setScaleAlerts] = useState<any[]>([]);
   const [loadingScaleAlerts, setLoadingScaleAlerts] = useState(false);
@@ -3832,6 +4026,7 @@ function AdminDash() {
   // Sidebar nav items definition
   const sidebarItems = [
     { id: "tecnicos",        label: "Gestão de Técnicos",      icon: Users,        onClick: () => { setActiveTab("tecnicos"); } },
+    { id: "obras",           label: "Gestão de Obras",         icon: HardHat,      onClick: () => { setActiveTab("obras"); fetchObrasGestor(); fetchEmpresasClientes(); } },
     { id: "locais",          label: "Locais de Check-in",      icon: MapPin,        onClick: () => { setActiveTab("locais"); fetchLocais(); } },
     { id: "alertas",         label: "Alertas de Escopo",       icon: AlertTriangle, onClick: () => { setActiveTab("alertas"); fetchAlertas(); }, badge: alertas.length > 0 ? alertas.length : undefined },
     { id: "alertas-escala",  label: "Alertas de Escala",       icon: Clock,         onClick: () => { setActiveTab("alertas-escala"); fetchScaleAlerts(); } },
@@ -5130,6 +5325,143 @@ function AdminDash() {
           </div>
         )}
 
+        {/* ── PAINEL: GESTÃO DE OBRAS ── */}
+        {activeTab === "obras" && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <HardHat className="h-5 w-5 text-primary" /> Gestão de Obras
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Gerencie o catálogo de obras cadastradas, remova duplicidades e adicione novos endereços.
+                </p>
+              </div>
+              <Button onClick={handleOpenNewObra} className="gap-2 font-bold bg-primary hover:bg-primary/90">
+                <Plus className="h-4 w-4" /> Cadastrar Obra
+              </Button>
+            </div>
+
+            {/* Filtros */}
+            <Card className="border border-border bg-card">
+              <CardContent className="py-4 flex flex-col sm:flex-row gap-3">
+                <div className="flex-1">
+                  <Label htmlFor="search-obras" className="sr-only">Buscar Obras</Label>
+                  <Input
+                    id="search-obras"
+                    placeholder="Buscar por nome da obra, endereço, cidade ou responsável..."
+                    value={obrasSearch}
+                    onChange={(e) => setObrasSearch(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="w-full sm:w-64">
+                  <Label htmlFor="filter-empresa" className="sr-only">Empresa</Label>
+                  <select
+                    id="filter-empresa"
+                    value={selectedEmpresaFiltro}
+                    onChange={(e) => setSelectedEmpresaFiltro(e.target.value)}
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="all">Todas as Empresas</option>
+                    {empresasClientes.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.razao_social}</option>
+                    ))}
+                  </select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Listagem */}
+            {loadingObras ? (
+              <div className="py-12 text-center text-muted-foreground animate-pulse">
+                Carregando obras...
+              </div>
+            ) : (() => {
+              const filteredObras = obrasGestor.filter(o => {
+                const matchesSearch = 
+                  o.nome_obra?.toLowerCase().includes(obrasSearch.toLowerCase()) ||
+                  o.endereco?.toLowerCase().includes(obrasSearch.toLowerCase()) ||
+                  o.cidade?.toLowerCase().includes(obrasSearch.toLowerCase()) ||
+                  o.responsavel?.toLowerCase().includes(obrasSearch.toLowerCase());
+                
+                const matchesEmpresa = selectedEmpresaFiltro === "all" || o.empresa_id === selectedEmpresaFiltro;
+                
+                return matchesSearch && matchesEmpresa;
+              });
+
+              if (filteredObras.length === 0) {
+                return (
+                  <Card className="border border-border bg-card p-12 text-center">
+                    <p className="text-muted-foreground">Nenhuma obra encontrada com os filtros selecionados.</p>
+                  </Card>
+                );
+              }
+
+              return (
+                <Card className="border border-border bg-card overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                          <th className="p-4">Obra</th>
+                          <th className="p-4">Empresa / Cliente</th>
+                          <th className="p-4">Endereço</th>
+                          <th className="p-4">Cidade/UF</th>
+                          <th className="p-4">CNO / Responsável</th>
+                          <th className="p-4 text-center">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {filteredObras.map((obra) => (
+                          <tr key={obra.id} className="hover:bg-muted/10 transition-colors">
+                            <td className="p-4 font-bold text-foreground">
+                              {obra.nome_obra}
+                            </td>
+                            <td className="p-4 text-muted-foreground text-xs font-semibold">
+                              {obra.empresa?.razao_social || "Empresa sem nome"}
+                            </td>
+                            <td className="p-4 text-xs text-muted-foreground">
+                              {obra.endereco}{obra.numero ? `, ${obra.numero}` : ""}{obra.bairro ? ` - ${obra.bairro}` : ""}
+                            </td>
+                            <td className="p-4 text-xs">
+                              {obra.cidade}{obra.estado ? `/${obra.estado}` : ""}
+                            </td>
+                            <td className="p-4 text-xs text-muted-foreground">
+                              {obra.cno && <div><span className="font-semibold text-foreground">CNO:</span> {obra.cno}</div>}
+                              {obra.responsavel && <div><span className="font-semibold text-foreground">Resp:</span> {obra.responsavel} {obra.cargo_responsavel ? `(${obra.cargo_responsavel})` : ""}</div>}
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenEditObra(obra)}
+                                  className="h-8 px-2 text-xs font-bold"
+                                >
+                                  Editar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDeleteObra(obra.id)}
+                                  className="h-8 px-2 text-xs font-bold"
+                                >
+                                  Excluir
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              );
+            })()}
+          </div>
+        )}
+
         {/* ── PAINEL: MÓDULO FINANCEIRO ── */}
         {activeTab === "financeiro" && (
           <div className="space-y-8">
@@ -5226,6 +5558,184 @@ function AdminDash() {
             )}
           </div>
         )}
+
+      {/* ── DIALOG: Nova / Edição de Obra ── */}
+      <Dialog open={obraDialogOpen} onOpenChange={setObraDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto border border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+              <HardHat className="h-5 w-5 text-primary" />
+              {obraId ? "Editar Obra" : "Cadastrar Nova Obra"}
+            </DialogTitle>
+            <DialogDescription>
+              Insira os dados cadastrais da obra para ser vinculada aos agendamentos e medições.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveObra} className="space-y-4 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1 md:col-span-2">
+                <Label htmlFor="obra-empresa" className="font-bold">Cliente / Empresa Contratante *</Label>
+                <select
+                  id="obra-empresa"
+                  required
+                  value={obraEmpresaId}
+                  onChange={(e) => setObraEmpresaId(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="" disabled>Selecione uma empresa...</option>
+                  {empresasClientes.map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.razao_social}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1 md:col-span-2">
+                <Label htmlFor="obra-nome" className="font-bold">Nome da Obra *</Label>
+                <Input
+                  id="obra-nome"
+                  required
+                  value={obraNome}
+                  onChange={(e) => setObraNome(e.target.value)}
+                  placeholder="Ex: Residencial Splendor Torres A e B"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="obra-cep" className="font-bold">CEP</Label>
+                <div className="relative">
+                  <Input
+                    id="obra-cep"
+                    value={obraCep}
+                    onChange={handleObraCepChange}
+                    placeholder="00000-000"
+                  />
+                  {fetchingObraCep && (
+                    <span className="absolute right-3 top-2.5 text-xs text-muted-foreground animate-pulse">Buscando...</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="obra-cidade" className="font-bold">Cidade *</Label>
+                <Input
+                  id="obra-cidade"
+                  required
+                  value={obraCidade}
+                  onChange={(e) => setObraCidade(e.target.value)}
+                  placeholder="Ex: Sorocaba"
+                />
+              </div>
+
+              <div className="space-y-1 md:col-span-2">
+                <Label htmlFor="obra-endereco" className="font-bold">Endereço *</Label>
+                <Input
+                  id="obra-endereco"
+                  required
+                  value={obraEndereco}
+                  onChange={(e) => setObraEndereco(e.target.value)}
+                  placeholder="Ex: Av. Engenheiro Carlos Reinaldo Mendes"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 md:col-span-2">
+                <div className="space-y-1 col-span-1">
+                  <Label htmlFor="obra-numero" className="font-bold">Número</Label>
+                  <Input
+                    id="obra-numero"
+                    value={obraNumero}
+                    onChange={(e) => setObraNumero(e.target.value)}
+                    placeholder="123"
+                  />
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <Label htmlFor="obra-bairro" className="font-bold">Bairro</Label>
+                  <Input
+                    id="obra-bairro"
+                    value={obraBairro}
+                    onChange={(e) => setObraBairro(e.target.value)}
+                    placeholder="Parque Campolim"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="obra-estado" className="font-bold">Estado (UF)</Label>
+                <Input
+                  id="obra-estado"
+                  maxLength={2}
+                  value={obraEstado}
+                  onChange={(e) => setObraEstado(e.target.value.toUpperCase())}
+                  placeholder="SP"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="obra-cno" className="font-bold">CNO (Cadastro Nacional de Obras)</Label>
+                <Input
+                  id="obra-cno"
+                  value={obraCno}
+                  onChange={(e) => setObraCno(e.target.value)}
+                  placeholder="00.000.00000/00"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="obra-resp" className="font-bold">Responsável no Campo</Label>
+                <Input
+                  id="obra-resp"
+                  value={obraResponsavel}
+                  onChange={(e) => setObraResponsavel(e.target.value)}
+                  placeholder="Eng. Ricardo Silva"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="obra-cargo" className="font-bold">Cargo do Responsável</Label>
+                <Input
+                  id="obra-cargo"
+                  value={obraCargoResponsavel}
+                  onChange={(e) => setObraCargoResponsavel(e.target.value)}
+                  placeholder="Mestre de Obras / Engenheiro"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="obra-lat" className="font-bold">Latitude (Opcional)</Label>
+                <Input
+                  id="obra-lat"
+                  type="number"
+                  step="any"
+                  value={obraLat}
+                  onChange={(e) => setObraLat(e.target.value)}
+                  placeholder="-23.5489"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="obra-lng" className="font-bold">Longitude (Opcional)</Label>
+                <Input
+                  id="obra-lng"
+                  type="number"
+                  step="any"
+                  value={obraLng}
+                  onChange={(e) => setObraLng(e.target.value)}
+                  placeholder="-46.6388"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="mt-6 border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => setObraDialogOpen(false)} disabled={obraSaving}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={obraSaving} className="bg-primary hover:bg-primary/90 font-bold">
+                {obraSaving ? "Salvando..." : "Salvar Obra"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* ── DIALOG: Nova / Edição de Cidade Atendida ── */}
       <Dialog open={cidadeDialogOpen} onOpenChange={setCidadeDialogOpen}>
