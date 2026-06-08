@@ -181,11 +181,23 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 
   const fetchBookings = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("empresa_id")
+        .eq("id", userId)
+        .single();
+
+      let query = supabase
         .from("agendamentos_medicoes")
-        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos(*)")
-        .eq("criado_por", userId)
-        .order("created_at", { ascending: false });
+        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos(*)");
+
+      if (profile?.empresa_id) {
+        query = query.eq("empresa_id", profile.empresa_id);
+      } else {
+        query = query.eq("criado_por", userId);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
       if (data) setAgendamentos(data);
     } catch (err) {

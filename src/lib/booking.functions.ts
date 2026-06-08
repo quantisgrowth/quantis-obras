@@ -1350,10 +1350,20 @@ export const syncUserRoles = createServerFn({ method: "POST" })
         .from("user_roles")
         .upsert({ user_id: userId, role: "tecnico" }, { onConflict: "user_id,role" });
       
+      // Also sync profiles.tecnico_id to link it with the technician
+      const { error: profileErr } = await supabaseAdmin
+        .from("profiles")
+        .update({ tecnico_id: tecnico.id })
+        .eq("id", userId);
+      
+      if (profileErr) {
+        console.error("Error updating profile with tecnico_id during sync:", profileErr);
+      }
+
       if (roleErr) {
         console.error("Error inserting role during sync:", roleErr);
       } else {
-        console.log(`Successfully synced 'tecnico' role for user ${userId}`);
+        console.log(`Successfully synced 'tecnico' role and profile for user ${userId}`);
         return { roleSynced: "tecnico" };
       }
     }
