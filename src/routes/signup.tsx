@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({ meta: [{ title: "Criar conta — Geraltest Brasil" }] }),
@@ -21,6 +21,7 @@ function SignupPage() {
   const [email, setEmail] = useState("");
   const [telefone, setTelefone] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -65,8 +66,27 @@ function SignupPage() {
               <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="telefone">Telefone</Label>
               <Input id="telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="(15) 99999-9999" /></div>
-            <div className="space-y-2"><Label htmlFor="password">Senha</Label>
-              <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
             <Button type="submit" className="w-full" disabled={loading}>{loading ? "Criando…" : "Criar conta"}</Button>
             <p className="text-center text-sm text-muted-foreground">
               Já tem conta? <Link to="/login" className="font-medium text-primary hover:underline">Entrar</Link>

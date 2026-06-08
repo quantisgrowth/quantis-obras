@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { ShieldCheck, ChevronLeft } from "lucide-react";
+import { ShieldCheck, ChevronLeft, Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/admin-login")({
   head: () => ({ meta: [{ title: "Acesso Administrativo — Geraltest Brasil" }] }),
@@ -19,6 +19,7 @@ function AdminLoginPage() {
   const { user, roles, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Auto-redirect if already logged in and role is verified
@@ -156,15 +157,24 @@ function AdminLoginPage() {
                     Recuperar Senha
                   </button>
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-amber-500 focus-visible:border-amber-500"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-amber-500 focus-visible:border-amber-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <Button
                 type="submit"

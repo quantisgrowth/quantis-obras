@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
-  Upload, Eye, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
+  Upload, Eye, EyeOff, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
   Star, Settings2, LogOut
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -192,7 +192,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
         .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos(*)");
 
       if (profile?.empresa_id) {
-        query = query.eq("empresa_id", profile.empresa_id);
+        query = query.or(`criado_por.eq.${userId},empresa_id.eq.${profile.empresa_id}`);
       } else {
         query = query.eq("criado_por", userId);
       }
@@ -2211,6 +2211,8 @@ function AdminDash() {
   const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   // Form states for technician creation
   const [nome, setNome] = useState("");
@@ -3095,7 +3097,25 @@ function AdminDash() {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="password">Senha de Acesso (mínimo 6 caracteres)</Label>
-                    <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" />
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        required
+                        minLength={6}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
@@ -3221,7 +3241,25 @@ function AdminDash() {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="admin-password">Senha de Acesso (mínimo 6 caracteres)</Label>
-                    <Input id="admin-password" type="password" required minLength={6} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="••••••" />
+                    <div className="relative">
+                      <Input
+                        id="admin-password"
+                        type={showAdminPassword ? "text" : "password"}
+                        required
+                        minLength={6}
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="••••••"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPassword(!showAdminPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="admin-telefone">Telefone / Contato</Label>
