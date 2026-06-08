@@ -1465,95 +1465,211 @@ function NovoAgendamento() {
                   <UserCheck className="h-5 w-5 text-emerald-600 shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-emerald-700">
-                      {tecnicosDisponiveis.length} técnico{tecnicosDisponiveis.length > 1 ? "s" : ""} especializado{tecnicosDisponiveis.length > 1 ? "s" : ""} disponível{tecnicosDisponiveis.length > 1 ? "s" : ""}
+                      Para esta data temos {tecnicosDisponiveis.length} técnico{tecnicosDisponiveis.length > 1 ? "s" : ""} especializado{tecnicosDisponiveis.length > 1 ? "s" : ""} disponível{tecnicosDisponiveis.length > 1 ? "s" : ""}
                     </p>
                     <p className="text-xs text-emerald-600 mt-0.5">
-                      {tecnicosDisponiveis.map((t) => t.nome).join(", ")}
+                      O técnico será confirmado após aceitar a solicitação.
                     </p>
                   </div>
                 </div>
               )}
 
-              <div className="grid gap-6 md:grid-cols-2">
-                {/* Data com calendário filtrado */}
-                <div className="space-y-2">
-                  <Label htmlFor="data-servico" className="text-base font-bold">Data do Serviço</Label>
-                  <input
-                    id="data-servico"
-                    type="date"
-                    required
-                    value={dataServico}
-                    min={new Date(Date.now() + 2 * 86400000).toISOString().split("T")[0]}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (datasDisponiveis.length > 0 && !datasDisponiveis.includes(val)) {
-                        toast.warning("Esta data não tem técnicos disponíveis. Escolha uma data disponível.");
-                        return;
-                      }
-                      setDataServico(val);
-                    }}
-                    style={{ fontSize: "1.1rem", padding: "0.6rem 0.75rem", minHeight: "3rem" }}
-                    className="flex w-full rounded-md border border-input bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  />
-                  {datasDisponiveis.length > 0 && (
-                    <p className="text-xs text-emerald-600 font-medium">
-                      ✅ {datasDisponiveis.length} datas disponíveis nos próximos 60 dias
-                    </p>
-                  )}
-                  {dataServico && !datasDisponiveis.includes(dataServico) && datasDisponiveis.length > 0 && (
-                    <p className="text-xs text-red-500">⚠️ Data sem técnico disponível — escolha outra.</p>
-                  )}
-                </div>
+              {/* ── CALENDÁRIO VISUAL ── */}
+              <div className="space-y-2">
+                <Label className="text-base font-bold">Data do Serviço</Label>
+                {(() => {
+                  // Gera o calendário interativo
+                  const hoje = new Date();
+                  hoje.setHours(0,0,0,0);
 
-                {/* Horário com cálculo automático */}
-                <div className="space-y-2">
-                  <Label htmlFor="hora-servico" className="text-base font-bold">Horário de Chegada na Obra</Label>
-                  <input
-                    id="hora-servico"
-                    type="time"
-                    required
-                    value={horarioNaObra}
-                    onChange={(e) => setHorarioNaObra(e.target.value)}
-                    style={{ fontSize: "1.1rem", padding: "0.6rem 0.75rem", minHeight: "3rem" }}
-                    className="flex w-full rounded-md border border-input bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  />
-                  {horarioNaObra && !isHorarioValido(dataServico, horarioNaObra) && (
-                    <p className="text-xs text-red-500 font-semibold mt-1">
-                      ⚠️ Horário de chegada inválido. Permitido das 07:00 às 17:00 (Seg-Sex) e das 07:00 às 12:00 (Sáb).
-                    </p>
-                  )}
+                  const [calMes, setCalMes] = React.useState(() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 2);
+                    return new Date(d.getFullYear(), d.getMonth(), 1);
+                  });
 
-                  {/* Jornada calculada */}
-                  {horarioNaObra && isHorarioValido(dataServico, horarioNaObra) && (
-                    <div className="rounded-lg bg-muted/40 border border-border p-3 space-y-1.5 mt-1">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock3 className="h-3.5 w-3.5 text-primary" />
-                        <span>Entrada: <strong className="text-foreground">{horarioNaObra}</strong></span>
-                        <span className="text-border">|</span>
-                        <span>Almoço: <strong className="text-foreground">1h</strong></span>
-                        <span className="text-border">|</span>
-                        <span>Saída estimada: <strong className="text-foreground">{horarioFim}</strong></span>
+                  const diasSemana = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+                  const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+                  // Primeiro e último dia do mês exibido
+                  const primeiroDia = new Date(calMes.getFullYear(), calMes.getMonth(), 1);
+                  const ultimoDia  = new Date(calMes.getFullYear(), calMes.getMonth() + 1, 0);
+                  const diasNoMes  = ultimoDia.getDate();
+                  const offsetInicio = primeiroDia.getDay(); // 0=Dom
+
+                  // Limite de exibição: hoje + 62 dias
+                  const limiteMax = new Date(hoje);
+                  limiteMax.setDate(limiteMax.getDate() + 62);
+
+                  const prevMesDisabled = new Date(calMes.getFullYear(), calMes.getMonth(), 1) <= new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+                  const nextMesDisabled = new Date(calMes.getFullYear(), calMes.getMonth() + 1, 1) > new Date(limiteMax.getFullYear(), limiteMax.getMonth(), 1);
+
+                  const cells: (null | Date)[] = [
+                    ...Array(offsetInicio).fill(null),
+                    ...Array.from({ length: diasNoMes }, (_, i) => new Date(calMes.getFullYear(), calMes.getMonth(), i + 1))
+                  ];
+                  // Preencher até múltiplo de 7
+                  while (cells.length % 7 !== 0) cells.push(null);
+
+                  const isoDate = (d: Date) => d.toISOString().split("T")[0];
+
+                  return (
+                    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden w-full">
+                      {/* Header do mês */}
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+                        <button
+                          type="button"
+                          disabled={prevMesDisabled}
+                          onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                          className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          ‹
+                        </button>
+                        <span className="text-sm font-bold text-foreground">
+                          {MESES[calMes.getMonth()]} {calMes.getFullYear()}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={nextMesDisabled}
+                          onClick={() => setCalMes(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                          className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          ›
+                        </button>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">Jornada padrão: 8h trabalho + 1h almoço = 9h total</p>
 
-                      {/* Horas extras */}
-                      {horasExtras > 0 && (
-                        <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5 mt-2">
-                          <p className="text-xs font-semibold text-amber-700">
-                            ⚠️ {horasExtras}h extra{horasExtras > 1 ? "s" : ""} após {dataServico && new Date(dataServico + "T00:00:00").getDay() === 6 ? "12:00" : "17:00"}
-                          </p>
-                          <p className="text-xs text-amber-600 mt-0.5">
-                            Custo adicional: <strong>R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
-                            {" "}(R$ {valorHoraExtra.toFixed(2)}/h)
-                          </p>
-                          <p className="text-[10px] text-amber-500 mt-0.5">Este valor será adicionado ao total do pedido.</p>
-                        </div>
-                      )}
+                      {/* Cabeçalho dias da semana */}
+                      <div className="grid grid-cols-7 border-b border-border">
+                        {diasSemana.map((d, i) => (
+                          <div key={d} className={`py-2 text-center text-[11px] font-bold uppercase tracking-wide ${
+                            i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-muted-foreground"
+                          }`}>
+                            {d}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Grade de dias */}
+                      <div className="grid grid-cols-7">
+                        {cells.map((day, idx) => {
+                          if (!day) return <div key={idx} className="h-12 sm:h-14" />;
+
+                          const iso        = isoDate(day);
+                          const isSelected = dataServico === iso;
+                          const isToday    = isoDate(hoje) === iso;
+                          const isPast     = day < hoje;
+                          const isMin48h   = day < new Date(hoje.getTime() + 2 * 86400000);
+                          const isSun      = day.getDay() === 0;
+                          const isFuture   = day > limiteMax;
+                          const hasVaga    = datasDisponiveis.includes(iso);
+                          const isDisabled = isPast || isMin48h || isSun || isFuture || (datasDisponiveis.length > 0 && !hasVaga);
+
+                          let cellClass = "h-12 sm:h-14 flex flex-col items-center justify-center relative transition-all duration-150 select-none ";
+                          if (isSelected) {
+                            cellClass += "bg-primary text-primary-foreground font-bold rounded-lg m-0.5 shadow-md ";
+                          } else if (isDisabled) {
+                            cellClass += "text-muted-foreground/30 cursor-not-allowed ";
+                          } else {
+                            cellClass += "cursor-pointer hover:bg-accent hover:text-foreground rounded-lg m-0.5 ";
+                            if (hasVaga) cellClass += "text-foreground font-semibold ";
+                          }
+
+                          return (
+                            <button
+                              key={iso}
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => setDataServico(iso)}
+                              className={cellClass}
+                            >
+                              <span className={`text-sm ${isToday && !isSelected ? "underline decoration-dotted" : ""}`}>
+                                {day.getDate()}
+                              </span>
+                              {hasVaga && !isDisabled && !isSelected && (
+                                <span className="absolute bottom-1 h-1 w-1 rounded-full bg-emerald-500" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Legenda */}
+                      <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-t border-border bg-muted/20 text-[11px] text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                          Data disponível
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-primary" />
+                          Selecionada
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+                          Indisponível
+                        </span>
+                      </div>
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
+
+                {/* Data selecionada — leitura */}
+                {dataServico && (
+                  <p className="text-sm font-semibold text-emerald-700 mt-1">
+                    ✅ {new Date(dataServico + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
+                  </p>
+                )}
+                {dataServico && !datasDisponiveis.includes(dataServico) && datasDisponiveis.length > 0 && (
+                  <p className="text-xs text-red-500">⚠️ Data sem técnico disponível — escolha outra.</p>
+                )}
               </div>
 
+              {/* Horário de Chegada */}
+              <div className="space-y-2">
+                <Label htmlFor="hora-servico" className="text-base font-bold">Horário de Chegada na Obra</Label>
+                <input
+                  id="hora-servico"
+                  type="time"
+                  required
+                  value={horarioNaObra}
+                  onChange={(e) => setHorarioNaObra(e.target.value)}
+                  style={{ fontSize: "1.1rem", padding: "0.6rem 0.75rem", minHeight: "3rem" }}
+                  className="flex w-full rounded-md border border-input bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+                {horarioNaObra && !isHorarioValido(dataServico, horarioNaObra) && (
+                  <p className="text-xs text-red-500 font-semibold mt-1">
+                    ⚠️ Horário de chegada inválido. Permitido das 07:00 às 17:00 (Seg-Sex) e das 07:00 às 12:00 (Sáb).
+                  </p>
+                )}
+
+                {/* Jornada calculada */}
+                {horarioNaObra && isHorarioValido(dataServico, horarioNaObra) && (
+                  <div className="rounded-lg bg-muted/40 border border-border p-3 space-y-1.5 mt-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <Clock3 className="h-3.5 w-3.5 text-primary" />
+                      <span>Entrada: <strong className="text-foreground">{horarioNaObra}</strong></span>
+                      <span className="text-border">|</span>
+                      <span>Almoço: <strong className="text-foreground">1h</strong></span>
+                      <span className="text-border">|</span>
+                      <span>Saída estimada: <strong className="text-foreground">{horarioFim}</strong></span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Jornada padrão: 8h trabalho + 1h almoço = 9h total</p>
+
+                    {/* Horas extras */}
+                    {horasExtras > 0 && (
+                      <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5 mt-2">
+                        <p className="text-xs font-semibold text-amber-700">
+                          ⚠️ {horasExtras}h extra{horasExtras > 1 ? "s" : ""} após {dataServico && new Date(dataServico + "T00:00:00").getDay() === 6 ? "12:00" : "17:00"}
+                        </p>
+                        <p className="text-xs text-amber-600 mt-0.5">
+                          Custo adicional: <strong>R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>
+                          {" "}(R$ {valorHoraExtra.toFixed(2)}/h)
+                        </p>
+                        <p className="text-[10px] text-amber-500 mt-0.5">Este valor será adicionado ao total do pedido.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="obs" className="text-base font-bold">Observações / Recomendações Especiais</Label>
                 <textarea
