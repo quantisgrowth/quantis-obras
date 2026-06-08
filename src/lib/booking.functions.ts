@@ -161,7 +161,7 @@ export const createBooking = createServerFn({ method: "POST" })
     // Load city costs (only once)
     const { data: cidade } = await supabase
       .from("cidades_atendidas")
-      .select("mobilizacao_base, pedagio_estimado")
+      .select("id, mobilizacao_base, pedagio_estimado")
       .ilike("nome_cidade", cidadeObra || "")
       .maybeSingle();
     const mobilizacao = cidade ? Number(cidade.mobilizacao_base) || 0 : 0;
@@ -215,19 +215,38 @@ export const createBooking = createServerFn({ method: "POST" })
       }
 
       // Load service details
-      const { data: servicoPub } = await supabase
-        .from("servicos_catalogo_pub")
-        .select("id, valor_venda_editavel, ativo, categoria, nome_servico")
+      const { data: servicoCatalog } = await supabase
+        .from("servicos_catalogo")
+        .select("*")
         .eq("id", selectedSvc.servico_id)
         .single();
 
-      if (!servicoPub || !servicoPub.ativo) {
+      if (!servicoCatalog || !servicoCatalog.ativo) {
         throw new Error("Serviço inválido ou inativo: " + selectedSvc.servico_id);
       }
 
-      const servicePrice = Number(servicoPub.valor_venda_editavel) || 0;
-      const serviceCategory = servicoPub.categoria || "";
-      const nomeServico = servicoPub.nome_servico || "";
+      let servicePrice = Number(servicoCatalog.valor_venda_editavel) || 0;
+      let requireManualQuote = false;
+
+      if (cidade?.id) {
+        const { data: precoCidade } = await supabase
+          .from("servicos_precos_cidades")
+          .select("*")
+          .eq("servico_id", selectedSvc.servico_id)
+          .eq("cidade_id", cidade.id)
+          .maybeSingle();
+
+        if (precoCidade) {
+          servicePrice = Number(precoCidade.valor_fixo);
+        } else {
+          requireManualQuote = true;
+        }
+      } else {
+        requireManualQuote = true;
+      }
+
+      const serviceCategory = servicoCatalog.categoria || "";
+      const nomeServico = servicoCatalog.nome_servico || "";
 
       // Determine service type and calculate quantity/cost
       let cpsContratados = 0;
@@ -246,15 +265,31 @@ export const createBooking = createServerFn({ method: "POST" })
 
       if (isConcrete && selectedSvc.idades_cp && selectedSvc.qtd_caminhoes) {
         cpsContratados = selectedSvc.idades_cp.reduce((acc, i) => acc + i.qtd, 0) * selectedSvc.qtd_caminhoes;
-        rawServiceCost = cpsContratados * servicePrice;
       } else if (isArrancamento && selectedSvc.qtd_ensaios && selectedSvc.pontos_por_ensaio) {
         const totalPoints = selectedSvc.qtd_ensaios * selectedSvc.pontos_por_ensaio;
         cpsContratados = totalPoints;
-        rawServiceCost = totalPoints * servicePrice;
       } else {
         const qty = selectedSvc.quantidade || 1;
         cpsContratados = qty;
-        rawServiceCost = qty * servicePrice;
+      }
+
+      // Check CP/quantity limit:
+      if (cidade?.id) {
+        const { data: precoCidade } = await supabase
+          .from("servicos_precos_cidades")
+          .select("limite_unidades")
+          .eq("servico_id", selectedSvc.servico_id)
+          .eq("cidade_id", cidade.id)
+          .maybeSingle();
+        if (precoCidade && cpsContratados > precoCidade.limite_unidades) {
+          requireManualQuote = true;
+        }
+      }
+
+      if (servicoCatalog.tipo_cobranca === "Por Unidade" || servicoCatalog.tipo_cobranca === "Por Hora") {
+        rawServiceCost = cpsContratados * servicePrice;
+      } else {
+        rawServiceCost = servicePrice;
       }
 
       // Mobilization, tolls, and overtime are charged ONLY on the first service in the list
@@ -304,6 +339,8 @@ export const createBooking = createServerFn({ method: "POST" })
         status_pagamento: statusPagamento,
         forma_pagamento: formaPagamentoDb,
         status_agendamento: "Pendente_Tecnico",
+        is_orcamento_manual: requireManualQuote,
+        orcamento_aprovado: !requireManualQuote,
         valor_subtotal: +subtotal.toFixed(2),
         valor_desconto: desconto,
         valor_imposto_12: imposto,
@@ -1785,4 +1822,188 @@ export const getTechnicianRatings = createServerFn({ method: "POST" })
     if (error) throw error;
     return data || [];
   });
+
+export const saveServico = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    id: z.string().uuid().optional(),
+    sku: z.string().min(1),
+    nome_servico: z.string().min(1),
+    unidade: z.string().min(1),
+    valor_custo_base: z.number().min(0),
+    valor_venda_editavel: z.number().min(0),
+    equipamentos_inclusos: z.array(z.string()).optional(),
+    categoria: z.string().min(1),
+    ativo: z.boolean().default(true),
+    descricao: z.string().optional(),
+    tipo_cobranca: z.string().default("Por Execucao"),
+    formas_pagamento_aceitas: z.array(z.string()).default(["PIX", "Boleto", "Cartao"]),
+    regra_minimo_a_vista: z.number().default(1000.00)
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem gerenciar serviços.");
+
+    const row = {
+      sku: input.sku,
+      nome_servico: input.nome_servico,
+      unidade: input.unidade,
+      valor_custo_base: input.valor_custo_base,
+      valor_venda_editavel: input.valor_venda_editavel,
+      equipamentos_inclusos: input.equipamentos_inclusos || [],
+      categoria: input.categoria,
+      ativo: input.ativo,
+      descricao: input.descricao || null,
+      tipo_cobranca: input.tipo_cobranca,
+      formas_pagamento_aceitas: input.formas_pagamento_aceitas,
+      regra_minimo_a_vista: input.regra_minimo_a_vista
+    };
+
+    if (input.id) {
+      const { data, error } = await supabase
+        .from("servicos_catalogo")
+        .update(row)
+        .eq("id", input.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return { success: true, data };
+    } else {
+      const { data, error } = await supabase
+        .from("servicos_catalogo")
+        .insert(row)
+        .select()
+        .single();
+      if (error) throw error;
+      return { success: true, data };
+    }
+  });
+
+export const saveServicoPrecoCidade = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    id: z.string().uuid().optional(),
+    servicoId: z.string().uuid(),
+    cidadeId: z.string().uuid(),
+    valorFixo: z.number().min(0),
+    limiteUnidades: z.number().int().min(1).default(50)
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem gerenciar precificação por cidade.");
+
+    const row = {
+      servico_id: input.servicoId,
+      cidade_id: input.cidadeId,
+      valor_fixo: input.valorFixo,
+      limite_unidades: input.limiteUnidades
+    };
+
+    if (input.id) {
+      const { error } = await supabase
+        .from("servicos_precos_cidades")
+        .update(row)
+        .eq("id", input.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("servicos_precos_cidades")
+        .upsert(row, { onConflict: "servico_id,cidade_id" });
+      if (error) throw error;
+    }
+
+    return { success: true };
+  });
+
+export const calculateBookingPrice = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    servicoId: z.string().uuid(),
+    cidadeId: z.string().uuid().optional().nullable(),
+    quantidade: z.number().min(0)
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase } = context;
+
+    // 1. Fetch service details
+    const { data: servico, error: sError } = await supabase
+      .from("servicos_catalogo")
+      .select("*")
+      .eq("id", input.servicoId)
+      .single();
+
+    if (sError || !servico) throw new Error("Serviço não encontrado.");
+
+    if (!input.cidadeId) {
+      return {
+        success: true,
+        valorTotal: 0,
+        requireManualQuote: true,
+        reason: "Cidade não selecionada ou não atendida."
+      };
+    }
+
+    // 2. Fetch city custom price
+    const { data: precoCidade, error: pError } = await supabase
+      .from("servicos_precos_cidades")
+      .select("*")
+      .eq("servico_id", input.servicoId)
+      .eq("cidade_id", input.cidadeId)
+      .maybeSingle();
+
+    if (pError || !precoCidade) {
+      return {
+        success: true,
+        valorTotal: 0,
+        requireManualQuote: true,
+        reason: "Cidade sem preço fixo cadastrado para este serviço."
+      };
+    }
+
+    // 3. Check quantity limit
+    if (input.quantidade > precoCidade.limite_unidades) {
+      return {
+        success: true,
+        valorTotal: 0,
+        requireManualQuote: true,
+        reason: `A quantidade de CPs/unidades (${input.quantidade}) ultrapassa o limite máximo (${precoCidade.limite_unidades}) estabelecido para preço fixo nesta cidade.`
+      };
+    }
+
+    // 4. Calculate total price based on charging type
+    let valorTotal = 0;
+    if (servico.tipo_cobranca === "Por Unidade" || servico.tipo_cobranca === "Por Hora") {
+      valorTotal = Number(precoCidade.valor_fixo) * input.quantidade;
+    } else {
+      // Por Execucao (flat fee)
+      valorTotal = Number(precoCidade.valor_fixo);
+    }
+
+    // 5. Check if it requires upfront payment
+    const requireUpfrontPayment = valorTotal < Number(servico.regra_minimo_a_vista);
+
+    return {
+      success: true,
+      valorTotal,
+      requireManualQuote: false,
+      requireUpfrontPayment,
+      formasPagamento: servico.formas_pagamento_aceitas,
+      regraMinimo: servico.regra_minimo_a_vista
+    };
+  });
+
 

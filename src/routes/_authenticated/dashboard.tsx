@@ -2571,6 +2571,200 @@ function AdminDash() {
   const [loadingEmpresa, setLoadingEmpresa] = useState(false);
   const [savingEmpresa, setSavingEmpresa] = useState(false);
 
+  // Products/Services states
+  const [servicos, setServicos] = useState<any[]>([]);
+  const [cidades, setCidades] = useState<any[]>([]);
+  const [loadingServicos, setLoadingServicos] = useState(false);
+  const [servicoDialogOpen, setServicoDialogOpen] = useState(false);
+  const [selectedServico, setSelectedServico] = useState<any | null>(null);
+
+  // Form states for service creation/edition
+  const [servicoSku, setServicoSku] = useState("");
+  const [servicoNome, setServicoNome] = useState("");
+  const [servicoUnidade, setServicoUnidade] = useState("");
+  const [servicoCustoBase, setServicoCustoBase] = useState(0);
+  const [servicoVendaEditavel, setServicoVendaEditavel] = useState(0);
+  const [servicoCategoria, setServicoCategoria] = useState("");
+  const [servicoAtivo, setServicoAtivo] = useState(true);
+  const [servicoDescricao, setServicoDescricao] = useState("");
+  const [servicoTipoCobranca, setServicoTipoCobranca] = useState("Por Execucao");
+  const [servicoFormasPagamento, setServicoFormasPagamento] = useState<string[]>(["PIX", "Boleto", "Cartao"]);
+  const [servicoRegraMinimo, setServicoRegraMinimo] = useState(1000.00);
+  const [servicoSaving, setServicoSaving] = useState(false);
+
+  // City pricing states
+  const [precosCidadeOpen, setPrecosCidadeOpen] = useState(false);
+  const [pricingCityRates, setPricingCityRates] = useState<{ [cidadeId: string]: { valorFixo: number; limiteUnidades: number; id?: string } }>({});
+  const [savingCityRates, setSavingCityRates] = useState<string | null>(null);
+
+  const fetchAllServicos = async () => {
+    setLoadingServicos(true);
+    try {
+      const { data, error } = await supabase
+        .from("servicos_catalogo")
+        .select("*")
+        .order("nome_servico", { ascending: true });
+      if (error) throw error;
+      setServicos(data || []);
+    } catch (err) {
+      console.error("Error fetching servicos:", err);
+      toast.error("Erro ao carregar serviços.");
+    } finally {
+      setLoadingServicos(false);
+    }
+  };
+
+  const fetchAllCidades = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("cidades_atendidas")
+        .select("*")
+        .order("nome_cidade", { ascending: true });
+      if (error) throw error;
+      setCidades(data || []);
+    } catch (err) {
+      console.error("Error fetching cidades:", err);
+    }
+  };
+
+  const handleOpenServicoDialog = (serv: any | null = null) => {
+    setSelectedServico(serv);
+    if (serv) {
+      setServicoSku(serv.sku);
+      setServicoNome(serv.nome_servico);
+      setServicoUnidade(serv.unidade);
+      setServicoCustoBase(Number(serv.valor_custo_base));
+      setServicoVendaEditavel(Number(serv.valor_venda_editavel));
+      setServicoCategoria(serv.categoria);
+      setServicoAtivo(serv.ativo);
+      setServicoDescricao(serv.descricao || "");
+      setServicoTipoCobranca(serv.tipo_cobranca || "Por Execucao");
+      setServicoFormasPagamento(serv.formas_pagamento_aceitas || ["PIX", "Boleto", "Cartao"]);
+      setServicoRegraMinimo(Number(serv.regra_minimo_a_vista ?? 1000.00));
+    } else {
+      setServicoSku("");
+      setServicoNome("");
+      setServicoUnidade("unidade");
+      setServicoCustoBase(0);
+      setServicoVendaEditavel(0);
+      setServicoCategoria("Controle Tecnológico");
+      setServicoAtivo(true);
+      setServicoDescricao("");
+      setServicoTipoCobranca("Por Execucao");
+      setServicoFormasPagamento(["PIX", "Boleto", "Cartao"]);
+      setServicoRegraMinimo(1000.00);
+    }
+    setServicoDialogOpen(true);
+  };
+
+  const handleSaveServicoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setServicoSaving(true);
+    try {
+      const { saveServico } = await import("@/lib/booking.functions");
+      const res = await saveServico({
+        data: {
+          id: selectedServico?.id,
+          sku: servicoSku,
+          nome_servico: servicoNome,
+          unidade: servicoUnidade,
+          valor_custo_base: servicoCustoBase,
+          valor_venda_editavel: servicoVendaEditavel,
+          categoria: servicoCategoria,
+          ativo: servicoAtivo,
+          descricao: servicoDescricao,
+          tipo_cobranca: servicoTipoCobranca,
+          formas_pagamento_aceitas: servicoFormasPagamento,
+          regra_minimo_a_vista: servicoRegraMinimo
+        }
+      });
+      if (res.success) {
+        toast.success("Serviço salvo com sucesso!");
+        setServicoDialogOpen(false);
+        fetchAllServicos();
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao salvar serviço.");
+    } finally {
+      setServicoSaving(false);
+    }
+  };
+
+  const handleOpenPrecosCidade = async (serv: any) => {
+    setSelectedServico(serv);
+    setPrecosCidadeOpen(true);
+    setLoadingServicos(true);
+    try {
+      const { data: precos, error } = await supabase
+        .from("servicos_precos_cidades")
+        .select("*")
+        .eq("servico_id", serv.id);
+      if (error) throw error;
+
+      await fetchAllCidades();
+
+      const mapping: any = {};
+      precos?.forEach((p: any) => {
+        mapping[p.cidade_id] = {
+          id: p.id,
+          valorFixo: Number(p.valor_fixo),
+          limiteUnidades: Number(p.limite_unidades)
+        };
+      });
+
+      setPricingCityRates(mapping);
+    } catch (err) {
+      console.error("Error loading pricing rates:", err);
+      toast.error("Erro ao carregar precificação regional.");
+    } finally {
+      setLoadingServicos(false);
+    }
+  };
+
+  const handleSaveCityPriceRate = async (cidadeId: string) => {
+    const rate = pricingCityRates[cidadeId];
+    if (!rate || rate.valorFixo === undefined) {
+      toast.error("Por favor, preencha o valor fixo.");
+      return;
+    }
+    setSavingCityRates(cidadeId);
+    try {
+      const { saveServicoPrecoCidade } = await import("@/lib/booking.functions");
+      const res = await saveServicoPrecoCidade({
+        data: {
+          id: rate.id,
+          servicoId: selectedServico.id,
+          cidadeId: cidadeId,
+          valorFixo: Number(rate.valorFixo),
+          limiteUnidades: Number(rate.limiteUnidades ?? 50)
+        }
+      });
+      if (res.success) {
+        toast.success("Preço regional atualizado!");
+        const { data: precos } = await supabase
+          .from("servicos_precos_cidades")
+          .select("*")
+          .eq("servico_id", selectedServico.id);
+
+        const mapping: any = {};
+        precos?.forEach((p: any) => {
+          mapping[p.cidade_id] = {
+            id: p.id,
+            valorFixo: Number(p.valor_fixo),
+            limiteUnidades: Number(p.limite_unidades)
+          };
+        });
+        setPricingCityRates(mapping);
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao salvar preço regional.");
+    } finally {
+      setSavingCityRates(null);
+    }
+  };
+
   const fetchEmpresaPlataforma = async () => {
     setLoadingEmpresa(true);
     try {
@@ -3471,6 +3665,13 @@ function AdminDash() {
             onClick={fetchEmpresaPlataforma}
           >
             <Building2 className="h-4 w-4" /> Meus Dados
+          </TabsTrigger>
+          <TabsTrigger
+            value="produtos"
+            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+            onClick={fetchAllServicos}
+          >
+            <FlaskConical className="h-4 w-4" /> Produtos & Serviços
           </TabsTrigger>
         </TabsList>
 
@@ -4457,8 +4658,303 @@ function AdminDash() {
               )}
             </CardContent>
           </Card>
+         </TabsContent>
+
+        {/* ── ABA: PRODUTOS & SERVIÇOS ── */}
+        <TabsContent value="produtos" className="space-y-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold text-foreground">Catálogo de Serviços</h3>
+            <Button
+              className="gap-2 bg-primary hover:bg-primary/90 font-bold cursor-pointer"
+              onClick={() => handleOpenServicoDialog(null)}
+            >
+              <Plus className="h-4 w-4" />
+              Cadastrar Produto/Serviço
+            </Button>
+          </div>
+
+          {loadingServicos && servicos.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground animate-pulse">Carregando catálogo...</div>
+          ) : servicos.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground border border-dashed rounded-lg">Nenhum serviço cadastrado ainda.</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {servicos.map((serv) => (
+                <Card key={serv.id} className="border border-border bg-card shadow-sm hover:shadow-md transition-all">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <Badge variant={serv.ativo ? "default" : "secondary"}>
+                        {serv.ativo ? "Ativo" : "Inativo"}
+                      </Badge>
+                      <span className="text-[10px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                        SKU: {serv.sku}
+                      </span>
+                    </div>
+                    <CardTitle className="text-base font-bold mt-2 text-foreground line-clamp-1">
+                      {serv.nome_servico}
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                      {serv.descricao || "Sem descrição cadastrada."}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pb-4">
+                    <div className="grid grid-cols-2 gap-2 text-xs border-t pt-3">
+                      <div>
+                        <span className="text-muted-foreground block text-[10px]">Categoria</span>
+                        <span className="font-semibold text-foreground">{serv.categoria}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[10px]">Cobrança</span>
+                        <span className="font-semibold text-foreground">{serv.tipo_cobranca}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[10px]">Unidade</span>
+                        <span className="font-semibold text-foreground">{serv.unidade}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[10px]">Mínimo à Vista</span>
+                        <span className="font-semibold text-foreground">R$ {Number(serv.regra_minimo_a_vista).toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-2 border-t mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs"
+                        onClick={() => handleOpenServicoDialog(serv)}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                        onClick={() => handleOpenPrecosCidade(serv)}
+                      >
+                        Cidades e Preços
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
+
+      {/* Modal de Configuração de Preço por Cidade */}
+      {precosCidadeOpen && selectedServico && (
+        <Dialog open={precosCidadeOpen} onOpenChange={setPrecosCidadeOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto border border-border bg-card">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+                <MapPin className="h-5 w-5 text-indigo-500" />
+                Preço por Cidade — {selectedServico.nome_servico}
+              </DialogTitle>
+              <DialogDescription>
+                Defina os valores fixos e limites de CPs/unidades de cobrança para cada cidade atendida.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 pt-4">
+              {cidades.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhuma cidade cadastrada no sistema.</p>
+              ) : (
+                <div className="space-y-3">
+                  {cidades.map((cidade) => {
+                    const rate = pricingCityRates[cidade.id] || { valorFixo: 0, limiteUnidades: 50 };
+                    const isSaving = savingCityRates === cidade.id;
+                    return (
+                      <div key={cidade.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border border-border rounded-lg bg-muted/20 gap-3">
+                        <div className="flex-1">
+                          <span className="font-semibold text-foreground text-sm block">{cidade.nome_cidade}</span>
+                          <span className="text-[10px] text-muted-foreground">Pedágio Estimado: R$ {Number(cidade.pedagio_estimado).toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-28 space-y-1">
+                            <label className="text-[10px] text-muted-foreground block">Valor Fixo</label>
+                            <Input
+                              type="number"
+                              className="h-8 text-xs bg-background border-border text-foreground"
+                              value={rate.valorFixo}
+                              onChange={(e) => setPricingCityRates({
+                                ...pricingCityRates,
+                                [cidade.id]: { ...rate, valorFixo: Number(e.target.value) }
+                              })}
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div className="w-24 space-y-1">
+                            <label className="text-[10px] text-muted-foreground block">Limite CPs/Unid</label>
+                            <Input
+                              type="number"
+                              className="h-8 text-xs bg-background border-border text-foreground"
+                              value={rate.limiteUnidades}
+                              onChange={(e) => setPricingCityRates({
+                                ...pricingCityRates,
+                                [cidade.id]: { ...rate, limiteUnidades: Number(e.target.value) }
+                              })}
+                              placeholder="50"
+                            />
+                          </div>
+                          <div className="self-end pb-0.5">
+                            <Button
+                              size="sm"
+                              disabled={isSaving}
+                              onClick={() => handleSaveCityPriceRate(cidade.id)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-8 text-xs px-3"
+                            >
+                              {isSaving ? "Salvar..." : "Salvar"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="border-t pt-4 mt-6">
+              <Button variant="outline" onClick={() => setPrecosCidadeOpen(false)}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal de Cadastro/Edição de Serviço */}
+      {servicoDialogOpen && (
+        <Dialog open={servicoDialogOpen} onOpenChange={setServicoDialogOpen}>
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto border border-border bg-card">
+            <DialogHeader>
+              <DialogTitle>{selectedServico ? "Editar Serviço" : "Novo Serviço"}</DialogTitle>
+              <DialogDescription>Cadastre ou modifique informações do catálogo de produtos/serviços.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSaveServicoSubmit} className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="sku">SKU / Código</Label>
+                  <Input id="sku" required value={servicoSku} onChange={(e) => setServicoSku(e.target.value)} placeholder="ENS-CP-01" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="categoria">Categoria</Label>
+                  <select
+                    id="categoria"
+                    value={servicoCategoria}
+                    onChange={(e) => setServicoCategoria(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
+                  >
+                    <option value="Controle Tecnológico">Controle Tecnológico</option>
+                    <option value="Solo / Asfalto">Solo / Asfalto</option>
+                    <option value="Arrancamento">Arrancamento</option>
+                    <option value="Blocos / Prismas">Blocos / Prismas</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="nome_servico">Nome do Serviço</Label>
+                <Input id="nome_servico" required value={servicoNome} onChange={(e) => setServicoNome(e.target.value)} placeholder="Moldagem e Ensaio de CPs" />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="descricao">Descrição Detalhada</Label>
+                <Textarea
+                  id="descricao"
+                  value={servicoDescricao}
+                  onChange={(e) => setServicoDescricao(e.target.value)}
+                  placeholder="Descreva o escopo do serviço para o cliente..."
+                  className="min-h-[80px] bg-background border-border text-foreground"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="unidade">Unidade de Medida</Label>
+                  <Input id="unidade" required value={servicoUnidade} onChange={(e) => setServicoUnidade(e.target.value)} placeholder="m³ ou unidade" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="tipo_cobranca">Forma de Cobrança</Label>
+                  <select
+                    id="tipo_cobranca"
+                    value={servicoTipoCobranca}
+                    onChange={(e) => setServicoTipoCobranca(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
+                  >
+                    <option value="Por Execucao">Por Execução (Fixo)</option>
+                    <option value="Por Unidade">Por Unidade</option>
+                    <option value="Por Hora">Por Hora</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="custo_base">Custo Base (R$)</Label>
+                  <Input id="custo_base" type="number" required value={servicoCustoBase} onChange={(e) => setServicoCustoBase(Number(e.target.value))} placeholder="0.00" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="venda_editavel">Venda Base (R$)</Label>
+                  <Input id="venda_editavel" type="number" required value={servicoVendaEditavel} onChange={(e) => setServicoVendaEditavel(Number(e.target.value))} placeholder="0.00" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 border-t pt-3">
+                <div className="space-y-1">
+                  <Label htmlFor="regra_minimo">Faturamento Mínimo para a Vista (R$)</Label>
+                  <Input id="regra_minimo" type="number" required value={servicoRegraMinimo} onChange={(e) => setServicoRegraMinimo(Number(e.target.value))} placeholder="1000.00" />
+                  <p className="text-[10px] text-muted-foreground">Pedidos abaixo deste valor exigirão pagamento à vista imediato.</p>
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t pt-3">
+                <Label>Formas de Pagamento Aceitas</Label>
+                <div className="flex gap-4 text-sm">
+                  {["PIX", "Boleto", "Cartao"].map((forma) => (
+                    <label key={forma} className="flex items-center gap-2 cursor-pointer text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={servicoFormasPagamento.includes(forma)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setServicoFormasPagamento([...servicoFormasPagamento, forma]);
+                          } else {
+                            setServicoFormasPagamento(servicoFormasPagamento.filter((f) => f !== forma));
+                          }
+                        }}
+                      />
+                      {forma}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 border-t pt-3">
+                <input
+                  type="checkbox"
+                  id="ativo"
+                  checked={servicoAtivo}
+                  onChange={(e) => setServicoAtivo(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <Label htmlFor="ativo" className="cursor-pointer">Serviço Ativo no Catálogo</Label>
+              </div>
+
+              <DialogFooter className="border-t pt-4">
+                <Button type="button" variant="outline" onClick={() => setServicoDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={servicoSaving} className="bg-primary hover:bg-primary/90 font-bold">
+                  {servicoSaving ? "Salvando..." : "Salvar Serviço"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Detalhes e Edição do Técnico */}
       {selectedTecnico && (

@@ -111,6 +111,8 @@ interface ConfiguredService {
   qtd_ensaios?: number;
   pontos_por_ensaio?: number;
   quantidade?: number;
+  is_orcamento_manual?: boolean;
+  reason_manual_quote?: string;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -164,6 +166,89 @@ function NovoAgendamento() {
   const [currentQtdEnsaios, setCurrentQtdEnsaios] = useState(1);
   const [currentPontosPorEnsaio, setCurrentPontosPorEnsaio] = useState(16);
   const [currentQuantidade, setCurrentQuantidade] = useState(1);
+
+  // Dynamic Pricing States
+  const [priceCalculation, setPriceCalculation] = useState<{
+    valorTotal: number;
+    requireManualQuote: boolean;
+    reason?: string;
+    requireUpfrontPayment?: boolean;
+    formasPagamento?: string[];
+    regraMinimo?: number;
+  } | null>(null);
+  const [calculatingPrice, setCalculatingPrice] = useState(false);
+
+  useEffect(() => {
+    if (!currentServiceId) return;
+
+    const selectedCityName = getSelectedObraCity();
+    const cityObj = cidades.find(c => c.nome_cidade.toLowerCase() === selectedCityName.toLowerCase());
+    const cityId = cityObj?.id;
+
+    const currentService = servicos.find((s) => s.id === currentServiceId);
+    if (!currentService) return;
+
+    const isConcrete = 
+      currentService.nome_servico.toLowerCase().includes("concreto") ||
+      currentService.nome_servico.toLowerCase().includes("graute") ||
+      currentService.nome_servico.toLowerCase().includes("argamassa") ||
+      currentService.nome_servico.toLowerCase().includes("cp") ||
+      currentService.categoria.toLowerCase().includes("concreto");
+
+    const isArrancamento = 
+      currentService.nome_servico.toLowerCase().includes("arrancamento") ||
+      currentService.categoria.toLowerCase().includes("arrancamento");
+
+    let qty = 1;
+    if (isConcrete) {
+      const currentQtdCaminhoes = Math.ceil(currentVolume / currentBetoneiraSize);
+      qty = currentIdadesCP.reduce((acc, i) => acc + i.qtd, 0) * currentQtdCaminhoes;
+    } else if (isArrancamento) {
+      qty = currentQtdEnsaios * currentPontosPorEnsaio;
+    } else {
+      qty = currentQuantidade;
+    }
+
+    let active = true;
+    const updatePrice = async () => {
+      setCalculatingPrice(true);
+      try {
+        const { calculateBookingPrice } = await import("@/lib/booking.functions");
+        const res = await calculateBookingPrice({
+          data: {
+            servicoId: currentServiceId,
+            cidadeId: cityId || null,
+            quantidade: qty
+          }
+        });
+        if (active) {
+          setPriceCalculation(res as any);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (active) setCalculatingPrice(false);
+      }
+    };
+
+    updatePrice();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    currentServiceId,
+    selectedObraId,
+    novaObraCidade,
+    currentVolume,
+    currentBetoneiraSize,
+    currentIdadesCP,
+    currentQtdEnsaios,
+    currentPontosPorEnsaio,
+    currentQuantidade,
+    cidades,
+    servicos
+  ]);
 
   // Step 3 — Agenda
   const [dataServico, setDataServico] = useState("");
@@ -298,7 +383,7 @@ function NovoAgendamento() {
 
       const { data: listServicos, error: servicosErr } = await supabase
         .from("servicos_catalogo_pub")
-        .select("id, sku, nome_servico, unidade, valor_venda_editavel, categoria, ativo, created_at")
+        .select("*")
         .eq("ativo", true);
 
       if (servicosErr) {
@@ -530,6 +615,7 @@ function NovoAgendamento() {
   const imposto = subtotal * impostoPct;
   const desconto = subtotal * descontoPct;
   const total = subtotal + imposto - desconto + custoExtra;
+  const isBookingManualQuote = selectedServices.some(s => s.is_orcamento_manual);
 
   const currentService = getCurrentService();
   const isConcrete = checkIsConcrete(currentService);
@@ -547,13 +633,28 @@ function NovoAgendamento() {
       return;
     }
 
+    const isConcreteService = checkIsConcrete(currentService);
+    const isArrancamentoService = checkIsArrancamento(currentService);
+    let qty = 1;
+    if (isConcreteService) {
+      qty = currentCpsCount;
+    } else if (isArrancamentoService) {
+      qty = currentQtdEnsaios * currentPontosPorEnsaio;
+    } else {
+      qty = currentQuantidade;
+    }
+
     const newSvc: ConfiguredService = {
       client_id: Math.random().toString(36).substring(2, 9),
       servico_id: currentService.id,
       nome_servico: currentService.nome_servico,
       sku: currentService.sku,
       categoria: currentService.categoria,
-      valor_venda_editavel: currentService.valor_venda_editavel,
+      valor_venda_editavel: priceCalculation && !priceCalculation.requireManualQuote 
+        ? (currentService.tipo_cobranca === "Por Execucao" ? priceCalculation.valorTotal : priceCalculation.valorTotal / qty) 
+        : currentService.valor_venda_editavel,
+      is_orcamento_manual: priceCalculation?.requireManualQuote || false,
+      reason_manual_quote: priceCalculation?.reason || "",
     };
 
     if (isConcrete) {
@@ -1200,6 +1301,35 @@ function NovoAgendamento() {
                   </div>
                 )}
 
+                {/* Visualização de Preço Dinâmico e Regras */}
+                {calculatingPrice ? (
+                  <div className="text-xs text-muted-foreground animate-pulse py-2">Calculando preço estimado...</div>
+                ) : priceCalculation && (
+                  <div className="space-y-2 py-2">
+                    {priceCalculation.requireManualQuote ? (
+                      <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5 flex gap-2 items-start text-xs text-amber-700">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-semibold text-amber-800">Orçamento sob consulta por vendedor</p>
+                          <p className="mt-0.5">{priceCalculation.reason || "Este serviço na cidade selecionada exige cotação comercial manual."}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-3.5 space-y-2 text-xs text-emerald-800 dark:text-emerald-400">
+                        <div className="flex justify-between items-center font-bold">
+                          <span>Preço Estimado do Ensaio:</span>
+                          <span className="text-base text-emerald-600">R$ {priceCalculation.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        {priceCalculation.requireUpfrontPayment && (
+                          <div className="rounded bg-emerald-500/10 border border-emerald-500/20 p-2 text-[10px] text-emerald-800 dark:text-emerald-400">
+                            <strong>💡 Pagamento à Vista Requerido</strong>: Pedidos com valor menor que R$ {Number(priceCalculation.regraMinimo).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} exigem faturamento à vista para liberação.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Botão de Adicionar ao Agendamento */}
                 <div className="flex justify-end pt-2">
                   <Button
@@ -1245,36 +1375,54 @@ function NovoAgendamento() {
                   {/* Resumo Financeiro do Grupo */}
                   <div className="rounded-xl border border-border bg-muted/20 p-5 space-y-3">
                     <div className="text-xs font-bold text-foreground uppercase tracking-wide pb-1 border-b border-border">Resumo de Custos Previstos</div>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Subtotal dos Serviços</span>
-                      <span>R$ {rawServiceCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    {(mobilizacao > 0 || pedagios > 0) && (
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Deslocamento & Mobilização ({getSelectedObraCity()})</span>
-                        <span>R$ {(mobilizacao + pedagios).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    {isBookingManualQuote ? (
+                      <div className="space-y-2 text-xs">
+                        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5 flex gap-2 items-start text-amber-700">
+                          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-semibold text-amber-800">Orçamento sob consulta comercial</p>
+                            <p className="mt-0.5">Alguns serviços ou cidades deste agendamento ultrapassam o limite de precificação automática ou estão fora da área de preço fixo. O orçamento final será enviado após avaliação do vendedor.</p>
+                          </div>
+                        </div>
+                        <div className="flex justify-between border-t border-border pt-2.5 text-base font-extrabold text-foreground">
+                          <span>Valor Total Final</span>
+                          <span className="text-primary text-sm">Sob Consulta</span>
+                        </div>
                       </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Subtotal dos Serviços</span>
+                          <span>R$ {rawServiceCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        {(mobilizacao > 0 || pedagios > 0) && (
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Deslocamento & Mobilização ({getSelectedObraCity()})</span>
+                            <span>R$ {(mobilizacao + pedagios).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        {custoExtra > 0 && (
+                          <div className="flex justify-between text-xs text-muted-foreground text-amber-600 font-medium">
+                            <span>Custo Adicional (Horas Extras / Fora de Expediente)</span>
+                            <span>+ R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Imposto Retido (12%)</span>
+                          <span>+ R$ {imposto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        {desconto > 0 && (
+                          <div className="flex justify-between text-xs text-emerald-600 font-semibold">
+                            <span>Desconto Forma de Pagamento (5%)</span>
+                            <span>- R$ {desconto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between border-t border-border pt-2.5 text-base font-extrabold text-foreground">
+                          <span>Valor Total Prévio</span>
+                          <span className="text-primary text-lg">R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </>
                     )}
-                    {custoExtra > 0 && (
-                      <div className="flex justify-between text-xs text-muted-foreground text-amber-600 font-medium">
-                        <span>Custo Adicional (Horas Extras / Fora de Expediente)</span>
-                        <span>+ R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Imposto Retido (12%)</span>
-                      <span>+ R$ {imposto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    {desconto > 0 && (
-                      <div className="flex justify-between text-xs text-emerald-600 font-semibold">
-                        <span>Desconto Forma de Pagamento (5%)</span>
-                        <span>- R$ {desconto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between border-t border-border pt-2.5 text-base font-extrabold text-foreground">
-                      <span>Valor Total Prévio</span>
-                      <span className="text-primary text-lg">R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    </div>
                   </div>
                 </div>
               )}
@@ -1455,40 +1603,58 @@ function NovoAgendamento() {
 
               {/* Memória de cálculo */}
               <div className="rounded-xl border border-border p-5 space-y-4 bg-card shadow-sm">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal dos Serviços</span>
-                  <span className="font-semibold">R$ {rawServiceCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                </div>
-                {(mobilizacao > 0 || pedagios > 0) && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Deslocamento e Mobilização ({getSelectedObraCity() || "Sorocaba"})</span>
-                    <span className="font-semibold">R$ {(mobilizacao + pedagios).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                {isBookingManualQuote ? (
+                  <div className="space-y-2 text-xs">
+                    <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5 flex gap-2 items-start text-amber-700">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-amber-800">Orçamento sob consulta comercial</p>
+                        <p className="mt-0.5">Alguns serviços ou cidades deste agendamento ultrapassam o limite de precificação automática ou estão fora da área de preço fixo. O orçamento final será enviado após avaliação do vendedor.</p>
+                      </div>
+                    </div>
+                    <div className="flex justify-between border-t border-border pt-2.5 text-base font-extrabold text-foreground">
+                      <span>Valor Total Final</span>
+                      <span className="text-primary text-sm">Sob Consulta</span>
+                    </div>
                   </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Subtotal dos Serviços</span>
+                      <span className="font-semibold">R$ {rawServiceCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {(mobilizacao > 0 || pedagios > 0) && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Deslocamento e Mobilização ({getSelectedObraCity() || "Sorocaba"})</span>
+                        <span className="font-semibold">R$ {(mobilizacao + pedagios).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {custoExtra > 0 && (
+                      <div className="flex justify-between text-sm text-amber-600">
+                        <span>Horas Extras ({horasExtras}h após {dataServico && new Date(dataServico + "T00:00:00").getDay() === 6 ? "12:00" : "17:00"} × R$ {valorHoraExtra}/h)</span>
+                        <span className="font-semibold">+ R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-border pt-3 flex justify-between text-sm font-semibold">
+                      <span>Subtotal Bruto</span>
+                      <span>R$ {subtotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-amber-600">
+                      <span>Imposto de Serviço Retido (12%)</span>
+                      <span>+ R$ {imposto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {desconto > 0 && (
+                      <div className="flex justify-between text-sm text-emerald-600 font-medium">
+                        <span>Desconto Pagamento Rápido (5%)</span>
+                        <span>− R$ {desconto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="border-t-2 border-border pt-4 flex justify-between text-lg font-extrabold">
+                      <span>Valor Total Final</span>
+                      <span className="text-primary text-xl">R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </>
                 )}
-                {custoExtra > 0 && (
-                  <div className="flex justify-between text-sm text-amber-600">
-                    <span>Horas Extras ({horasExtras}h após {dataServico && new Date(dataServico + "T00:00:00").getDay() === 6 ? "12:00" : "17:00"} × R$ {valorHoraExtra}/h)</span>
-                    <span className="font-semibold">+ R$ {custoExtra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                  </div>
-                )}
-                <div className="border-t border-border pt-3 flex justify-between text-sm font-semibold">
-                  <span>Subtotal Bruto</span>
-                  <span>R$ {subtotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between text-sm text-amber-600">
-                  <span>Imposto de Serviço Retido (12%)</span>
-                  <span>+ R$ {imposto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                </div>
-                {desconto > 0 && (
-                  <div className="flex justify-between text-sm text-emerald-600 font-medium">
-                    <span>Desconto Pagamento Rápido (5%)</span>
-                    <span>− R$ {desconto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                  </div>
-                )}
-                <div className="border-t-2 border-border pt-4 flex justify-between text-lg font-extrabold">
-                  <span>Valor Total Final</span>
-                  <span className="text-primary text-xl">R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                </div>
               </div>
 
               {/* Forma de pagamento */}

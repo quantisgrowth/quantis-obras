@@ -46,6 +46,8 @@ export type Database = {
           valor_subtotal: number
           valor_total: number
           volume_m3: number
+          is_orcamento_manual: boolean
+          orcamento_aprovado: boolean
         }
         Insert: {
           codigo_pedido?: string
@@ -80,6 +82,8 @@ export type Database = {
           valor_subtotal?: number
           valor_total?: number
           volume_m3?: number
+          is_orcamento_manual?: boolean
+          orcamento_aprovado?: boolean
         }
         Update: {
           codigo_pedido?: string
@@ -114,6 +118,8 @@ export type Database = {
           valor_subtotal?: number
           valor_total?: number
           volume_m3?: number
+          is_orcamento_manual?: boolean
+          orcamento_aprovado?: boolean
         }
         Relationships: [
           {
@@ -451,6 +457,10 @@ export type Database = {
           unidade: string
           valor_custo_base: number
           valor_venda_editavel: number
+          descricao: string | null
+          tipo_cobranca: string
+          formas_pagamento_aceitas: string[]
+          regra_minimo_a_vista: number
         }
         Insert: {
           ativo?: boolean
@@ -463,6 +473,10 @@ export type Database = {
           unidade: string
           valor_custo_base?: number
           valor_venda_editavel?: number
+          descricao?: string | null
+          tipo_cobranca?: string
+          formas_pagamento_aceitas?: string[]
+          regra_minimo_a_vista?: number
         }
         Update: {
           ativo?: boolean
@@ -475,8 +489,52 @@ export type Database = {
           unidade?: string
           valor_custo_base?: number
           valor_venda_editavel?: number
+          descricao?: string | null
+          tipo_cobranca?: string
+          formas_pagamento_aceitas?: string[]
+          regra_minimo_a_vista?: number
         }
         Relationships: []
+      }
+      servicos_precos_cidades: {
+        Row: {
+          id: string
+          servico_id: string
+          cidade_id: string
+          valor_fixo: number
+          limite_unidades: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          servico_id: string
+          cidade_id: string
+          valor_fixo?: number
+          limite_unidades?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          servico_id?: string
+          cidade_id?: string
+          valor_fixo?: number
+          limite_unidades?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servicos_precos_cidades_servico_id_fkey"
+            columns: ["servico_id"]
+            referencedRelation: "servicos_catalogo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servicos_precos_cidades_cidade_id_fkey"
+            columns: ["cidade_id"]
+            referencedRelation: "cidades_atendidas"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       tecnicos: {
         Row: {
