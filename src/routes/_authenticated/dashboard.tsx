@@ -3794,6 +3794,71 @@ function AdminDash() {
     setAllocModalOpen(true);
   };
 
+  // Desempenho de Técnicos states
+  const [desempenhoData, setDesempenhoData] = useState<any[]>([]);
+  const [loadingDesempenho, setLoadingDesempenho] = useState(false);
+  const [desempenhoSortBy, setDesempenhoSortBy] = useState<"nota"|"atendimentos"|"nome">("nota");
+  const [selectedTecDesempenho, setSelectedTecDesempenho] = useState<any | null>(null);
+
+  const fetchDesempenho = async () => {
+    setLoadingDesempenho(true);
+    try {
+      // Fetch all technicians
+      const { data: tecs } = await supabase
+        .from("tecnicos")
+        .select("id, nome, ranking_score, status, certificacoes, cpf")
+        .order("nome");
+
+      // Fetch all ratings with booking info
+      const { data: ratings } = await supabase
+        .from("avaliacoes_tecnicos")
+        .select("*, agendamento:agendamentos_medicoes(codigo_pedido, data_servico, obra:obras(nome_obra, cidade))")
+        .order("created_at", { ascending: false });
+
+      // Aggregate per technician
+      const tecMap: Record<string, any> = {};
+      (tecs || []).forEach((t: any) => {
+        tecMap[t.id] = {
+          ...t,
+          avaliacoes: [],
+          media_comunicacao: 0,
+          media_conhecimento: 0,
+          media_pontualidade: 0,
+          media_limpeza: 0,
+          media_organizacao: 0,
+          media_geral: 0,
+          total_avaliacoes: 0,
+        };
+      });
+
+      (ratings || []).forEach((r: any) => {
+        const tec = tecMap[r.tecnico_id];
+        if (!tec) return;
+        tec.avaliacoes.push(r);
+      });
+
+      Object.values(tecMap).forEach((tec: any) => {
+        const avs = tec.avaliacoes;
+        const n = avs.length;
+        if (n === 0) return;
+        tec.total_avaliacoes = n;
+        tec.media_comunicacao = +(avs.reduce((s: number, a: any) => s + (a.nota_comunicacao || a.nota || 5), 0) / n).toFixed(2);
+        tec.media_conhecimento = +(avs.reduce((s: number, a: any) => s + (a.nota_conhecimento_tecnico || a.nota || 5), 0) / n).toFixed(2);
+        tec.media_pontualidade = +(avs.reduce((s: number, a: any) => s + (a.nota_pontualidade || a.nota || 5), 0) / n).toFixed(2);
+        tec.media_limpeza = +(avs.reduce((s: number, a: any) => s + (a.nota_limpeza_materiais || a.nota || 5), 0) / n).toFixed(2);
+        tec.media_organizacao = +(avs.reduce((s: number, a: any) => s + (a.nota_organizacao_trabalho || a.nota || 5), 0) / n).toFixed(2);
+        tec.media_geral = +((tec.media_comunicacao + tec.media_conhecimento + tec.media_pontualidade + tec.media_limpeza + tec.media_organizacao) / 5).toFixed(2);
+      });
+
+      setDesempenhoData(Object.values(tecMap));
+    } catch (err) {
+      console.error("Erro ao carregar desempenho:", err);
+      toast.error("Erro ao carregar dados de desempenho.");
+    } finally {
+      setLoadingDesempenho(false);
+    }
+  };
+
   const handleAllocateTechnician = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!allocBooking || !allocTecnicoId) return;
@@ -5641,6 +5706,7 @@ function AdminDash() {
   const sidebarItems = [
     { id: "agendamentos",    label: "Gestão de Escala",         icon: ClipboardList, onClick: () => { setActiveTab("agendamentos"); fetchAdminAgendamentos(); }, badge: adminAgendamentos.filter(a => ["Pendente_Aprovacao_Gestor","Pendente_Tecnico"].includes(a.status_agendamento)).length || undefined },
     { id: "tecnicos",        label: "Gestão de Técnicos",      icon: Users,        onClick: () => { setActiveTab("tecnicos"); } },
+    { id: "desempenho",      label: "Desempenho de Técnicos",  icon: Star,         onClick: () => { setActiveTab("desempenho"); fetchDesempenho(); } },
     { id: "obras",           label: "Gestão de Obras",         icon: HardHat,      onClick: () => { setActiveTab("obras"); fetchObrasGestor(); fetchEmpresasClientes(); } },
     { id: "clientes",        label: "Gestão de Clientes",      icon: Building2,    onClick: () => { setActiveTab("clientes"); fetchEmpresasClientes(); } },
     { id: "locais",          label: "Locais de Check-in",      icon: MapPin,        onClick: () => { setActiveTab("locais"); fetchLocais(); } },
@@ -5995,7 +6061,282 @@ function AdminDash() {
           </div>
         )}
 
-        {/* ── PAINEL: GESTÃO DE TÉCNICOS ── */}
+        {/* ── PAINEL: DESEMPENHO DE TÉCNICOS ── */}
+        {activeTab === "desempenho" && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                  <Star className="h-6 w-6 text-yellow-500" />
+                  Desempenho de Técnicos
+                </h2>
+                <p className="text-muted-foreground text-sm mt-1">
+                  Avaliações realizadas pelos Gestores de Obras após cada atendimento. Influenciam diretamente a prioridade de distribuição de oportunidades.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={desempenhoSortBy}
+                  onChange={(e) => setDesempenhoSortBy(e.target.value as any)}
+                  className="text-xs rounded-lg border border-border bg-background text-foreground px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  <option value="nota">Ordenar por Nota</option>
+                  <option value="atendimentos">Ordenar por Atendimentos</option>
+                  <option value="nome">Ordenar por Nome</option>
+                </select>
+                <button
+                  onClick={fetchDesempenho}
+                  className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all"
+                >
+                  ↻ Atualizar
+                </button>
+              </div>
+            </div>
+
+            {/* Podium Top 3 */}
+            {!loadingDesempenho && desempenhoData.filter(t => t.total_avaliacoes > 0).length >= 2 && (() => {
+              const ranked = [...desempenhoData]
+                .filter(t => t.total_avaliacoes > 0)
+                .sort((a, b) => (b.media_geral || 0) - (a.media_geral || 0));
+              const top3 = ranked.slice(0, 3);
+              const medals = ["🥇", "🥈", "🥉"];
+              const colors = [
+                "border-yellow-400 bg-yellow-500/5",
+                "border-zinc-300 bg-zinc-100/20",
+                "border-amber-600/60 bg-amber-700/5",
+              ];
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {top3.map((tec, i) => (
+                    <div
+                      key={tec.id}
+                      className={`border-2 rounded-2xl p-5 text-center cursor-pointer hover:shadow-md transition-all ${colors[i]}`}
+                      onClick={() => setSelectedTecDesempenho(tec)}
+                    >
+                      <div className="text-3xl mb-1">{medals[i]}</div>
+                      <p className="font-bold text-foreground text-base">{tec.nome}</p>
+                      <p className="text-4xl font-extrabold text-yellow-500 my-2">{tec.media_geral.toFixed(1)}</p>
+                      <p className="text-xs text-muted-foreground">Nota Geral • {tec.total_avaliacoes} avaliação{tec.total_avaliacoes !== 1 ? "ões" : ""}</p>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Full ranking table */}
+            {loadingDesempenho ? (
+              <div className="space-y-3">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="border border-border rounded-xl p-4 animate-pulse h-24" />
+                ))}
+              </div>
+            ) : (() => {
+              const sorted = [...desempenhoData].sort((a, b) => {
+                if (desempenhoSortBy === "nota") return (b.media_geral || 0) - (a.media_geral || 0);
+                if (desempenhoSortBy === "atendimentos") return (b.total_avaliacoes || 0) - (a.total_avaliacoes || 0);
+                return a.nome.localeCompare(b.nome);
+              });
+
+              return sorted.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
+                  <Star className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+                  Nenhum técnico cadastrado ainda.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sorted.map((tec, idx) => {
+                    const hasRatings = tec.total_avaliacoes > 0;
+                    const nota = tec.media_geral || 0;
+                    const params = [
+                      { label: "Comunicação",      value: tec.media_comunicacao },
+                      { label: "Conhecimento",     value: tec.media_conhecimento },
+                      { label: "Pontualidade",     value: tec.media_pontualidade },
+                      { label: "Limpeza",          value: tec.media_limpeza },
+                      { label: "Organização",      value: tec.media_organizacao },
+                    ];
+                    const starColor = nota >= 4.5 ? "text-yellow-400" : nota >= 3.5 ? "text-amber-400" : nota >= 2.5 ? "text-orange-400" : "text-red-400";
+                    return (
+                      <div
+                        key={tec.id}
+                        className="border border-border rounded-xl bg-card hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer overflow-hidden"
+                        onClick={() => setSelectedTecDesempenho(tec)}
+                      >
+                        <div className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+                          {/* Rank + Name */}
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0">
+                              #{idx + 1}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-foreground truncate">{tec.nome}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {tec.total_avaliacoes > 0
+                                  ? `${tec.total_avaliacoes} avaliação${tec.total_avaliacoes !== 1 ? "ões" : ""}`
+                                  : "Sem avaliações"}
+                                {" · "}
+                                <span className={tec.status === "Disponivel" ? "text-emerald-600" : tec.status === "Em_Campo" ? "text-amber-600" : "text-muted-foreground"}>
+                                  {tec.status === "Disponivel" ? "Disponível" : tec.status === "Em_Campo" ? "Em Campo" : "De Folga"}
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Overall Score */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Star className={`h-5 w-5 ${hasRatings ? starColor : "text-muted-foreground/30"}`} fill={hasRatings ? "currentColor" : "none"} />
+                            <span className={`text-2xl font-extrabold ${hasRatings ? starColor : "text-muted-foreground/40"}`}>
+                              {hasRatings ? nota.toFixed(1) : "—"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">/5</span>
+                          </div>
+
+                          {/* Mini parameter bars */}
+                          {hasRatings && (
+                            <div className="hidden sm:flex flex-col gap-1 min-w-[200px]">
+                              {params.map((p) => (
+                                <div key={p.label} className="flex items-center gap-2 text-[10px]">
+                                  <span className="text-muted-foreground w-20 shrink-0">{p.label}</span>
+                                  <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-gradient-to-r from-primary to-primary/60 transition-all"
+                                      style={{ width: `${(p.value / 5) * 100}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-bold text-foreground w-6 text-right">{p.value.toFixed(1)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* View Details chevron */}
+                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Detail Modal */}
+            <Dialog open={!!selectedTecDesempenho} onOpenChange={(open) => { if (!open) setSelectedTecDesempenho(null); }}>
+              <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto border border-border bg-card">
+                {selectedTecDesempenho && (() => {
+                  const tec = selectedTecDesempenho;
+                  const hasRatings = tec.total_avaliacoes > 0;
+                  const params = [
+                    { label: "Comunicação",                  icon: "💬", value: tec.media_comunicacao },
+                    { label: "Conhecimento Técnico",         icon: "🔬", value: tec.media_conhecimento },
+                    { label: "Pontualidade",                 icon: "⏰", value: tec.media_pontualidade },
+                    { label: "Limpeza dos Materiais",        icon: "🧹", value: tec.media_limpeza },
+                    { label: "Organização do Espaço",        icon: "📦", value: tec.media_organizacao },
+                  ];
+                  const nota = tec.media_geral || 0;
+                  const starColor = nota >= 4.5 ? "text-yellow-400" : nota >= 3.5 ? "text-amber-400" : nota >= 2.5 ? "text-orange-400" : "text-red-400";
+                  return (
+                    <>
+                      <DialogHeader>
+                        <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                          <Star className={`h-5 w-5 ${starColor}`} fill={hasRatings ? "currentColor" : "none"} />
+                          Desempenho — {tec.nome}
+                        </DialogTitle>
+                        <DialogDescription>
+                          {tec.total_avaliacoes} atendimento{tec.total_avaliacoes !== 1 ? "s" : ""} avaliado{tec.total_avaliacoes !== 1 ? "s" : ""} pelos gestores de obra
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="space-y-6 pt-2">
+                        {/* Score header */}
+                        <div className="flex items-center justify-center gap-6 bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl p-6 border border-primary/10">
+                          <div className="text-center">
+                            <p className={`text-6xl font-extrabold ${hasRatings ? starColor : "text-muted-foreground/40"}`}>
+                              {hasRatings ? nota.toFixed(1) : "—"}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">Nota Geral</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-4xl font-extrabold text-foreground">{tec.total_avaliacoes}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Avaliações</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-foreground">
+                              {tec.status === "Disponivel" ? "🟢" : tec.status === "Em_Campo" ? "🟡" : "⚫"}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {tec.status === "Disponivel" ? "Disponível" : tec.status === "Em_Campo" ? "Em Campo" : "De Folga"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Parameter breakdown */}
+                        {hasRatings && (
+                          <div>
+                            <h3 className="text-sm font-bold text-foreground mb-3">Desempenho por Parâmetro</h3>
+                            <div className="space-y-3">
+                              {params.map((p) => (
+                                <div key={p.label} className="space-y-1">
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="flex items-center gap-1.5 font-medium text-foreground">
+                                      <span>{p.icon}</span> {p.label}
+                                    </span>
+                                    <span className="font-bold text-foreground">{p.value.toFixed(1)} <span className="text-muted-foreground font-normal">/ 5.0</span></span>
+                                  </div>
+                                  <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all ${
+                                        p.value >= 4.5 ? "bg-yellow-400" : p.value >= 3.5 ? "bg-amber-400" : p.value >= 2.5 ? "bg-orange-400" : "bg-red-400"
+                                      }`}
+                                      style={{ width: `${(p.value / 5) * 100}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Rating history */}
+                        {tec.avaliacoes && tec.avaliacoes.length > 0 && (
+                          <div>
+                            <h3 className="text-sm font-bold text-foreground mb-3">Histórico de Avaliações</h3>
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                              {tec.avaliacoes.map((av: any) => (
+                                <div key={av.id} className="border border-border rounded-lg p-3 text-xs bg-muted/20">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-semibold text-foreground">
+                                      {av.agendamento?.obra?.nome_obra || av.agendamento?.codigo_pedido || "Atendimento"}
+                                    </span>
+                                    <span className="font-bold text-yellow-500">{Number(av.nota).toFixed(1)} ⭐</span>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-muted-foreground">
+                                    <span>📅 {av.agendamento?.data_servico ? new Date(av.agendamento.data_servico + "T00:00:00").toLocaleDateString("pt-BR") : "—"}</span>
+                                    <span>📍 {av.agendamento?.obra?.cidade || "—"}</span>
+                                  </div>
+                                  {av.comentario && (
+                                    <p className="mt-2 italic text-muted-foreground border-l-2 border-primary/30 pl-2">"{av.comentario}"</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {!hasRatings && (
+                          <div className="text-center py-8 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
+                            <Star className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+                            Este técnico ainda não recebeu avaliações.
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
         {/* ── PAINEL: GESTÃO DE TÉCNICOS ── */}
         {activeTab === "tecnicos" && <div className="space-y-6">
           <div className="flex justify-end gap-2 mb-4">
