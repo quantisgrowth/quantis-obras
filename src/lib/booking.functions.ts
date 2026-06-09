@@ -408,39 +408,6 @@ export const createBooking = createServerFn({ method: "POST" })
       }
     }
 
-    // Notify the Geraltest Manager via WhatsApp
-    try {
-      const { data: setting } = await supabaseAdmin
-        .from("app_settings")
-        .select("value")
-        .eq("key", "whatsapp_thais")
-        .maybeSingle();
-      const gestorPhone = (setting?.value as string) || "5515999999999";
-
-      const { data: empresa } = await supabaseAdmin
-        .from("empresas_clientes")
-        .select("razao_social")
-        .eq("id", empresaId)
-        .single();
-      const companyName = empresa?.razao_social || "Cliente";
-
-      const obraNome = data.nova_obra?.nome_obra || "Obra";
-
-      const messageText = 
-        `📋 *Quantis Obras - Nova Solicitação de Agendamento*\n\n` +
-        `Um novo agendamento foi solicitado e aguarda alocação de técnico.\n\n` +
-        `🏢 *Cliente:* ${companyName}\n` +
-        `🏗️ *Obra:* ${obraNome}\n` +
-        `📅 *Data:* ${new Date(data.data_servico + "T00:00:00").toLocaleDateString("pt-BR")}\n` +
-        `⏰ *Horário na Obra:* ${data.horario_na_obra}\n` +
-        `💰 *Valor Estimado:* R$ ${groupTotalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n\n` +
-        `Acesse o painel do gestor para alocar o técnico de sua preferência.`;
-
-      await sendServerWhatsappMessage(gestorPhone, messageText);
-    } catch (waErr) {
-      console.error("Erro ao enviar notificação de agendamento para o gestor:", waErr);
-    }
-
     // Return the first booking details but with the combined group total value
     const firstAgendamento = agendamentos[0];
     return {

@@ -5639,7 +5639,7 @@ function AdminDash() {
 
   // Sidebar nav items definition
   const sidebarItems = [
-    { id: "agendamentos",    label: "Agendamentos",            icon: ClipboardList, onClick: () => { setActiveTab("agendamentos"); fetchAdminAgendamentos(); }, badge: adminAgendamentos.filter(a => a.status_agendamento === "Pendente_Aprovacao_Gestor").length || undefined },
+    { id: "agendamentos",    label: "Gestão de Escala",         icon: ClipboardList, onClick: () => { setActiveTab("agendamentos"); fetchAdminAgendamentos(); }, badge: adminAgendamentos.filter(a => ["Pendente_Aprovacao_Gestor","Pendente_Tecnico"].includes(a.status_agendamento)).length || undefined },
     { id: "tecnicos",        label: "Gestão de Técnicos",      icon: Users,        onClick: () => { setActiveTab("tecnicos"); } },
     { id: "obras",           label: "Gestão de Obras",         icon: HardHat,      onClick: () => { setActiveTab("obras"); fetchObrasGestor(); fetchEmpresasClientes(); } },
     { id: "clientes",        label: "Gestão de Clientes",      icon: Building2,    onClick: () => { setActiveTab("clientes"); fetchEmpresasClientes(); } },
@@ -5701,143 +5701,276 @@ function AdminDash() {
       {/* ══ CONTEÚDO PRINCIPAL ══ */}
       <main className="flex-1 min-w-0 p-8 overflow-y-auto">
 
-        {/* ── PAINEL: AGENDAMENTOS ── */}
+        {/* ── PAINEL: GESTÃO DE ESCALA ── */}
         {activeTab === "agendamentos" && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">Agendamentos</h2>
-              <p className="text-muted-foreground text-sm mt-1">Gerencie todos os agendamentos e aloque técnicos manualmente para pendências de aprovação.</p>
-            </div>
-
-            {/* Filter bar */}
-            <div className="flex flex-wrap gap-3 items-center">
-              <div className="flex gap-1.5">
-                {[
-                  { label: "Aguardando Alocação", value: "Pendente_Aprovacao_Gestor" },
-                  { label: "Pendente Técnico", value: "Pendente_Tecnico" },
-                  { label: "Confirmados", value: "Confirmado" },
-                  { label: "Em Execução", value: "Em_Execucao" },
-                  { label: "Todos", value: "todos" },
-                ].map((f) => (
-                  <button
-                    key={f.value}
-                    onClick={() => setAdminAgendStatusFilter(f.value)}
-                    className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${
-                      adminAgendStatusFilter === f.value
-                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                        : "bg-background text-muted-foreground border-border hover:border-primary/50"
-                    }`}
-                  >
-                    {f.label}
-                    {f.value === "Pendente_Aprovacao_Gestor" && (
-                      <span className="ml-1.5 bg-orange-500 text-white rounded-full px-1.5 text-[10px] font-bold">
-                        {adminAgendamentos.filter(a => a.status_agendamento === "Pendente_Aprovacao_Gestor").length}
-                      </span>
-                    )}
-                  </button>
-                ))}
+          <div className="space-y-5 -mx-4 -mt-4 px-6 pt-6">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                  <ClipboardList className="h-6 w-6 text-primary" />
+                  Gestão de Escala
+                </h2>
+                <p className="text-muted-foreground text-sm mt-1">Visão completa de todos os agendamentos. Aloque técnicos, acompanhe execuções e monitore o status em tempo real.</p>
               </div>
               <button
                 onClick={fetchAdminAgendamentos}
-                className="ml-auto text-xs px-3 py-1.5 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all"
+                className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-accent/50 transition-all font-medium"
               >
-                ↻ Atualizar
+                <span className="text-base leading-none">↻</span> Atualizar
               </button>
             </div>
 
-            {loadingAdminAgend ? (
-              <div className="text-center py-12 text-muted-foreground text-sm animate-pulse">Carregando agendamentos...</div>
-            ) : (() => {
-              const filtered = adminAgendStatusFilter === "todos"
-                ? adminAgendamentos
-                : adminAgendamentos.filter(a => a.status_agendamento === adminAgendStatusFilter);
-
-              return filtered.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground text-sm border border-dashed border-border rounded-lg">
-                  Nenhum agendamento encontrado com esse filtro.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {filtered.map((ag) => (
-                    <div key={ag.id} className="border border-border rounded-xl bg-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-primary/40 transition-all">
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra"}</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            ag.status_agendamento === "Pendente_Aprovacao_Gestor"
-                              ? "bg-orange-500/10 text-orange-600 border-orange-500/20"
-                              : ag.status_agendamento === "Confirmado"
-                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                              : ag.status_agendamento === "Em_Execucao"
-                              ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-                              : "bg-muted text-muted-foreground border-border"
-                          }`}>
-                            {STATUS_LABELS[ag.status_agendamento] || ag.status_agendamento}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{ag.servico?.nome_servico || "Serviço"}</p>
-                        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-1">
-                          <span>📋 {ag.codigo_pedido}</span>
-                          <span>📅 {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0,5)}</span>
-                          <span>📍 {ag.obra?.cidade || "-"}</span>
-                          <span>🔬 {ag.cps_contratados} CPs</span>
-                          {ag.tecnico && <span className="text-primary font-semibold">👷 {ag.tecnico.nome}</span>}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        {ag.status_agendamento === "Pendente_Aprovacao_Gestor" && (
-                          <Button
-                            size="sm"
-                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5"
-                            onClick={() => handleOpenAllocModal(ag)}
-                          >
-                            <Users className="h-3.5 w-3.5" />
-                            Alocar Técnico
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+            {/* KPI Strip */}
+            {!loadingAdminAgend && (() => {
+              const pendAlloc = adminAgendamentos.filter(a => a.status_agendamento === "Pendente_Aprovacao_Gestor").length;
+              const pendTec   = adminAgendamentos.filter(a => a.status_agendamento === "Pendente_Tecnico").length;
+              const confirmed = adminAgendamentos.filter(a => a.status_agendamento === "Confirmado").length;
+              const running   = adminAgendamentos.filter(a => a.status_agendamento === "Em_Execucao").length;
+              const done      = adminAgendamentos.filter(a => ["Validado","Aguardando_Medicao","Laboratorio"].includes(a.status_agendamento)).length;
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {[
+                    { label: "Aguardando Alocação", count: pendAlloc, color: "border-l-orange-500", textColor: "text-orange-600", bg: "bg-orange-500/5", filter: "Pendente_Aprovacao_Gestor", urgent: pendAlloc > 0 },
+                    { label: "Pendente Técnico",    count: pendTec,   color: "border-l-yellow-500", textColor: "text-yellow-600", bg: "bg-yellow-500/5",  filter: "Pendente_Tecnico" },
+                    { label: "Confirmados",         count: confirmed, color: "border-l-emerald-500",textColor: "text-emerald-600",bg: "bg-emerald-500/5", filter: "Confirmado" },
+                    { label: "Em Execução",         count: running,   color: "border-l-blue-500",   textColor: "text-blue-600",   bg: "bg-blue-500/5",    filter: "Em_Execucao" },
+                    { label: "Concluídos",          count: done,      color: "border-l-purple-500", textColor: "text-purple-600", bg: "bg-purple-500/5",  filter: "concluidos" },
+                  ].map((kpi) => (
+                    <button
+                      key={kpi.filter}
+                      onClick={() => setAdminAgendStatusFilter(kpi.filter)}
+                      className={`text-left p-4 rounded-xl border-l-4 border border-border ${kpi.color} ${kpi.bg} transition-all hover:shadow-sm ${
+                        adminAgendStatusFilter === kpi.filter ? "ring-2 ring-primary/40 shadow-sm" : ""
+                      } ${kpi.urgent ? "animate-pulse" : ""}`}
+                    >
+                      <p className={`text-2xl font-extrabold ${kpi.textColor}`}>{kpi.count}</p>
+                      <p className="text-xs text-muted-foreground font-medium mt-0.5">{kpi.label}</p>
+                    </button>
                   ))}
                 </div>
               );
             })()}
 
-            {/* Modal de Alocação Manual de Técnico */}
+            {/* Filter pills */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+              {[
+                { label: "Todos", value: "todos" },
+                { label: "🟠 Aguardando Alocação", value: "Pendente_Aprovacao_Gestor" },
+                { label: "🟡 Pendente Técnico",    value: "Pendente_Tecnico" },
+                { label: "🟢 Confirmados",         value: "Confirmado" },
+                { label: "🔵 Em Execução",         value: "Em_Execucao" },
+                { label: "🟣 Aguardando Medição",  value: "Aguardando_Medicao" },
+                { label: "✅ Concluídos",          value: "concluidos" },
+                { label: "❌ Cancelados",          value: "Cancelado" },
+              ].map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setAdminAgendStatusFilter(f.value)}
+                  className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${
+                    adminAgendStatusFilter === f.value
+                      ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                      : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Agendamentos List */}
+            {loadingAdminAgend ? (
+              <div className="grid gap-3">
+                {[1,2,3].map(i => (
+                  <div key={i} className="border border-border rounded-xl bg-card p-4 animate-pulse">
+                    <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                    <div className="h-3 bg-muted/60 rounded w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : (() => {
+              const concluidos_statuses = ["Validado", "Aguardando_Medicao", "Laboratorio"];
+              const filtered = adminAgendStatusFilter === "todos"
+                ? adminAgendamentos
+                : adminAgendStatusFilter === "concluidos"
+                ? adminAgendamentos.filter(a => concluidos_statuses.includes(a.status_agendamento))
+                : adminAgendamentos.filter(a => a.status_agendamento === adminAgendStatusFilter);
+
+              const sortedFiltered = [...filtered].sort((a, b) => {
+                const priority: Record<string, number> = {
+                  Pendente_Aprovacao_Gestor: 0,
+                  Pendente_Tecnico: 1,
+                  Em_Execucao: 2,
+                  Confirmado: 3,
+                  Aguardando_Medicao: 4,
+                  Validado: 5,
+                  Laboratorio: 6,
+                  Cancelado: 7,
+                };
+                const pa = priority[a.status_agendamento] ?? 9;
+                const pb = priority[b.status_agendamento] ?? 9;
+                if (pa !== pb) return pa - pb;
+                return new Date(a.data_servico).getTime() - new Date(b.data_servico).getTime();
+              });
+
+              return sortedFiltered.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground text-sm border border-dashed border-border rounded-xl">
+                  <ClipboardList className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+                  Nenhum agendamento encontrado com este filtro.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {sortedFiltered.map((ag) => {
+                    const isPendingAlloc = ag.status_agendamento === "Pendente_Aprovacao_Gestor";
+                    const isPendingTec   = ag.status_agendamento === "Pendente_Tecnico";
+                    const isRunning      = ag.status_agendamento === "Em_Execucao";
+                    const isConfirmed    = ag.status_agendamento === "Confirmado";
+                    const statusStyle = isPendingAlloc
+                      ? "border-l-orange-500 bg-orange-500/5"
+                      : isPendingTec
+                      ? "border-l-yellow-400 bg-yellow-500/5"
+                      : isRunning
+                      ? "border-l-blue-500 bg-blue-500/5"
+                      : isConfirmed
+                      ? "border-l-emerald-500 bg-emerald-500/5"
+                      : ag.status_agendamento === "Aguardando_Medicao"
+                      ? "border-l-purple-500 bg-purple-500/5"
+                      : "border-l-border bg-card";
+
+                    return (
+                      <div
+                        key={ag.id}
+                        className={`border border-border border-l-4 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-sm transition-all ${statusStyle}`}
+                      >
+                        {/* Left: booking info */}
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-foreground truncate">{ag.obra?.nome_obra || "Obra"}</span>
+                            <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              STATUS_COLORS[ag.status_agendamento] || "bg-muted text-muted-foreground border-border"
+                            }`}>
+                              {STATUS_LABELS[ag.status_agendamento] || ag.status_agendamento}
+                            </span>
+                            {isPendingAlloc && (
+                              <span className="text-[10px] bg-orange-500 text-white font-bold px-2 py-0.5 rounded-full animate-pulse">
+                                ⚡ Alocar Agora
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">{ag.servico?.nome_servico || "Serviço"}</span>
+                            <span>📋 {ag.codigo_pedido}</span>
+                            <span>📅 {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0,5)}</span>
+                            <span>📍 {ag.obra?.cidade || "-"}/{ag.obra?.estado || ""}</span>
+                            <span>🔬 {ag.cps_contratados} CPs</span>
+                            <span>💰 R$ {Number(ag.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+
+                          {/* Technician row */}
+                          <div className="flex items-center gap-2">
+                            {ag.tecnico ? (
+                              <span className="flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20">
+                                <Users className="h-3 w-3" />
+                                {ag.tecnico.nome}
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1.5 text-xs text-muted-foreground italic">
+                                <Users className="h-3 w-3" />
+                                Sem técnico alocado
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right: actions */}
+                        <div className="flex gap-2 items-center shrink-0">
+                          {isPendingAlloc && (
+                            <Button
+                              size="sm"
+                              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5 shadow-sm"
+                              onClick={() => handleOpenAllocModal(ag)}
+                            >
+                              <Users className="h-3.5 w-3.5" />
+                              Alocar Técnico
+                            </Button>
+                          )}
+                          {(isPendingTec || isConfirmed || isRunning) && ag.tecnico && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="font-medium gap-1.5 text-xs"
+                              onClick={() => handleOpenAllocModal(ag)}
+                            >
+                              <Edit className="h-3 w-3" />
+                              Trocar Técnico
+                            </Button>
+                          )}
+                          {(isPendingTec || isConfirmed) && !ag.tecnico && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="font-medium gap-1.5 text-xs border-yellow-400 text-yellow-600 hover:bg-yellow-50"
+                              onClick={() => handleOpenAllocModal(ag)}
+                            >
+                              <Users className="h-3 w-3" />
+                              Alocar Manualmente
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Modal de Alocação de Técnico */}
             <Dialog open={allocModalOpen} onOpenChange={setAllocModalOpen}>
               <DialogContent className="max-w-md border border-border bg-card">
                 <DialogHeader>
                   <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
                     <Users className="h-5 w-5 text-primary" />
-                    Alocar Técnico Manualmente
+                    Alocar Técnico
                   </DialogTitle>
                   <DialogDescription>
-                    Selecione o técnico que irá atender este serviço. Uma notificação será enviada ao técnico via WhatsApp.
+                    Selecione o técnico para este agendamento. Após confirmar, o status será alterado para <strong>Confirmado</strong> e o técnico será notificado via WhatsApp.
                   </DialogDescription>
                 </DialogHeader>
 
                 {allocBooking && (
-                  <div className="bg-muted/40 rounded-lg p-3 text-xs space-y-1 border border-border mb-2">
-                    <p><span className="text-muted-foreground">Obra:</span> <strong className="text-foreground">{allocBooking.obra?.nome_obra}</strong></p>
-                    <p><span className="text-muted-foreground">Serviço:</span> <strong className="text-foreground">{allocBooking.servico?.nome_servico}</strong></p>
-                    <p><span className="text-muted-foreground">Data:</span> <strong className="text-foreground">{new Date(allocBooking.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {allocBooking.horario_na_obra?.substring(0,5)}</strong></p>
-                    <p><span className="text-muted-foreground">CPs:</span> <strong className="text-foreground">{allocBooking.cps_contratados}</strong></p>
+                  <div className="bg-muted/40 rounded-xl p-4 text-xs space-y-2 border border-border">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><span className="text-muted-foreground block">Obra</span><strong className="text-foreground">{allocBooking.obra?.nome_obra}</strong></div>
+                      <div><span className="text-muted-foreground block">Serviço</span><strong className="text-foreground">{allocBooking.servico?.nome_servico}</strong></div>
+                      <div><span className="text-muted-foreground block">Data</span><strong className="text-foreground">{new Date(allocBooking.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {allocBooking.horario_na_obra?.substring(0,5)}</strong></div>
+                      <div><span className="text-muted-foreground block">CPs</span><strong className="text-foreground">{allocBooking.cps_contratados}</strong></div>
+                      <div><span className="text-muted-foreground block">Cidade</span><strong className="text-foreground">{allocBooking.obra?.cidade}</strong></div>
+                      <div><span className="text-muted-foreground block">Valor</span><strong className="text-foreground">R$ {Number(allocBooking.valor_total||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</strong></div>
+                    </div>
+                    {allocBooking.tecnico && (
+                      <div className="pt-2 border-t border-border">
+                        <span className="text-muted-foreground">Técnico atual: </span>
+                        <strong className="text-primary">{allocBooking.tecnico.nome}</strong>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                <form onSubmit={handleAllocateTechnician} className="space-y-4">
+                <form onSubmit={handleAllocateTechnician} className="space-y-4 mt-1">
                   <div className="space-y-2">
-                    <Label htmlFor="alloc-tecnico" className="text-sm font-semibold">Técnico *</Label>
+                    <Label htmlFor="alloc-tecnico" className="text-sm font-semibold">Selecionar Técnico *</Label>
                     <select
                       id="alloc-tecnico"
                       value={allocTecnicoId}
                       onChange={(e) => setAllocTecnicoId(e.target.value)}
                       required
-                      className="w-full rounded-md border border-border bg-background text-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                     >
-                      <option value="">Selecionar técnico...</option>
+                      <option value="">Escolha um técnico...</option>
                       {tecnicos.map((tec: any) => (
                         <option key={tec.id} value={tec.id}>
-                          {tec.nome} {tec.especialidade ? `— ${tec.especialidade}` : ""}
+                          {tec.nome}{tec.especialidade ? ` — ${tec.especialidade}` : ""}
                         </option>
                       ))}
                     </select>
@@ -5847,9 +5980,13 @@ function AdminDash() {
                     <Button type="button" variant="outline" onClick={() => setAllocModalOpen(false)} disabled={allocating}>
                       Cancelar
                     </Button>
-                    <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5" disabled={allocating || !allocTecnicoId}>
+                    <Button
+                      type="submit"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5"
+                      disabled={allocating || !allocTecnicoId}
+                    >
                       <Users className="h-4 w-4" />
-                      {allocating ? "Alocando..." : "Confirmar Alocação"}
+                      {allocating ? "Confirmando..." : "Confirmar Alocação"}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -5858,6 +5995,7 @@ function AdminDash() {
           </div>
         )}
 
+        {/* ── PAINEL: GESTÃO DE TÉCNICOS ── */}
         {/* ── PAINEL: GESTÃO DE TÉCNICOS ── */}
         {activeTab === "tecnicos" && <div className="space-y-6">
           <div className="flex justify-end gap-2 mb-4">
