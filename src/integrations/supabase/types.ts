@@ -199,6 +199,76 @@ export type Database = {
         }
         Relationships: []
       }
+      avaliacoes_tecnicos: {
+        Row: {
+          id: string
+          tecnico_id: string
+          agendamento_id: string
+          avaliador_id: string
+          tipo_avaliador: string
+          nota: number
+          comentario: string | null
+          nota_comunicacao: number | null
+          nota_conhecimento_tecnico: number | null
+          nota_pontualidade: number | null
+          nota_limpeza_materiais: number | null
+          nota_organizacao_trabalho: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tecnico_id: string
+          agendamento_id: string
+          avaliador_id: string
+          tipo_avaliador: string
+          nota?: number
+          comentario?: string | null
+          nota_comunicacao?: number | null
+          nota_conhecimento_tecnico?: number | null
+          nota_pontualidade?: number | null
+          nota_limpeza_materiais?: number | null
+          nota_organizacao_trabalho?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tecnico_id?: string
+          agendamento_id?: string
+          avaliador_id?: string
+          tipo_avaliador?: string
+          nota?: number
+          comentario?: string | null
+          nota_comunicacao?: number | null
+          nota_conhecimento_tecnico?: number | null
+          nota_pontualidade?: number | null
+          nota_limpeza_materiais?: number | null
+          nota_organizacao_trabalho?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "avaliacoes_tecnicos_tecnico_id_fkey"
+            columns: ["tecnico_id"]
+            isOneToOne: false
+            referencedRelation: "tecnicos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "avaliacoes_tecnicos_tecnico_id_fkey"
+            columns: ["tecnico_id"]
+            isOneToOne: false
+            referencedRelation: "tecnicos_pub"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "avaliacoes_tecnicos_agendamento_id_fkey"
+            columns: ["agendamento_id"]
+            isOneToOne: false
+            referencedRelation: "agendamentos_medicoes"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       cidades_atendidas: {
         Row: {
           created_at: string

@@ -408,6 +408,39 @@ export const createBooking = createServerFn({ method: "POST" })
       }
     }
 
+    // Notify the Geraltest Manager via WhatsApp
+    try {
+      const { data: setting } = await supabaseAdmin
+        .from("app_settings")
+        .select("value")
+        .eq("key", "whatsapp_thais")
+        .maybeSingle();
+      const gestorPhone = (setting?.value as string) || "5515999999999";
+
+      const { data: empresa } = await supabaseAdmin
+        .from("empresas_clientes")
+        .select("razao_social")
+        .eq("id", empresaId)
+        .single();
+      const companyName = empresa?.razao_social || "Cliente";
+
+      const obraNome = data.nova_obra?.nome_obra || "Obra";
+
+      const messageText = 
+        `📋 *Quantis Obras - Nova Solicitação de Agendamento*\n\n` +
+        `Um novo agendamento foi solicitado e aguarda alocação de técnico.\n\n` +
+        `🏢 *Cliente:* ${companyName}\n` +
+        `🏗️ *Obra:* ${obraNome}\n` +
+        `📅 *Data:* ${new Date(data.data_servico + "T00:00:00").toLocaleDateString("pt-BR")}\n` +
+        `⏰ *Horário na Obra:* ${data.horario_na_obra}\n` +
+        `💰 *Valor Estimado:* R$ ${groupTotalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n\n` +
+        `Acesse o painel do gestor para alocar o técnico de sua preferência.`;
+
+      await sendServerWhatsappMessage(gestorPhone, messageText);
+    } catch (waErr) {
+      console.error("Erro ao enviar notificação de agendamento para o gestor:", waErr);
+    }
+
     // Return the first booking details but with the combined group total value
     const firstAgendamento = agendamentos[0];
     return {
@@ -1851,8 +1884,12 @@ export const submitTechnicianRating = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => z.object({
     bookingId: z.string().uuid(),
     tecnicoId: z.string().uuid(),
-    nota: z.number().min(1).max(5),
-    comentario: z.string().max(1000).optional(),
+    notaComunicacao: z.number().min(1).max(5),
+    notaConhecimentoTecnico: z.number().min(1).max(5),
+    notaPontualidade: z.number().min(1).max(5),
+    notaLimpezaMateriais: z.number().min(1).max(5),
+    notaOrganizacaoTrabalho: z.number().min(1).max(5),
+    comentario: z.string().max(1000).optional().nullable(),
     tipoAvaliador: z.enum(["cliente", "gestor"]),
   }).parse(input))
   .handler(async ({ data: input, context }) => {
@@ -1870,6 +1907,15 @@ export const submitTechnicianRating = createServerFn({ method: "POST" })
       throw new Error("Você já avaliou este atendimento.");
     }
 
+    const avgNota = +(
+      (input.notaComunicacao +
+        input.notaConhecimentoTecnico +
+        input.notaPontualidade +
+        input.notaLimpezaMateriais +
+        input.notaOrganizacaoTrabalho) /
+      5
+    ).toFixed(2);
+
     // Insert rating
     const { error } = await supabase
       .from("avaliacoes_tecnicos")
@@ -1878,8 +1924,13 @@ export const submitTechnicianRating = createServerFn({ method: "POST" })
         agendamento_id: input.bookingId,
         avaliador_id: userId,
         tipo_avaliador: input.tipoAvaliador,
-        nota: input.nota,
+        nota: avgNota,
         comentario: input.comentario || null,
+        nota_comunicacao: input.notaComunicacao,
+        nota_conhecimento_tecnico: input.notaConhecimentoTecnico,
+        nota_pontualidade: input.notaPontualidade,
+        nota_limpeza_materiais: input.notaLimpezaMateriais,
+        nota_organizacao_trabalho: input.notaOrganizacaoTrabalho,
       });
 
     if (error) throw error;
@@ -2537,6 +2588,109 @@ export const updateCompanySettings = createServerFn({ method: "POST" })
     if (error) throw error;
     return { success: true };
   });
+
+export const allocateTechnicianManually = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    bookingId: z.string().uuid(),
+    tecnicoId: z.string().uuid(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem alocar técnicos.");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Update booking to Confirmado with the allocated technician
+    const { error } = await supabaseAdmin
+      .from("agendamentos_medicoes")
+      .update({
+        tecnico_id: input.tecnicoId,
+        status_agendamento: "Confirmado",
+        convidado_em: new Date().toISOString(),
+      })
+      .eq("id", input.bookingId);
+
+    if (error) throw error;
+
+    // Notify technician via WhatsApp
+    try {
+      const { data: tecnico } = await supabaseAdmin
+        .from("tecnicos")
+        .select("nome, user_id")
+        .eq("id", input.tecnicoId)
+        .single();
+        
+      if (tecnico?.user_id) {
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("telefone")
+          .eq("id", tecnico.user_id)
+          .single();
+          
+        if (profile?.telefone) {
+          const { data: booking } = await supabaseAdmin
+            .from("agendamentos_medicoes")
+            .select("codigo_pedido, data_servico, horario_na_obra, obra:obras(nome_obra, endereco)")
+            .eq("id", input.bookingId)
+            .single();
+            
+          if (booking) {
+            const messageText = 
+              `📅 *Quantis Obras - Nova Escala Confirmada*\n\n` +
+              `Olá, *${tecnico.nome}*!\n` +
+              `Você foi escalado para um novo serviço.\n\n` +
+              `📝 *Código do Pedido:* ${booking.codigo_pedido}\n` +
+              `📅 *Data:* ${new Date(booking.data_servico + "T00:00:00").toLocaleDateString("pt-BR")}\n` +
+              `⏰ *Horário na Obra:* ${booking.horario_na_obra?.substring(0, 5)}\n` +
+              `🏗️ *Obra:* ${(booking.obra as any)?.nome_obra}\n` +
+              `📍 *Endereço:* ${(booking.obra as any)?.endereco}\n\n` +
+              `Por favor, acesse seu painel para mais detalhes. Bom trabalho!`;
+              
+            await sendServerWhatsappMessage(profile.telefone, messageText);
+          }
+        }
+      }
+    } catch (notifErr) {
+      console.error("Erro ao notificar técnico por WhatsApp:", notifErr);
+    }
+
+    return { success: true };
+  });
+
+async function sendServerWhatsappMessage(number: string, text: string) {
+  const apiUrl = process.env.EVOLUTION_API_URL;
+  const apiToken = process.env.EVOLUTION_API_TOKEN;
+  const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
+
+  let cleanNumber = number.replace(/\D/g, "");
+  if (cleanNumber.length === 11 || cleanNumber.length === 10) {
+    cleanNumber = "55" + cleanNumber;
+  }
+
+  if (!apiUrl || !apiToken || !instanceName) {
+    console.warn("[Evolution API Backend] Simulation mode — credentials not set. Would send to", cleanNumber, text);
+    return;
+  }
+
+  try {
+    const url = `${apiUrl.replace(/\/$/, "")}/message/sendText/${instanceName}`;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: apiToken },
+      body: JSON.stringify({ number: cleanNumber, text, delay: 1200, linkPreview: true }),
+    });
+  } catch (error) {
+    console.error("[Evolution API Backend] Exception:", error);
+  }
+}
 
 
 

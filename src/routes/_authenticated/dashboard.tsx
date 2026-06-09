@@ -41,7 +41,8 @@ import {
   saveAgendamentoSettings,
   submitTechnicianRating,
   getTechnicianRatings,
-  deleteObra
+  deleteObra,
+  allocateTechnicianManually
 } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -224,6 +225,61 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const [rescheduleDatasDisponiveis, setRescheduleDatasDisponiveis] = useState<string[]>([]);
   const [loadingRescheduleDatas, setLoadingRescheduleDatas] = useState(false);
   const [calMesReschedule, setCalMesReschedule] = useState<Date>(new Date());
+
+  // Technician Rating Modal states
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [ratingBookingId, setRatingBookingId] = useState<string | null>(null);
+  const [ratingTecnicoId, setRatingTecnicoId] = useState<string | null>(null);
+  const [ratingTecnicoNome, setRatingTecnicoNome] = useState<string>("");
+  const [ratingComunicacao, setRatingComunicacao] = useState(5);
+  const [ratingConhecimento, setRatingConhecimento] = useState(5);
+  const [ratingPontualidade, setRatingPontualidade] = useState(5);
+  const [ratingLimpeza, setRatingLimpeza] = useState(5);
+  const [ratingOrganizacao, setRatingOrganizacao] = useState(5);
+  const [ratingComentario, setRatingComentario] = useState("");
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [ratedBookingIds, setRatedBookingIds] = useState<Set<string>>(new Set());
+
+  const handleOpenRatingDialog = (ag: any) => {
+    setRatingBookingId(ag.id);
+    setRatingTecnicoId(ag.tecnico?.id || ag.tecnico_id || null);
+    setRatingTecnicoNome(ag.tecnico?.nome || "Técnico");
+    setRatingComunicacao(5);
+    setRatingConhecimento(5);
+    setRatingPontualidade(5);
+    setRatingLimpeza(5);
+    setRatingOrganizacao(5);
+    setRatingComentario("");
+    setRatingDialogOpen(true);
+  };
+
+  const handleSubmitRating = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ratingBookingId || !ratingTecnicoId) return;
+    setRatingSubmitting(true);
+    try {
+      await submitTechnicianRating({
+        data: {
+          bookingId: ratingBookingId,
+          tecnicoId: ratingTecnicoId,
+          notaComunicacao: ratingComunicacao,
+          notaConhecimentoTecnico: ratingConhecimento,
+          notaPontualidade: ratingPontualidade,
+          notaLimpezaMateriais: ratingLimpeza,
+          notaOrganizacaoTrabalho: ratingOrganizacao,
+          comentario: ratingComentario || null,
+          tipoAvaliador: "cliente",
+        },
+      });
+      toast.success("Avaliação enviada! Obrigado pelo feedback.");
+      setRatedBookingIds(prev => new Set(prev).add(ratingBookingId));
+      setRatingDialogOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao enviar avaliação.");
+    } finally {
+      setRatingSubmitting(false);
+    }
+  };
 
   const fetchRescheduleAvailability = async (categoria: string) => {
     setLoadingRescheduleDatas(true);
@@ -1145,24 +1201,8 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                         </div>
                       </div>
                       {ag.status_agendamento === "Pendente_Aprovacao_Gestor" ? (
-                        <div className="flex gap-1.5 w-full sm:w-auto" onClick={(e) => e.stopPropagation()}>
-                          <Button 
-                            size="sm" 
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] h-7 px-2"
-                            onClick={() => handleApproveTechnician(ag.id)}
-                            disabled={approvingTec === ag.id}
-                          >
-                            {approvingTec === ag.id ? "Aprovando..." : "Aprovar"}
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            className="text-red-500 border-red-200 hover:bg-red-50 text-[10px] h-7 px-2"
-                            onClick={() => handleReallocateTechnician(ag.id)}
-                            disabled={reallocatingTec === ag.id}
-                          >
-                            {reallocatingTec === ag.id ? "Remanejando..." : "Remanejar"}
-                          </Button>
+                        <div className="text-[10px] text-orange-600 font-semibold italic flex items-center gap-1 bg-orange-500/10 px-2 py-1 rounded border border-orange-500/20">
+                          <Clock className="h-3 w-3 text-orange-500" /> Aguardando aprovação da Geraltest
                         </div>
                       ) : (
                         <div className="text-[10px] text-muted-foreground italic flex items-center gap-1 bg-muted px-2 py-1 rounded">
@@ -1585,10 +1625,107 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                   </Button>
                 </>
               )}
+              {selectedBooking.status_agendamento === "Validado" && selectedBooking.tecnico_id && !ratedBookingIds.has(selectedBooking.id) && (
+                <Button
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5"
+                  onClick={() => { setSelectedBooking(null); handleOpenRatingDialog(selectedBooking); }}
+                >
+                  <Star className="h-4 w-4" />
+                  Avaliar Técnico
+                </Button>
+              )}
+              {selectedBooking.status_agendamento === "Validado" && ratedBookingIds.has(selectedBooking.id) && (
+                <div className="text-xs text-emerald-600 font-semibold flex items-center gap-1 bg-emerald-500/10 px-3 py-1.5 rounded border border-emerald-500/20">
+                  <Check className="h-3.5 w-3.5" /> Avaliação enviada
+                </div>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* ── DIALOG: Avaliar Técnico ── */}
+      <Dialog open={ratingDialogOpen} onOpenChange={setRatingDialogOpen}>
+        <DialogContent className="max-w-lg border border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+              <Star className="h-5 w-5 text-yellow-500" />
+              Avaliar Técnico
+            </DialogTitle>
+            <DialogDescription>
+              Avalie o desempenho de <strong>{ratingTecnicoNome}</strong> neste atendimento. Seu feedback é muito importante para melhorarmos a qualidade dos nossos serviços.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitRating} className="space-y-5 mt-2">
+            {/* Helper component for star rating */}
+            {([
+              { label: "Comunicação", value: ratingComunicacao, setter: setRatingComunicacao, id: "comunicacao" },
+              { label: "Conhecimento Técnico", value: ratingConhecimento, setter: setRatingConhecimento, id: "conhecimento" },
+              { label: "Pontualidade", value: ratingPontualidade, setter: setRatingPontualidade, id: "pontualidade" },
+              { label: "Limpeza dos Materiais", value: ratingLimpeza, setter: setRatingLimpeza, id: "limpeza" },
+              { label: "Organização do Espaço de Trabalho", value: ratingOrganizacao, setter: setRatingOrganizacao, id: "organizacao" },
+            ] as const).map((param) => (
+              <div key={param.id} className="space-y-1.5">
+                <label className="text-sm font-semibold text-foreground">{param.label}</label>
+                <div className="flex items-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => (param.setter as (v: number) => void)(star)}
+                      className={`transition-all duration-100 hover:scale-110 focus:outline-none ${
+                        star <= param.value
+                          ? "text-yellow-400"
+                          : "text-muted-foreground/30 hover:text-yellow-300"
+                      }`}
+                    >
+                      <Star className="h-7 w-7" fill={star <= param.value ? "currentColor" : "none"} />
+                    </button>
+                  ))}
+                  <span className="ml-2 text-sm font-bold text-muted-foreground">{param.value}/5</span>
+                </div>
+              </div>
+            ))}
+
+            <div className="space-y-1.5">
+              <label htmlFor="rating-comentario" className="text-sm font-semibold text-foreground">
+                Comentários Adicionais <span className="text-muted-foreground font-normal">(opcional)</span>
+              </label>
+              <Textarea
+                id="rating-comentario"
+                placeholder="Descreva sua experiência com o técnico (pontualidade, organização, etc.)"
+                value={ratingComentario}
+                onChange={(e) => setRatingComentario(e.target.value)}
+                className="min-h-[80px] bg-background border-border text-foreground"
+              />
+            </div>
+
+            <div className="bg-muted/40 rounded-lg px-4 py-3 text-xs text-muted-foreground border border-border">
+              Nota Média Calculada: <strong className="text-foreground text-sm">{((ratingComunicacao + ratingConhecimento + ratingPontualidade + ratingLimpeza + ratingOrganizacao) / 5).toFixed(1)}</strong> / 5.0
+            </div>
+
+            <DialogFooter className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRatingDialogOpen(false)}
+                disabled={ratingSubmitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5"
+                disabled={ratingSubmitting}
+              >
+                <Star className="h-4 w-4" />
+                {ratingSubmitting ? "Enviando..." : "Enviar Avaliação"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Reprovação de Medição */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
@@ -3623,6 +3760,59 @@ function AdminDash() {
   const [clienteCnpj, setClienteCnpj] = useState("");
   const [clienteRequerAprovacaoTecnico, setClienteRequerAprovacaoTecnico] = useState(false);
 
+  // Admin Agendamentos panel states
+  const [adminAgendamentos, setAdminAgendamentos] = useState<any[]>([]);
+  const [loadingAdminAgend, setLoadingAdminAgend] = useState(false);
+  const [adminAgendStatusFilter, setAdminAgendStatusFilter] = useState("Pendente_Aprovacao_Gestor");
+  // Manual allocation modal states
+  const [allocModalOpen, setAllocModalOpen] = useState(false);
+  const [allocBooking, setAllocBooking] = useState<any | null>(null);
+  const [allocTecnicoId, setAllocTecnicoId] = useState("");
+  const [allocating, setAllocating] = useState(false);
+
+  const fetchAdminAgendamentos = async () => {
+    setLoadingAdminAgend(true);
+    try {
+      const { data, error } = await supabase
+        .from("agendamentos_medicoes")
+        .select("*, obra:obras(*), servico:servicos_catalogo_pub(*), tecnico:tecnicos!agendamentos_medicoes_tecnico_id_fkey(*)")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      setAdminAgendamentos(data || []);
+    } catch (err) {
+      console.error("Erro ao buscar agendamentos:", err);
+      toast.error("Erro ao carregar agendamentos.");
+    } finally {
+      setLoadingAdminAgend(false);
+    }
+  };
+
+  const handleOpenAllocModal = (ag: any) => {
+    setAllocBooking(ag);
+    setAllocTecnicoId("");
+    setAllocModalOpen(true);
+  };
+
+  const handleAllocateTechnician = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!allocBooking || !allocTecnicoId) return;
+    setAllocating(true);
+    try {
+      await allocateTechnicianManually({
+        data: { bookingId: allocBooking.id, tecnicoId: allocTecnicoId },
+      });
+      toast.success("Técnico alocado com sucesso! Notificação enviada via WhatsApp.");
+      setAllocModalOpen(false);
+      fetchAdminAgendamentos();
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao alocar técnico.");
+    } finally {
+      setAllocating(false);
+    }
+  };
+
+
   const handleSaveCliente = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clienteRazaoSocial || !clienteCnpj) {
@@ -5449,6 +5639,7 @@ function AdminDash() {
 
   // Sidebar nav items definition
   const sidebarItems = [
+    { id: "agendamentos",    label: "Agendamentos",            icon: ClipboardList, onClick: () => { setActiveTab("agendamentos"); fetchAdminAgendamentos(); }, badge: adminAgendamentos.filter(a => a.status_agendamento === "Pendente_Aprovacao_Gestor").length || undefined },
     { id: "tecnicos",        label: "Gestão de Técnicos",      icon: Users,        onClick: () => { setActiveTab("tecnicos"); } },
     { id: "obras",           label: "Gestão de Obras",         icon: HardHat,      onClick: () => { setActiveTab("obras"); fetchObrasGestor(); fetchEmpresasClientes(); } },
     { id: "clientes",        label: "Gestão de Clientes",      icon: Building2,    onClick: () => { setActiveTab("clientes"); fetchEmpresasClientes(); } },
@@ -5509,6 +5700,164 @@ function AdminDash() {
 
       {/* ══ CONTEÚDO PRINCIPAL ══ */}
       <main className="flex-1 min-w-0 p-8 overflow-y-auto">
+
+        {/* ── PAINEL: AGENDAMENTOS ── */}
+        {activeTab === "agendamentos" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">Agendamentos</h2>
+              <p className="text-muted-foreground text-sm mt-1">Gerencie todos os agendamentos e aloque técnicos manualmente para pendências de aprovação.</p>
+            </div>
+
+            {/* Filter bar */}
+            <div className="flex flex-wrap gap-3 items-center">
+              <div className="flex gap-1.5">
+                {[
+                  { label: "Aguardando Alocação", value: "Pendente_Aprovacao_Gestor" },
+                  { label: "Pendente Técnico", value: "Pendente_Tecnico" },
+                  { label: "Confirmados", value: "Confirmado" },
+                  { label: "Em Execução", value: "Em_Execucao" },
+                  { label: "Todos", value: "todos" },
+                ].map((f) => (
+                  <button
+                    key={f.value}
+                    onClick={() => setAdminAgendStatusFilter(f.value)}
+                    className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${
+                      adminAgendStatusFilter === f.value
+                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                        : "bg-background text-muted-foreground border-border hover:border-primary/50"
+                    }`}
+                  >
+                    {f.label}
+                    {f.value === "Pendente_Aprovacao_Gestor" && (
+                      <span className="ml-1.5 bg-orange-500 text-white rounded-full px-1.5 text-[10px] font-bold">
+                        {adminAgendamentos.filter(a => a.status_agendamento === "Pendente_Aprovacao_Gestor").length}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={fetchAdminAgendamentos}
+                className="ml-auto text-xs px-3 py-1.5 rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all"
+              >
+                ↻ Atualizar
+              </button>
+            </div>
+
+            {loadingAdminAgend ? (
+              <div className="text-center py-12 text-muted-foreground text-sm animate-pulse">Carregando agendamentos...</div>
+            ) : (() => {
+              const filtered = adminAgendStatusFilter === "todos"
+                ? adminAgendamentos
+                : adminAgendamentos.filter(a => a.status_agendamento === adminAgendStatusFilter);
+
+              return filtered.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-sm border border-dashed border-border rounded-lg">
+                  Nenhum agendamento encontrado com esse filtro.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filtered.map((ag) => (
+                    <div key={ag.id} className="border border-border rounded-xl bg-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-primary/40 transition-all">
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra"}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            ag.status_agendamento === "Pendente_Aprovacao_Gestor"
+                              ? "bg-orange-500/10 text-orange-600 border-orange-500/20"
+                              : ag.status_agendamento === "Confirmado"
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                              : ag.status_agendamento === "Em_Execucao"
+                              ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                              : "bg-muted text-muted-foreground border-border"
+                          }`}>
+                            {STATUS_LABELS[ag.status_agendamento] || ag.status_agendamento}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{ag.servico?.nome_servico || "Serviço"}</p>
+                        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-1">
+                          <span>📋 {ag.codigo_pedido}</span>
+                          <span>📅 {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0,5)}</span>
+                          <span>📍 {ag.obra?.cidade || "-"}</span>
+                          <span>🔬 {ag.cps_contratados} CPs</span>
+                          {ag.tecnico && <span className="text-primary font-semibold">👷 {ag.tecnico.nome}</span>}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        {ag.status_agendamento === "Pendente_Aprovacao_Gestor" && (
+                          <Button
+                            size="sm"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5"
+                            onClick={() => handleOpenAllocModal(ag)}
+                          >
+                            <Users className="h-3.5 w-3.5" />
+                            Alocar Técnico
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Modal de Alocação Manual de Técnico */}
+            <Dialog open={allocModalOpen} onOpenChange={setAllocModalOpen}>
+              <DialogContent className="max-w-md border border-border bg-card">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+                    <Users className="h-5 w-5 text-primary" />
+                    Alocar Técnico Manualmente
+                  </DialogTitle>
+                  <DialogDescription>
+                    Selecione o técnico que irá atender este serviço. Uma notificação será enviada ao técnico via WhatsApp.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {allocBooking && (
+                  <div className="bg-muted/40 rounded-lg p-3 text-xs space-y-1 border border-border mb-2">
+                    <p><span className="text-muted-foreground">Obra:</span> <strong className="text-foreground">{allocBooking.obra?.nome_obra}</strong></p>
+                    <p><span className="text-muted-foreground">Serviço:</span> <strong className="text-foreground">{allocBooking.servico?.nome_servico}</strong></p>
+                    <p><span className="text-muted-foreground">Data:</span> <strong className="text-foreground">{new Date(allocBooking.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {allocBooking.horario_na_obra?.substring(0,5)}</strong></p>
+                    <p><span className="text-muted-foreground">CPs:</span> <strong className="text-foreground">{allocBooking.cps_contratados}</strong></p>
+                  </div>
+                )}
+
+                <form onSubmit={handleAllocateTechnician} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="alloc-tecnico" className="text-sm font-semibold">Técnico *</Label>
+                    <select
+                      id="alloc-tecnico"
+                      value={allocTecnicoId}
+                      onChange={(e) => setAllocTecnicoId(e.target.value)}
+                      required
+                      className="w-full rounded-md border border-border bg-background text-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                      <option value="">Selecionar técnico...</option>
+                      {tecnicos.map((tec: any) => (
+                        <option key={tec.id} value={tec.id}>
+                          {tec.nome} {tec.especialidade ? `— ${tec.especialidade}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <DialogFooter className="flex justify-end gap-2 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setAllocModalOpen(false)} disabled={allocating}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-1.5" disabled={allocating || !allocTecnicoId}>
+                      <Users className="h-4 w-4" />
+                      {allocating ? "Alocando..." : "Confirmar Alocação"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
         {/* ── PAINEL: GESTÃO DE TÉCNICOS ── */}
         {activeTab === "tecnicos" && <div className="space-y-6">
           <div className="flex justify-end gap-2 mb-4">
