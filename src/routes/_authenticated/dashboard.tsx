@@ -3740,7 +3740,7 @@ function AdminDash() {
     try {
       const { data, error } = await supabase
         .from("empresas_clientes")
-        .select("id, razao_social")
+        .select("id, razao_social, cnpj, requer_aprovacao_tecnico")
         .order("razao_social", { ascending: true });
       if (!error && data) {
         setEmpresasClientes(data);
