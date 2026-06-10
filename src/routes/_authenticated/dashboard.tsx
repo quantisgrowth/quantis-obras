@@ -12,6 +12,8 @@ import {
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useBranding } from "@/hooks/use-branding";
+import { BrandingSettings } from "@/components/branding-settings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
@@ -166,6 +168,7 @@ const STATUS_LABELS: Record<string, string> = {
 // ── CLIENTE DASHBOARD ──────────────────────────────────────────────────────
 function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const navigate = useNavigate();
+  const { isAdminEmpresa } = useBranding();
 
   const [agendamentos, setAgendamentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1118,6 +1121,14 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
           >
             <CheckCircle2 className="h-4 w-4" /> Realizados ({concluidos.length})
           </TabsTrigger>
+          {isAdminEmpresa && (
+            <TabsTrigger 
+              value="personalizacao" 
+              className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+            >
+              <Settings className="h-4 w-4" /> Identidade Visual
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── TAB: SOLICITAÇÃO ── */}
@@ -1365,7 +1376,11 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
           )}
         </TabsContent>
 
-
+        {isAdminEmpresa && (
+          <TabsContent value="personalizacao" className="space-y-4">
+            <BrandingSettings />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* ── DETALHES MODAL (LINHA DO TEMPO DOS ENSAIOS E FOTOS CRONOLÓGICA) ── */}
@@ -3877,6 +3892,27 @@ function AdminDash() {
     }
   };
 
+  const [approvingBookingId, setApprovingBookingId] = useState<string | null>(null);
+
+  const handleApproveBooking = async (bookingId: string) => {
+    setApprovingBookingId(bookingId);
+    try {
+      const { error } = await supabase
+        .from("agendamentos_medicoes")
+        .update({ status_agendamento: "Confirmado" })
+        .eq("id", bookingId);
+
+      if (error) throw error;
+      toast.success("Agendamento confirmado com sucesso!");
+      fetchAdminAgendamentos();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Erro ao aprovar agendamento.");
+    } finally {
+      setApprovingBookingId(null);
+    }
+  };
+
 
   const handleSaveCliente = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -5951,6 +5987,17 @@ function AdminDash() {
 
                         {/* Right: actions */}
                         <div className="flex gap-2 items-center shrink-0">
+                          {((isPendingAlloc || isPendingTec) && ag.tecnico) && (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 shadow-sm text-xs cursor-pointer"
+                              disabled={approvingBookingId === ag.id}
+                              onClick={() => handleApproveBooking(ag.id)}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              {approvingBookingId === ag.id ? "Aprovando..." : "Aprovar"}
+                            </Button>
+                          )}
                           {isPendingAlloc && (
                             <Button
                               size="sm"

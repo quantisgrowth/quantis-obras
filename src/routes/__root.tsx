@@ -10,6 +10,7 @@ import {
 
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/hooks/use-auth";
+import { BrandingProvider } from "@/hooks/use-branding";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -121,9 +122,11 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
-        <Toaster richColors position="top-right" />
+        <BrandingProvider>
+          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+          <Outlet />
+          <Toaster richColors position="top-right" />
+        </BrandingProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
