@@ -3216,6 +3216,42 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
           ) : (
             <div className="space-y-6">
               {(() => {
+                const getCountdownText = (dataServico: string, horarioNaObra: string, status: string) => {
+                  if (status !== "Confirmado" && status !== "Em_Execucao") return null;
+                  const timeStr = horarioNaObra?.substring(0, 5) || "07:00";
+                  const targetTime = new Date(`${dataServico}T${timeStr}:00`);
+                  const now = new Date();
+                  const diffMs = targetTime.getTime() - now.getTime();
+
+                  if (diffMs < 0) {
+                    return (
+                      <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-950/40 px-2 py-0.5 rounded animate-pulse">
+                        ⚠️ Atrasado
+                      </span>
+                    );
+                  }
+
+                  const diffMin = Math.floor(diffMs / (1000 * 60));
+                  const diffHrs = Math.floor(diffMin / 60);
+                  const diffDays = Math.floor(diffHrs / 24);
+
+                  let text = "";
+                  if (diffDays > 0) {
+                    text = diffDays === 1 ? "Falta 1 dia" : `Faltam ${diffDays} dias`;
+                  } else if (diffHrs > 0) {
+                    const mins = diffMin % 60;
+                    text = mins > 0 ? `Faltam ${diffHrs}h ${mins}m` : `Faltam ${diffHrs}h`;
+                  } else {
+                    text = `Faltam ${diffMin} min`;
+                  }
+
+                  return (
+                    <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded">
+                      ⏱️ {text}
+                    </span>
+                  );
+                };
+
                 const renderCard = (ag: any) => (
                   <Card key={ag.id} className="border border-border bg-card p-4 hover:shadow-sm transition-all">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -3238,9 +3274,12 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                       </div>
 
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 justify-center min-w-[150px]">
-                        <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-muted px-2.5 py-1 rounded">
-                          <Clock className="h-3.5 w-3.5 text-primary" />
-                          {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
+                        <div className="flex flex-col gap-1 items-end sm:items-center">
+                          <div className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-muted px-2.5 py-1 rounded">
+                            <Clock className="h-3.5 w-3.5 text-primary" />
+                            {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
+                          </div>
+                          {getCountdownText(ag.data_servico, ag.horario_na_obra, ag.status_agendamento)}
                         </div>
 
                         {ag.status_agendamento === "Confirmado" && (
@@ -3733,8 +3772,12 @@ function AdminDash() {
   const [activeTab, setActiveTab] = useState("tecnicos");
 
   // Global Configs states
-  const [globalConfigs, setGlobalConfigs] = useState({ eficiencia_cp: 95, coeficiente_he: 1.5, prazo_faturamento_dias: 28 });
+  const [globalConfigs, setGlobalConfigs] = useState<any>({ eficiencia_cp: 95, coeficiente_he: 1.5, prazo_faturamento_dias: 28 });
   const [savingGlobalConfigs, setSavingGlobalConfigs] = useState(false);
+  const [blockLimitVal, setBlockLimitVal] = useState(60);
+  const [blockLimitUnit, setBlockLimitUnit] = useState<"minutes" | "hours">("minutes");
+  const [alertLimitVal, setAlertLimitVal] = useState(30);
+  const [alertLimitUnit, setAlertLimitUnit] = useState<"minutes" | "hours">("minutes");
 
   // City form states
   const [cidadeId, setCidadeId] = useState("");
@@ -3885,6 +3928,7 @@ function AdminDash() {
       toast.success("Técnico alocado com sucesso! Notificação enviada via WhatsApp.");
       setAllocModalOpen(false);
       fetchAdminAgendamentos();
+      fetchAlertas();
     } catch (err: any) {
       toast.error(err?.message || "Erro ao alocar técnico.");
     } finally {
@@ -4266,11 +4310,32 @@ function AdminDash() {
         .eq("key", "configuracoes_globais")
         .maybeSingle();
       if (data && data.value) {
-        setGlobalConfigs(data.value as any);
+        const val = data.value as any;
+        setGlobalConfigs(val);
+
+        const blockMin = val.limite_atraso_bloqueio_minutos || 0;
+        if (blockMin > 0 && blockMin % 60 === 0) {
+          setBlockLimitVal(blockMin / 60);
+          setBlockLimitUnit("hours");
+        } else {
+          setBlockLimitVal(blockMin);
+          setBlockLimitUnit("minutes");
+        }
+
+        const alertMin = val.limite_atraso_alerta_minutos || 0;
+        if (alertMin > 0 && alertMin % 60 === 0) {
+          setAlertLimitVal(alertMin / 60);
+          setAlertLimitUnit("hours");
+        } else {
+          setAlertLimitVal(alertMin);
+          setAlertLimitUnit("minutes");
+        }
       }
       await fetchAllCidades();
     } catch (err) {
       console.error(err);
+    } finally {
+      setSavingGlobalConfigs(false);
     }
   };
 
@@ -4279,10 +4344,20 @@ function AdminDash() {
     setSavingGlobalConfigs(true);
     try {
       const { saveGlobalSettings } = await import("@/lib/booking.functions");
+      const blockMin = blockLimitUnit === "hours" ? blockLimitVal * 60 : blockLimitVal;
+      const alertMin = alertLimitUnit === "hours" ? alertLimitVal * 60 : alertLimitVal;
+
+      const updatedConfigs = {
+        ...globalConfigs,
+        limite_atraso_bloqueio_minutos: blockMin,
+        limite_atraso_alerta_minutos: alertMin,
+      };
+
       const res = await saveGlobalSettings({
-        data: globalConfigs
+        data: updatedConfigs
       });
       if (res.success) {
+        setGlobalConfigs(updatedConfigs);
         toast.success("Configurações globais atualizadas com sucesso!");
       }
     } catch (err: any) {
@@ -5172,7 +5247,7 @@ function AdminDash() {
     try {
       const { data, error } = await supabase
         .from("alertas_gestao")
-        .select("*, agendamento:agendamentos_medicoes(*, obra:obras(*)), tecnico:tecnicos(*)")
+        .select("*, agendamento:agendamentos_medicoes(*, obra:obras(*), servico:servicos_catalogo_pub(*)), tecnico:tecnicos(*)")
         .eq("resolvido", false)
         .order("created_at", { ascending: false });
       if (!error && data) setAlertas(data);
@@ -6941,45 +7016,136 @@ function AdminDash() {
                     <div key={alerta.id} className="border-2 border-red-500/20 bg-red-500/5 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="destructive" className="font-bold">⚠️ Fora do Raio</Badge>
+                          {alerta.tipo === "Atraso_Bloqueante" && <Badge variant="destructive" className="font-bold bg-red-600 text-white animate-pulse">🚨 Bloqueado por Atraso</Badge>}
+                          {alerta.tipo === "Atraso_Notificacao" && <Badge variant="destructive" className="font-bold bg-amber-500 text-white">⚠️ Alerta de Atraso</Badge>}
+                          {alerta.tipo === "Fora_Raio_Atuacao" && <Badge variant="destructive" className="font-bold">⚠️ Fora do Raio</Badge>}
                           <span className="text-xs text-muted-foreground font-semibold font-mono">Agendamento: {alerta.agendamento?.codigo_pedido}</span>
                         </div>
                         <p className="text-sm font-semibold mt-1">{alerta.descricao}</p>
                         <p className="text-xs text-muted-foreground">Obra: {alerta.agendamento?.obra?.nome_obra} ({alerta.agendamento?.obra?.cidade}/{alerta.agendamento?.obra?.estado})</p>
                       </div>
                       <div className="flex gap-2 shrink-0">
-                        <Button
-                          size="sm"
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer"
-                          onClick={() => {
-                            setSelectedAlerta(alerta);
-                            setLocalTipo("Hotel");
-                            setLocalNome(`Hotel para ${alerta.tecnico?.nome} - ${alerta.agendamento?.obra?.cidade}`);
-                            setLocalCidade(alerta.agendamento?.obra?.cidade || "");
-                            setLocalEstado(alerta.agendamento?.obra?.estado || "SP");
-                            setAlertSupportDialogOpen(true);
-                          }}
-                        >
-                          Cadastrar Hospedagem
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-red-500/30 text-red-600 hover:bg-red-500/10 cursor-pointer font-semibold"
-                          onClick={async () => {
-                            if (confirm("Deseja realmente ignorar o alerta? O técnico poderá iniciar utilizando a opção 'Local sem definição'.")) {
-                              try {
-                                await resolveAlert({ data: { alertId: alerta.id } });
-                                toast.info("Alerta resolvido.");
-                                fetchAlertas();
-                              } catch (err: any) {
-                                toast.error(err?.message);
-                              }
-                            }
-                          }}
-                        >
-                          Ignorar Alerta
-                        </Button>
+                        {alerta.tipo === "Atraso_Bloqueante" && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white font-bold cursor-pointer"
+                              onClick={async () => {
+                                if (confirm("Deseja realmente liberar este atendimento? O técnico poderá iniciar/fazer check-in normalmente.")) {
+                                  try {
+                                    const { liberarAtendimentoAtrasado } = await import("@/lib/booking.functions");
+                                    await liberarAtendimentoAtrasado({ data: { alertId: alerta.id } });
+                                    toast.success("Atendimento liberado com sucesso!");
+                                    fetchAlertas();
+                                  } catch (err: any) {
+                                    toast.error(err?.message || "Erro ao liberar atendimento.");
+                                  }
+                                }
+                              }}
+                            >
+                              Liberar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-red-500/30 text-red-600 hover:bg-red-500/10 cursor-pointer font-semibold"
+                              onClick={async () => {
+                                if (confirm("Deseja realmente cancelar este atendimento?")) {
+                                  try {
+                                    const { cancelarAtendimentoAtrasado } = await import("@/lib/booking.functions");
+                                    await cancelarAtendimentoAtrasado({ data: { alertId: alerta.id } });
+                                    toast.success("Atendimento cancelado com sucesso!");
+                                    fetchAlertas();
+                                  } catch (err: any) {
+                                    toast.error(err?.message || "Erro ao cancelar atendimento.");
+                                  }
+                                }
+                              }}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="font-semibold cursor-pointer"
+                              onClick={() => {
+                                setAllocBooking(alerta.agendamento);
+                                setAllocModalOpen(true);
+                              }}
+                            >
+                              Realocar
+                            </Button>
+                          </>
+                        )}
+                        {alerta.tipo === "Atraso_Notificacao" && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="font-semibold cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
+                              onClick={() => {
+                                setAllocBooking(alerta.agendamento);
+                                setAllocModalOpen(true);
+                              }}
+                            >
+                              Realocar Técnico
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-red-500/30 text-red-600 hover:bg-red-500/10 cursor-pointer font-semibold"
+                              onClick={async () => {
+                                if (confirm("Deseja realmente ignorar este alerta de atraso?")) {
+                                  try {
+                                    await resolveAlert({ data: { alertId: alerta.id } });
+                                    toast.info("Alerta resolvido.");
+                                    fetchAlertas();
+                                  } catch (err: any) {
+                                    toast.error(err?.message);
+                                  }
+                                }
+                              }}
+                            >
+                              Ignorar
+                            </Button>
+                          </>
+                        )}
+                        {alerta.tipo === "Fora_Raio_Atuacao" && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer"
+                              onClick={() => {
+                                setSelectedAlerta(alerta);
+                                setLocalTipo("Hotel");
+                                setLocalNome(`Hotel para ${alerta.tecnico?.nome} - ${alerta.agendamento?.obra?.cidade}`);
+                                setLocalCidade(alerta.agendamento?.obra?.cidade || "");
+                                setLocalEstado(alerta.agendamento?.obra?.estado || "SP");
+                                setAlertSupportDialogOpen(true);
+                              }}
+                            >
+                              Cadastrar Hospedagem
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-red-500/30 text-red-600 hover:bg-red-500/10 cursor-pointer font-semibold"
+                              onClick={async () => {
+                                if (confirm("Deseja realmente ignorar o alerta? O técnico poderá iniciar utilizando a opção 'Local sem definição'.")) {
+                                  try {
+                                    await resolveAlert({ data: { alertId: alerta.id } });
+                                    toast.info("Alerta resolvido.");
+                                    fetchAlertas();
+                                  } catch (err: any) {
+                                    toast.error(err?.message);
+                                  }
+                                }
+                              }}
+                            >
+                              Ignorar Alerta
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -7501,7 +7667,57 @@ function AdminDash() {
                       <p className="text-[10px] text-muted-foreground">Prazo padrão para faturamento após realização do serviço.</p>
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  
+                  <div className="border-t border-border pt-4 mt-4">
+                    <h4 className="text-sm font-semibold mb-3 text-foreground flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 text-primary" /> Controle de Atraso e Check-in
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="gc-bloqueio">Limite de Atraso para Bloqueio</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="gc-bloqueio" type="number" min={0}
+                            value={blockLimitVal}
+                            onChange={(e) => setBlockLimitVal(Number(e.target.value))}
+                            className="flex-1"
+                          />
+                          <select
+                            value={blockLimitUnit}
+                            onChange={(e) => setBlockLimitUnit(e.target.value as any)}
+                            className="w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                          >
+                            <option value="minutes">Minutos</option>
+                            <option value="hours">Horas</option>
+                          </select>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">O técnico será impedido de iniciar/fazer check-in após este limite de atraso (0 para desativar).</p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="gc-alerta">Notificação de Atraso (Alerta)</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="gc-alerta" type="number" min={0}
+                            value={alertLimitVal}
+                            onChange={(e) => setAlertLimitVal(Number(e.target.value))}
+                            className="flex-1"
+                          />
+                          <select
+                            value={alertLimitUnit}
+                            onChange={(e) => setAlertLimitUnit(e.target.value as any)}
+                            className="w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                          >
+                            <option value="minutes">Minutos</option>
+                            <option value="hours">Horas</option>
+                          </select>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">O gestor receberá um alerta se o check-in não ocorrer após este limite (0 para desativar).</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end mt-4">
                     <Button type="submit" disabled={savingGlobalConfigs} className="bg-primary hover:bg-primary/90 font-bold">
                       {savingGlobalConfigs ? "Salvando..." : "Salvar Parâmetros"}
                     </Button>

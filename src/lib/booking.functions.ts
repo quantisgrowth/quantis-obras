@@ -766,6 +766,56 @@ export const processTimeouts = createServerFn({ method: "POST" })
       }
     }
 
+    // 3. Process delayed technician check-ins (Alert Notification)
+    const { data: settingsData } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "configuracoes_globais")
+      .maybeSingle();
+    const configs = settingsData?.value as any || {};
+    const alertLimitMin = Number(configs.limite_atraso_alerta_minutos) || 0;
+
+    if (alertLimitMin > 0) {
+      const { data: unstartedBookings } = await supabase
+        .from("agendamentos_medicoes")
+        .select("*, tecnico:tecnicos(id, nome)")
+        .eq("status_agendamento", "Confirmado")
+        .not("tecnico_id", "is", null);
+
+      if (unstartedBookings && unstartedBookings.length > 0) {
+        const now = new Date();
+        for (const booking of unstartedBookings) {
+          const timeStr = booking.horario_na_obra?.substring(0, 5) || "07:00";
+          const serviceDateTime = new Date(`${booking.data_servico}T${timeStr}:00`);
+          const delayMs = now.getTime() - serviceDateTime.getTime();
+          const delayMin = delayMs / (1000 * 60);
+
+          if (delayMin > alertLimitMin) {
+            const { data: existingAlert } = await supabase
+              .from("alertas_gestao")
+              .select("id")
+              .eq("agendamento_id", booking.id)
+              .eq("tipo", "Atraso_Notificacao")
+              .eq("resolvido", false)
+              .maybeSingle();
+
+            if (!existingAlert) {
+              const delayText = alertLimitMin >= 60
+                ? `${(alertLimitMin / 60).toFixed(1)}h`
+                : `${alertLimitMin}min`;
+              await supabase.from("alertas_gestao").insert({
+                agendamento_id: booking.id,
+                tecnico_id: booking.tecnico_id,
+                tipo: "Atraso_Notificacao",
+                descricao: `Aviso de Atraso: Técnico ${booking.tecnico?.nome || "Técnico"} ainda não iniciou o atendimento do pedido ${booking.codigo_pedido} (${delayText} após o horário agendado de ${timeStr}).`,
+                resolvido: false
+              });
+            }
+          }
+        }
+      }
+    }
+
     return { processed: processedCount };
   });
 
@@ -1181,7 +1231,7 @@ export const startExecution = createServerFn({ method: "POST" })
     // Fetch and check booking
     const { data: booking } = await supabase
       .from("agendamentos_medicoes")
-      .select("id, tecnico_id, status_agendamento")
+      .select("id, codigo_pedido, tecnico_id, status_agendamento, data_servico, horario_na_obra, autorizado_atraso")
       .eq("id", input.bookingId)
       .single();
 
@@ -1190,6 +1240,48 @@ export const startExecution = createServerFn({ method: "POST" })
     }
     if (booking.tecnico_id !== tecnico.id) {
       throw new Error("Acesso negado: Você não é o técnico alocado para este serviço.");
+    }
+
+    // Delay blocking check
+    const { data: settingsData } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "configuracoes_globais")
+      .maybeSingle();
+    const configs = settingsData?.value as any || {};
+
+    const blockLimitMin = Number(configs.limite_atraso_bloqueio_minutos) || 0;
+    if (blockLimitMin > 0 && !booking.autorizado_atraso) {
+      const timeStr = booking.horario_na_obra?.substring(0, 5) || "07:00";
+      const serviceDateTime = new Date(`${booking.data_servico}T${timeStr}:00`);
+      const now = new Date();
+      const delayMs = now.getTime() - serviceDateTime.getTime();
+      const delayMin = delayMs / (1000 * 60);
+
+      if (delayMin > blockLimitMin) {
+        const { data: existingAlert } = await supabase
+          .from("alertas_gestao")
+          .select("id")
+          .eq("agendamento_id", booking.id)
+          .eq("tipo", "Atraso_Bloqueante")
+          .eq("resolvido", false)
+          .maybeSingle();
+
+        if (!existingAlert) {
+          const limitText = blockLimitMin >= 60 
+            ? `${(blockLimitMin / 60).toFixed(1)}h` 
+            : `${blockLimitMin}min`;
+          await supabase.from("alertas_gestao").insert({
+            agendamento_id: booking.id,
+            tecnico_id: tecnico.id,
+            tipo: "Atraso_Bloqueante",
+            descricao: `Check-in bloqueado: Técnico ${tecnico.nome || "Técnico"} tentou iniciar o atendimento do pedido ${booking.codigo_pedido} com atraso superior ao limite de ${limitText}.`,
+            resolvido: false
+          });
+        }
+
+        throw new Error("Acesso bloqueado: Limite de atraso excedido. Entre em contato com seu superior para autorização.");
+      }
     }
 
     const { error } = await supabase
@@ -1205,6 +1297,17 @@ export const startExecution = createServerFn({ method: "POST" })
       .eq("id", input.bookingId);
 
     if (error) throw error;
+
+    // Resolve any delay alerts on successful start
+    await supabase
+      .from("alertas_gestao")
+      .update({
+        resolvido: true,
+        resolvido_em: new Date().toISOString(),
+      })
+      .eq("agendamento_id", input.bookingId)
+      .in("tipo", ["Atraso_Bloqueante", "Atraso_Notificacao"]);
+
     return { success: true };
   });
 
@@ -1230,6 +1333,59 @@ export const recordCheckin = createServerFn({ method: "POST" })
       throw new Error("Acesso negado: Perfil de técnico não encontrado.");
     }
 
+    // Fetch and check booking to validate delay
+    const { data: booking } = await supabase
+      .from("agendamentos_medicoes")
+      .select("id, codigo_pedido, tecnico_id, data_servico, horario_na_obra, autorizado_atraso")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (!booking) {
+      throw new Error("Agendamento não encontrado.");
+    }
+
+    // Delay blocking check
+    const { data: settingsData } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "configuracoes_globais")
+      .maybeSingle();
+    const configs = settingsData?.value as any || {};
+
+    const blockLimitMin = Number(configs.limite_atraso_bloqueio_minutos) || 0;
+    if (blockLimitMin > 0 && !booking.autorizado_atraso) {
+      const timeStr = booking.horario_na_obra?.substring(0, 5) || "07:00";
+      const serviceDateTime = new Date(`${booking.data_servico}T${timeStr}:00`);
+      const now = new Date();
+      const delayMs = now.getTime() - serviceDateTime.getTime();
+      const delayMin = delayMs / (1000 * 60);
+
+      if (delayMin > blockLimitMin) {
+        const { data: existingAlert } = await supabase
+          .from("alertas_gestao")
+          .select("id")
+          .eq("agendamento_id", booking.id)
+          .eq("tipo", "Atraso_Bloqueante")
+          .eq("resolvido", false)
+          .maybeSingle();
+
+        if (!existingAlert) {
+          const limitText = blockLimitMin >= 60 
+            ? `${(blockLimitMin / 60).toFixed(1)}h` 
+            : `${blockLimitMin}min`;
+          await supabase.from("alertas_gestao").insert({
+            agendamento_id: booking.id,
+            tecnico_id: tecnico.id,
+            tipo: "Atraso_Bloqueante",
+            descricao: `Check-in bloqueado: Técnico ${tecnico.nome || "Técnico"} tentou registrar check-in do pedido ${booking.codigo_pedido} com atraso superior ao limite de ${limitText}.`,
+            resolvido: false
+          });
+        }
+
+        throw new Error("Acesso bloqueado: Limite de atraso excedido. Entre em contato com seu superior para autorização.");
+      }
+    }
+
     // Insert history record
     const { error } = await supabase
       .from("historico_fotos")
@@ -1245,6 +1401,17 @@ export const recordCheckin = createServerFn({ method: "POST" })
       });
 
     if (error) throw error;
+
+    // Resolve any delay alerts on successful checkin
+    await supabase
+      .from("alertas_gestao")
+      .update({
+        resolvido: true,
+        resolvido_em: new Date().toISOString(),
+      })
+      .eq("agendamento_id", input.bookingId)
+      .in("tipo", ["Atraso_Bloqueante", "Atraso_Notificacao"]);
+
     return { success: true };
   });
 
@@ -2193,7 +2360,9 @@ export const saveGlobalSettings = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => z.object({
     eficiencia_cp: z.number().min(0).max(100),
     coeficiente_he: z.number().min(1).max(5),
-    prazo_faturamento_dias: z.number().int().min(1)
+    prazo_faturamento_dias: z.number().int().min(1),
+    limite_atraso_bloqueio_minutos: z.number().int().min(0).optional(),
+    limite_atraso_alerta_minutos: z.number().int().min(0).optional()
   }).parse(input))
   .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
@@ -2582,10 +2751,21 @@ export const allocateTechnicianManually = createServerFn({ method: "POST" })
         tecnico_id: input.tecnicoId,
         status_agendamento: "Confirmado",
         convidado_em: new Date().toISOString(),
+        autorizado_atraso: false, // Reset delay override on reallocation
       })
       .eq("id", input.bookingId);
 
     if (error) throw error;
+
+    // Resolve existing delay alerts for this booking since a new technician is being allocated
+    await supabaseAdmin
+      .from("alertas_gestao")
+      .update({
+        resolvido: true,
+        resolvido_em: new Date().toISOString(),
+      })
+      .eq("agendamento_id", input.bookingId)
+      .in("tipo", ["Atraso_Bloqueante", "Atraso_Notificacao"]);
 
     // Notify technician via WhatsApp
     try {
@@ -2658,6 +2838,96 @@ async function sendServerWhatsappMessage(number: string, text: string) {
     console.error("[Evolution API Backend] Exception:", error);
   }
 }
+
+export const liberarAtendimentoAtrasado = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ alertId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem liberar atendimentos atrasados.");
+
+    // Fetch the alert to get agendamento_id
+    const { data: alerta } = await supabase
+      .from("alertas_gestao")
+      .select("agendamento_id")
+      .eq("id", input.alertId)
+      .single();
+
+    if (!alerta) throw new Error("Alerta não encontrado.");
+
+    // Update booking
+    const { error: bookingError } = await supabase
+      .from("agendamentos_medicoes")
+      .update({ autorizado_atraso: true })
+      .eq("id", alerta.agendamento_id);
+
+    if (bookingError) throw bookingError;
+
+    // Resolve alert
+    const { error: alertError } = await supabase
+      .from("alertas_gestao")
+      .update({
+        resolvido: true,
+        resolvido_em: new Date().toISOString(),
+      })
+      .eq("id", input.alertId);
+
+    if (alertError) throw alertError;
+
+    return { success: true };
+  });
+
+export const cancelarAtendimentoAtrasado = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ alertId: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    // Verify admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const isAdmin = (roles || []).some((r: any) => r.role === "admin");
+    if (!isAdmin) throw new Error("Acesso negado: apenas administradores podem cancelar atendimentos atrasados.");
+
+    // Fetch the alert to get agendamento_id
+    const { data: alerta } = await supabase
+      .from("alertas_gestao")
+      .select("agendamento_id")
+      .eq("id", input.alertId)
+      .single();
+
+    if (!alerta) throw new Error("Alerta não encontrado.");
+
+    // Update booking to Cancelado and remove technician assignment
+    const { error: bookingError } = await supabase
+      .from("agendamentos_medicoes")
+      .update({ status_agendamento: "Cancelado", tecnico_id: null })
+      .eq("id", alerta.agendamento_id);
+
+    if (bookingError) throw bookingError;
+
+    // Resolve alert
+    const { error: alertError } = await supabase
+      .from("alertas_gestao")
+      .update({
+        resolvido: true,
+        resolvido_em: new Date().toISOString(),
+      })
+      .eq("id", input.alertId);
+
+    if (alertError) throw alertError;
+
+    return { success: true };
+  });
 
 
 
