@@ -68,7 +68,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setSession(s);
       setUser(s.user);
-      setLoading(true); // Ensure loading is true while fetching roles
+
+      // Only show full page loader on explicit sign-in transitions to prevent flickering on background actions (e.g. TOKEN_REFRESHED)
+      const isSignIn = event === "SIGNED_IN";
+      if (isSignIn) {
+        setLoading(true);
+      }
 
       try {
         const { data } = await supabase.from("user_roles").select("role").eq("user_id", s.user.id);
@@ -78,7 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error("Erro ao carregar roles:", err);
       } finally {
-        if (active) setLoading(false);
+        if (active && isSignIn) {
+          setLoading(false);
+        }
       }
     });
 
