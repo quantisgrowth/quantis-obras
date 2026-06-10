@@ -20,54 +20,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function fetchRoles(userId: string) {
-    try {
-      const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-      setRoles((data ?? []).map((r) => r.role as AppRole));
-    } catch (err) {
-      console.error("Erro ao carregar roles:", err);
-    }
-  }
-
   useEffect(() => {
     let active = true;
-
-    async function initializeAuth() {
-      setLoading(true);
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (!active) return;
-
-        const currentSession = data.session;
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
-
-        if (currentSession?.user) {
-          await fetchRoles(currentSession.user.id);
-        } else {
-          setRoles([]);
-        }
-      } catch (err) {
-        console.error("Erro ao inicializar sessão:", err);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-
-    initializeAuth();
+    setLoading(true);
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
       if (!active) return;
 
-      setSession(s);
-      setUser(s?.user ?? null);
-
-      if (s?.user) {
-        setLoading(true);
-        await fetchRoles(s.user.id);
-        if (active) setLoading(false);
-      } else {
+      if (!s?.user) {
+        setSession(null);
+        setUser(null);
         setRoles([]);
+        setLoading(false);
+        return;
+      }
+
+      setSession(s);
+      setUser(s.user);
+      setLoading(true); // Ensure loading is true while fetching roles
+
+      try {
+        const { data } = await supabase.from("user_roles").select("role").eq("user_id", s.user.id);
+        if (active) {
+          setRoles((data ?? []).map((r) => r.role as AppRole));
+        }
+      } catch (err) {
+        console.error("Erro ao carregar roles:", err);
+      } finally {
         if (active) setLoading(false);
       }
     });
