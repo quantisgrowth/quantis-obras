@@ -7,7 +7,7 @@ import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera, Building2,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
   Upload, Eye, EyeOff, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
-  Star, Settings2, LogOut, HardHat, Filter, FileDown, Printer
+  Star, Settings2, LogOut, HardHat, Filter, FileDown, Printer, Trash2, Search
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,6 +35,7 @@ import {
   syncUserRoles,
   processTimeouts,
   resolveAlert,
+  resolveAllAlerts,
   requestBlocker,
   updateBlockerStatus,
   resolveMapsUrl,
@@ -5065,6 +5066,29 @@ function AdminDash() {
   const [loadingAlertas, setLoadingAlertas] = useState(false);
   const [alertSupportDialogOpen, setAlertSupportDialogOpen] = useState(false);
   const [selectedAlerta, setSelectedAlerta] = useState<any | null>(null);
+  const [filterAlertTipo, setFilterAlertTipo] = useState<string>("todos");
+  const [searchAlertQuery, setSearchAlertQuery] = useState<string>("");
+
+  const filteredAlertas = alertas.filter((alerta) => {
+    if (filterAlertTipo !== "todos") {
+      if (filterAlertTipo === "atraso") {
+        if (alerta.tipo !== "Atraso_Notificacao" && alerta.tipo !== "Atraso_Bloqueante") return false;
+      } else if (alerta.tipo !== filterAlertTipo) {
+        return false;
+      }
+    }
+    if (searchAlertQuery.trim() !== "") {
+      const q = searchAlertQuery.toLowerCase();
+      const techName = alerta.tecnico?.nome?.toLowerCase() || "";
+      const code = alerta.agendamento?.codigo_pedido?.toLowerCase() || "";
+      const obraName = alerta.agendamento?.obra?.nome_obra?.toLowerCase() || "";
+      const desc = alerta.descricao?.toLowerCase() || "";
+      if (!techName.includes(q) && !code.includes(q) && !obraName.includes(q) && !desc.includes(q)) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   // Blocker requests states
   const [blockerRequests, setBlockerRequests] = useState<any[]>([]);
@@ -5261,6 +5285,18 @@ function AdminDash() {
       console.error(err);
     } finally {
       setLoadingAlertas(false);
+    }
+  };
+
+  const handleClearAllAlertas = async () => {
+    if (confirm("Deseja realmente limpar/resolver todos os alertas ativos?")) {
+      try {
+        await resolveAllAlerts();
+        toast.success("Todos os alertas foram marcados como resolvidos.");
+        fetchAlertas();
+      } catch (err: any) {
+        toast.error(err?.message || "Erro ao limpar alertas.");
+      }
     }
   };
 
@@ -7009,6 +7045,45 @@ function AdminDash() {
               <CardDescription>Pendências de agendamentos aceitos fora do raio de atuação que necessitam de local de hospedagem ou apoio.</CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Filter and Clear Bar */}
+              <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-muted/20 border border-border/40 p-4 rounded-lg mb-6">
+                <div className="flex-1 w-full flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por técnico, obra, pedido ou descrição..."
+                      className="pl-9"
+                      value={searchAlertQuery}
+                      onChange={(e) => setSearchAlertQuery(e.target.value)}
+                    />
+                  </div>
+                  <div className="w-full sm:w-64">
+                    <select
+                      value={filterAlertTipo}
+                      onChange={(e) => setFilterAlertTipo(e.target.value)}
+                      className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <option value="todos">Todos os Alertas</option>
+                      <option value="atraso">Atrasos (Notificações & Bloqueios)</option>
+                      <option value="Atraso_Bloqueante">Bloqueios por Atraso</option>
+                      <option value="Atraso_Notificacao">Notificações de Atraso</option>
+                      <option value="Fora_Raio_Atuacao">Fora do Raio</option>
+                    </select>
+                  </div>
+                </div>
+                
+                {alertas.length > 0 && (
+                  <Button
+                    variant="outline"
+                    className="border-red-500/30 text-red-600 hover:bg-red-500/10 font-bold w-full md:w-auto cursor-pointer"
+                    onClick={handleClearAllAlertas}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Limpar Tudo
+                  </Button>
+                )}
+              </div>
+
               {loadingAlertas ? (
                 <div className="text-center text-sm text-muted-foreground py-8">Carregando pendências...</div>
               ) : alertas.length === 0 ? (
@@ -7016,9 +7091,14 @@ function AdminDash() {
                   <CheckCircle2 className="h-8 w-8 text-green-500/40 mx-auto mb-2" />
                   Nenhum alerta pendente. Toda a logística dos técnicos está no raio correto.
                 </div>
+              ) : filteredAlertas.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-8 border border-dashed rounded-lg bg-muted/10">
+                  <Filter className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                  Nenhum alerta corresponde aos filtros aplicados.
+                </div>
               ) : (
                 <div className="space-y-4">
-                  {alertas.map((alerta) => (
+                  {filteredAlertas.map((alerta) => (
                     <div key={alerta.id} className="border-2 border-red-500/20 bg-red-500/5 rounded-lg p-5 flex flex-col gap-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">

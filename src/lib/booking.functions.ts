@@ -1764,6 +1764,36 @@ export const resolveAlert = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+export const resolveAllAlerts = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+
+    // Check if user is admin
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    const userRoles = (roles || []).map((r: any) => r.role);
+    const isAdmin = userRoles.includes("admin");
+
+    if (!isAdmin) {
+      throw new Error("Acesso negado: Apenas administradores podem resolver alertas.");
+    }
+
+    const { error } = await supabase
+      .from("alertas_gestao")
+      .update({
+        resolvido: true,
+        resolvido_em: new Date().toISOString(),
+      })
+      .eq("resolvido", false);
+
+    if (error) throw error;
+    return { success: true };
+  });
+
 export const requestBlocker = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({
