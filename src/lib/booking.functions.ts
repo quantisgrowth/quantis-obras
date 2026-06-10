@@ -791,6 +791,9 @@ export const processTimeouts = createServerFn({ method: "POST" })
       if (unstartedBookings && unstartedBookings.length > 0) {
         const now = new Date();
         for (const booking of unstartedBookings) {
+          if (booking.autorizado_atraso) {
+            continue;
+          }
           const timeStr = booking.horario_na_obra?.substring(0, 5) || "07:00";
           const serviceDateTime = new Date(`${booking.data_servico}T${timeStr}:00`);
           const delayMs = now.getTime() - serviceDateTime.getTime();
@@ -810,9 +813,10 @@ export const processTimeouts = createServerFn({ method: "POST" })
               alertQuery.eq("resolvido", false);
             }
 
-            const { data: existingAlert } = await alertQuery.maybeSingle();
+            const { data: existingAlerts } = await alertQuery.limit(1);
+            const hasAlert = existingAlerts && existingAlerts.length > 0;
 
-            if (!existingAlert) {
+            if (!hasAlert) {
               const delayText = alertLimitMin >= 60
                 ? `${(alertLimitMin / 60).toFixed(1)}h`
                 : `${alertLimitMin}min`;
