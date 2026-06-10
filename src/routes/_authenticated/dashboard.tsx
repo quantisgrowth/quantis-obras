@@ -4240,7 +4240,7 @@ function AdminDash() {
       // Buscar todos os agendamentos confirmados/em execução ordenados por técnico e data
       const { data, error } = await supabase
         .from("agendamentos_medicoes")
-        .select("id, codigo_pedido, data_servico, horario_na_obra, duracao_estimada_horas, tecnico_id, tecnico:tecnicos(nome)")
+        .select("id, codigo_pedido, data_servico, horario_na_obra, duracao_estimada_horas, tecnico_id, tecnico:tecnicos!agendamentos_medicoes_tecnico_id_fkey(nome)")
         .in("status_agendamento", ["Confirmado", "Em_Execucao", "Aguardando_Medicao"])
         .order("tecnico_id", { ascending: true })
         .order("data_servico", { ascending: true });
@@ -5245,6 +5245,12 @@ function AdminDash() {
   const fetchAlertas = async () => {
     setLoadingAlertas(true);
     try {
+      try {
+        await processTimeouts({ data: { force: true } });
+      } catch (procErr) {
+        console.warn("Erro ao processar timeouts/alertas de atraso:", procErr);
+      }
+
       const { data, error } = await supabase
         .from("alertas_gestao")
         .select("*, agendamento:agendamentos_medicoes(*, obra:obras(*), servico:servicos_catalogo_pub(*)), tecnico:tecnicos(*)")

@@ -700,14 +700,20 @@ let lastTimeoutProcess = 0;
 
 export const processTimeouts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((input: unknown) => z.object({
+    force: z.boolean().optional()
+  }).parse(input || {}))
+  .handler(async ({ data: input, context }) => {
     const { supabase } = context;
+    const force = input?.force || false;
     
     // Cooldown of 5 minutes to prevent heavy database queries on every page load
-    if (Date.now() - lastTimeoutProcess < 5 * 60 * 1000) {
+    if (!force && Date.now() - lastTimeoutProcess < 5 * 60 * 1000) {
       return { processed: 0, skipped: true };
     }
-    lastTimeoutProcess = Date.now();
+    if (!force) {
+      lastTimeoutProcess = Date.now();
+    }
 
     const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
 
@@ -778,7 +784,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
     if (alertLimitMin > 0) {
       const { data: unstartedBookings } = await supabase
         .from("agendamentos_medicoes")
-        .select("*, tecnico:tecnicos(id, nome)")
+        .select("*, tecnico:tecnicos!agendamentos_medicoes_tecnico_id_fkey(id, nome)")
         .eq("status_agendamento", "Confirmado")
         .not("tecnico_id", "is", null);
 
