@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -19,6 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const currentUserRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (s?.user) {
           setSession(s);
           setUser(s.user);
+          currentUserRef.current = s.user.id;
           const { data } = await supabase.from("user_roles").select("role").eq("user_id", s.user.id);
           if (active) {
             setRoles((data ?? []).map((r) => r.role as AppRole));
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setSession(null);
           setUser(null);
+          currentUserRef.current = null;
           setRoles([]);
         }
       } catch (err) {
@@ -61,19 +64,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!s?.user) {
         setSession(null);
         setUser(null);
+        currentUserRef.current = null;
         setRoles([]);
         setLoading(false);
         return;
       }
 
-      setSession(s);
-      setUser(s.user);
-
-      // Only show full page loader on explicit sign-in transitions to prevent flickering on background actions (e.g. TOKEN_REFRESHED)
-      const isSignIn = event === "SIGNED_IN";
-      if (isSignIn) {
+      // Only show full page loader on explicit new sign-in transitions to prevent flickering on background actions (e.g. TOKEN_REFRESHED) or tab focus
+      const isNewSignIn = event === "SIGNED_IN" && currentUserRef.current !== s.user.id;
+      if (isNewSignIn) {
         setLoading(true);
       }
+
+      setSession(s);
+      setUser(s.user);
+      currentUserRef.current = s.user.id;
 
       try {
         const { data } = await supabase.from("user_roles").select("role").eq("user_id", s.user.id);
@@ -83,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error("Erro ao carregar roles:", err);
       } finally {
-        if (active && isSignIn) {
+        if (active && isNewSignIn) {
           setLoading(false);
         }
       }
@@ -102,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       roles,
       loading,
       signOut: async () => {
+        currentUserRef.current = null;
         await supabase.auth.signOut();
       },
     }),
