@@ -22,10 +22,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    let hasInitialized = false;
     setLoading(true);
+
+    async function initialize() {
+      try {
+        const { data: { session: s } } = await supabase.auth.getSession();
+        if (!active) return;
+
+        if (s?.user) {
+          setSession(s);
+          setUser(s.user);
+          const { data } = await supabase.from("user_roles").select("role").eq("user_id", s.user.id);
+          if (active) {
+            setRoles((data ?? []).map((r) => r.role as AppRole));
+          }
+        } else {
+          setSession(null);
+          setUser(null);
+          setRoles([]);
+        }
+      } catch (err) {
+        console.error("Erro ao inicializar sessão:", err);
+      } finally {
+        hasInitialized = true;
+        if (active) setLoading(false);
+      }
+    }
+
+    initialize();
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
       if (!active) return;
+      
+      // Ignore initial trigger event to avoid race conditions with initialize()
+      if (!hasInitialized) return;
 
       if (!s?.user) {
         setSession(null);
