@@ -797,13 +797,20 @@ export const processTimeouts = createServerFn({ method: "POST" })
           const delayMin = delayMs / (1000 * 60);
 
           if (delayMin > alertLimitMin) {
-            const { data: existingAlert } = await supabaseAdmin
+            const alertQuery = supabaseAdmin
               .from("alertas_gestao")
               .select("id")
               .eq("agendamento_id", booking.id)
-              .in("tipo", ["Atraso_Notificacao", "Atraso_Bloqueante"])
-              .eq("resolvido", false)
-              .maybeSingle();
+              .eq("tecnico_id", booking.tecnico_id)
+              .in("tipo", ["Atraso_Notificacao", "Atraso_Bloqueante"]);
+
+            if (booking.convidado_em) {
+              alertQuery.gt("created_at", booking.convidado_em);
+            } else {
+              alertQuery.eq("resolvido", false);
+            }
+
+            const { data: existingAlert } = await alertQuery.maybeSingle();
 
             if (!existingAlert) {
               const delayText = alertLimitMin >= 60
