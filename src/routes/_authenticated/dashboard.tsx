@@ -7019,18 +7019,51 @@ function AdminDash() {
               ) : (
                 <div className="space-y-4">
                   {alertas.map((alerta) => (
-                    <div key={alerta.id} className="border-2 border-red-500/20 bg-red-500/5 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1">
+                    <div key={alerta.id} className="border-2 border-red-500/20 bg-red-500/5 rounded-lg p-5 flex flex-col gap-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           {alerta.tipo === "Atraso_Bloqueante" && <Badge variant="destructive" className="font-bold bg-red-600 text-white animate-pulse">🚨 Bloqueado por Atraso</Badge>}
                           {alerta.tipo === "Atraso_Notificacao" && <Badge variant="destructive" className="font-bold bg-amber-500 text-white">⚠️ Alerta de Atraso</Badge>}
                           {alerta.tipo === "Fora_Raio_Atuacao" && <Badge variant="destructive" className="font-bold">⚠️ Fora do Raio</Badge>}
                           <span className="text-xs text-muted-foreground font-semibold font-mono">Agendamento: {alerta.agendamento?.codigo_pedido}</span>
                         </div>
-                        <p className="text-sm font-semibold mt-1">{alerta.descricao}</p>
-                        <p className="text-xs text-muted-foreground">Obra: {alerta.agendamento?.obra?.nome_obra} ({alerta.agendamento?.obra?.cidade}/{alerta.agendamento?.obra?.estado})</p>
+                        {alerta.created_at && (
+                          <span className="text-xs text-muted-foreground font-mono">
+                            {new Date(alerta.created_at).toLocaleString("pt-BR")}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex gap-2 shrink-0">
+                      
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-foreground">{alerta.descricao}</p>
+                        
+                        {alerta.agendamento && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-muted/45 border border-border/40 rounded-lg p-4 text-xs">
+                            <div className="space-y-1">
+                              <p className="font-bold text-muted-foreground uppercase tracking-wider text-[10px]">🏗️ Dados da Obra</p>
+                              <p className="font-semibold text-foreground text-sm">{alerta.agendamento.obra?.nome_obra || "N/A"}</p>
+                              <p className="text-muted-foreground">{alerta.agendamento.obra?.endereco || "N/A"}</p>
+                              <p className="text-muted-foreground">{alerta.agendamento.obra?.cidade || "N/A"} - {alerta.agendamento.obra?.estado || "N/A"}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="font-bold text-muted-foreground uppercase tracking-wider text-[10px]">📝 Dados da Solicitação</p>
+                              <p className="font-semibold text-foreground text-sm">{alerta.agendamento.servico?.nome_servico || "N/A"}</p>
+                              <p className="text-muted-foreground">Pedido: <span className="font-mono font-medium">{alerta.agendamento.codigo_pedido}</span></p>
+                              <p className="text-muted-foreground">Data/Hora: {alerta.agendamento.data_servico ? new Date(alerta.agendamento.data_servico + "T00:00:00").toLocaleDateString("pt-BR") : "N/A"} às {alerta.agendamento.horario_na_obra?.substring(0, 5) || "N/A"}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="font-bold text-muted-foreground uppercase tracking-wider text-[10px]">👷 Técnico Envolvido</p>
+                              <p className="font-semibold text-foreground text-sm">{alerta.tecnico?.nome || "Não alocado"}</p>
+                              {alerta.tecnico?.email && <p className="text-muted-foreground">Email: {alerta.tecnico.email}</p>}
+                              {alerta.tecnico?.ranking_score !== undefined && (
+                                <p className="text-amber-500 font-medium mt-0.5">Score de Avaliação: {Number(alerta.tecnico.ranking_score).toFixed(1)} ⭐</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2 justify-end pt-2 border-t border-border/20">
                         {alerta.tipo === "Atraso_Bloqueante" && (
                           <>
                             <Button

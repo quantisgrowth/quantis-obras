@@ -704,7 +704,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
     force: z.boolean().optional()
   }).parse(input || {}))
   .handler(async ({ data: input, context }) => {
-    const { supabase } = context;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const force = input?.force || false;
     
     // Cooldown of 5 minutes to prevent heavy database queries on every page load
@@ -720,7 +720,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
     let processedCount = 0;
 
     // 1. Process timed-out bookings
-    const { data: timedOutBookings } = await supabase
+    const { data: timedOutBookings } = await supabaseAdmin
       .from("agendamentos_medicoes")
       .select("*, servico:servicos_catalogo_pub(*)")
       .eq("status_agendamento", "Pendente_Tecnico")
@@ -732,7 +732,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
         const currentRejected = booking.tecnicos_rejeitados || [];
         const newRejected = [...new Set([...currentRejected, booking.tecnico_id])];
 
-        await supabase
+        await supabaseAdmin
           .from("agendamentos_medicoes")
           .update({
             tecnico_id: null,
@@ -742,7 +742,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
           .eq("id", booking.id);
 
         await selectAndInviteTechnician(
-          supabase,
+          supabaseAdmin,
           booking.id,
           booking.data_servico,
           booking.servico?.categoria || "",
@@ -753,7 +753,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
     }
 
     // 2. Process unassigned pending bookings
-    const { data: unassignedBookings } = await supabase
+    const { data: unassignedBookings } = await supabaseAdmin
       .from("agendamentos_medicoes")
       .select("*, servico:servicos_catalogo_pub(*)")
       .eq("status_agendamento", "Pendente_Tecnico")
@@ -762,7 +762,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
     if (unassignedBookings && unassignedBookings.length > 0) {
       for (const booking of unassignedBookings) {
         await selectAndInviteTechnician(
-          supabase,
+          supabaseAdmin,
           booking.id,
           booking.data_servico,
           booking.servico?.categoria || "",
@@ -773,7 +773,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
     }
 
     // 3. Process delayed technician check-ins (Alert Notification)
-    const { data: settingsData } = await supabase
+    const { data: settingsData } = await supabaseAdmin
       .from("app_settings")
       .select("value")
       .eq("key", "configuracoes_globais")
@@ -782,7 +782,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
     const alertLimitMin = Number(configs.limite_atraso_alerta_minutos) || 0;
 
     if (alertLimitMin > 0) {
-      const { data: unstartedBookings } = await supabase
+      const { data: unstartedBookings } = await supabaseAdmin
         .from("agendamentos_medicoes")
         .select("*, tecnico:tecnicos!agendamentos_medicoes_tecnico_id_fkey(id, nome)")
         .eq("status_agendamento", "Confirmado")
@@ -797,11 +797,11 @@ export const processTimeouts = createServerFn({ method: "POST" })
           const delayMin = delayMs / (1000 * 60);
 
           if (delayMin > alertLimitMin) {
-            const { data: existingAlert } = await supabase
+            const { data: existingAlert } = await supabaseAdmin
               .from("alertas_gestao")
               .select("id")
               .eq("agendamento_id", booking.id)
-              .eq("tipo", "Atraso_Notificacao")
+              .in("tipo", ["Atraso_Notificacao", "Atraso_Bloqueante"])
               .eq("resolvido", false)
               .maybeSingle();
 
@@ -809,7 +809,7 @@ export const processTimeouts = createServerFn({ method: "POST" })
               const delayText = alertLimitMin >= 60
                 ? `${(alertLimitMin / 60).toFixed(1)}h`
                 : `${alertLimitMin}min`;
-              await supabase.from("alertas_gestao").insert({
+              await supabaseAdmin.from("alertas_gestao").insert({
                 agendamento_id: booking.id,
                 tecnico_id: booking.tecnico_id,
                 tipo: "Atraso_Notificacao",
