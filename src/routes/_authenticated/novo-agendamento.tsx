@@ -701,6 +701,7 @@ function NovoAgendamento() {
     selectedObraId !== "nova" ||
     (!!novaObraNome.trim() && !!novaObraEndereco.trim() && !!novaObraCEP.trim() &&
       !!novaObraNumero.trim() && !!novaObraBairro.trim() && !!novaObraEstado &&
+      !!novaObraCidade.trim() &&
       !!cnoObra.trim() && !!responsavelObra.trim() && !!cargoResponsavel.trim());
 
   const handleConfirmBooking = async () => {
@@ -1048,7 +1049,12 @@ function NovoAgendamento() {
                     {/* Cidade */}
                     <div className="space-y-2">
                       <Label htmlFor="obra-cidade">Cidade</Label>
-                      <Input id="obra-cidade" disabled value={novaObraCidade} className="bg-muted text-muted-foreground" placeholder="Preenchido automaticamente" />
+                      <Input
+                        id="obra-cidade"
+                        value={novaObraCidade}
+                        onChange={(e) => setNovaObraCidade(e.target.value)}
+                        placeholder="Digite a cidade ou preencha automaticamente"
+                      />
                     </div>
                   </div>
 
@@ -1088,14 +1094,28 @@ function NovoAgendamento() {
                             })
                             .select("id")
                             .single();
-                          if (!error && newObra) {
+
+                          if (error) {
+                            console.error("Erro ao salvar obra:", error);
+                            toast.error(`Erro ao salvar obra: ${error.message}`);
+                            return; // Impede o avanço para o Step 2 se der erro
+                          }
+
+                          if (newObra) {
                             setObraRascunhoId(newObra.id);
-                            setObras((prev) => [...prev, { ...newObra, nome_obra: novaObraNome, cidade: novaObraCidade }]);
+                            setObras((prev) => [...prev, { id: newObra.id, nome_obra: novaObraNome, cidade: novaObraCidade }]);
                             setSelectedObraId(newObra.id);
                             toast.success("Obra salva! Você pode acessá-la em novos agendamentos.");
+                          } else {
+                            toast.error("Erro ao salvar obra: Retorno vazio do servidor.");
+                            return;
                           }
                         }
-                      } catch (_) {}
+                      } catch (err: any) {
+                        console.error("Erro ao salvar obra:", err);
+                        toast.error(`Erro ao salvar obra: ${err?.message || err}`);
+                        return; // Impede o avanço para o Step 2 se der erro
+                      }
                     }
                     setStep(2);
                   }}

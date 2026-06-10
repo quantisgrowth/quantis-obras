@@ -397,7 +397,7 @@ export const createBooking = createServerFn({ method: "POST" })
     for (const ag of agendamentos) {
       try {
         await selectAndInviteTechnician(
-          supabase,
+          supabaseAdmin,
           ag.id,
           data.data_servico,
           ag.servico?.categoria || "",
@@ -685,8 +685,10 @@ export const rejectInvite = createServerFn({ method: "POST" })
       })
       .eq("id", booking.id);
 
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     await selectAndInviteTechnician(
-      supabase,
+      supabaseAdmin,
       booking.id,
       booking.data_servico,
       booking.servico?.categoria || "",
@@ -1969,11 +1971,11 @@ export const abandonBooking = createServerFn({ method: "POST" })
 
     if (updateErr) throw updateErr;
 
-    // Reallocate to next best technician (exclude the one who just abandoned)
     try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const serviceCategory = (booking.servico as any)?.categoria || "";
       await selectAndInviteTechnician(
-        supabase,
+        supabaseAdmin,
         input.bookingId,
         booking.data_servico,
         serviceCategory,
@@ -2651,9 +2653,11 @@ export const reallocateTechnician = createServerFn({ method: "POST" })
 
     if (error) throw error;
 
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     // Re-trigger allocation algorithm
     await selectAndInviteTechnician(
-      supabase,
+      supabaseAdmin,
       booking.id,
       booking.data_servico,
       booking.servico?.categoria || "",
