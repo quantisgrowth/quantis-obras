@@ -3817,6 +3817,7 @@ function AdminDash() {
   const [clienteId, setClienteId] = useState<string | null>(null);
   const [clienteRazaoSocial, setClienteRazaoSocial] = useState("");
   const [clienteCnpj, setClienteCnpj] = useState("");
+  const [clienteSlug, setClienteSlug] = useState("");
   const [clienteRequerAprovacaoTecnico, setClienteRequerAprovacaoTecnico] = useState(false);
 
   // Admin Agendamentos panel states
@@ -3970,6 +3971,7 @@ function AdminDash() {
       const payload = {
         razao_social: clienteRazaoSocial,
         cnpj: clienteCnpj,
+        slug: clienteSlug || null,
         requer_aprovacao_tecnico: clienteRequerAprovacaoTecnico
       };
 
@@ -4025,6 +4027,7 @@ function AdminDash() {
     setClienteId(null);
     setClienteRazaoSocial("");
     setClienteCnpj("");
+    setClienteSlug("");
     setClienteRequerAprovacaoTecnico(false);
     setClienteDialogOpen(true);
   };
@@ -4033,6 +4036,7 @@ function AdminDash() {
     setClienteId(emp.id);
     setClienteRazaoSocial(emp.razao_social);
     setClienteCnpj(emp.cnpj);
+    setClienteSlug(emp.slug || "");
     setClienteRequerAprovacaoTecnico(emp.requer_aprovacao_tecnico || false);
     setClienteDialogOpen(true);
   };
@@ -4076,7 +4080,7 @@ function AdminDash() {
     try {
       const { data, error } = await supabase
         .from("empresas_clientes")
-        .select("id, razao_social, cnpj, requer_aprovacao_tecnico")
+        .select("id, razao_social, cnpj, slug, requer_aprovacao_tecnico")
         .order("razao_social", { ascending: true });
       if (!error && data) {
         setEmpresasClientes(data);
@@ -8024,6 +8028,7 @@ function AdminDash() {
                         <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs uppercase tracking-wider">
                           <th className="p-4">Razão Social</th>
                           <th className="p-4">CNPJ</th>
+                          <th className="p-4">Links de Acesso</th>
                           <th className="p-4 text-center">Aprovação Alocação</th>
                           <th className="p-4 text-center">Ações</th>
                         </tr>
@@ -8036,6 +8041,38 @@ function AdminDash() {
                             </td>
                             <td className="p-4 text-muted-foreground font-mono text-xs">
                               {emp.cnpj}
+                            </td>
+                            <td className="p-4 space-y-1">
+                              {emp.slug ? (
+                                <>
+                                  <div className="flex items-center gap-1 text-xs">
+                                    <span className="font-semibold text-muted-foreground">Cli:</span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(`${window.location.origin}/cliente-${emp.slug}`);
+                                        toast.success("Link do cliente copiado!");
+                                      }}
+                                      className="text-primary hover:underline font-mono text-[11px]"
+                                    >
+                                      /cliente-{emp.slug}
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-1 text-xs">
+                                    <span className="font-semibold text-muted-foreground">Téc:</span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(`${window.location.origin}/tecnico-${emp.slug}`);
+                                        toast.success("Link do técnico copiado!");
+                                      }}
+                                      className="text-primary hover:underline font-mono text-[11px]"
+                                    >
+                                      /tecnico-{emp.slug}
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-[11px] text-amber-500 font-semibold">Sem slug gerado</span>
+                              )}
                             </td>
                             <td className="p-4 text-center">
                               {emp.requer_aprovacao_tecnico ? (
@@ -8499,6 +8536,19 @@ function AdminDash() {
                 onChange={(e) => setClienteCnpj(e.target.value)}
                 placeholder="00.000.000/0001-00"
               />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="cli-slug" className="font-bold">Slug do Link de Acesso (Opcional)</Label>
+              <Input
+                id="cli-slug"
+                value={clienteSlug}
+                onChange={(e) => setClienteSlug(e.target.value)}
+                placeholder="Ex: construtora-alfa (deixe em branco para auto-gerar)"
+              />
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Define a URL de acesso: /cliente-[slug] e /tecnico-[slug]
+              </p>
             </div>
 
             <div className="flex items-center justify-between border-t border-border pt-4 mt-4">

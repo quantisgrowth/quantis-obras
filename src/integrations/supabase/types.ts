@@ -17,6 +17,7 @@ export type Database = {
       agendamentos_medicoes: {
         Row: {
           codigo_pedido: string
+          codigo_solicitacao: string | null
           cps_contratados: number
           cps_moldados_real: number | null
           created_at: string
@@ -55,6 +56,7 @@ export type Database = {
         }
         Insert: {
           codigo_pedido?: string
+          codigo_solicitacao?: string | null
           cps_contratados?: number
           cps_moldados_real?: number | null
           created_at?: string
@@ -95,6 +97,7 @@ export type Database = {
         }
         Update: {
           codigo_pedido?: string
+          codigo_solicitacao?: string | null
           cps_contratados?: number
           cps_moldados_real?: number | null
           created_at?: string

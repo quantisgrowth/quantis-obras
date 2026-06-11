@@ -4,6 +4,7 @@ import { useAuth } from "./use-auth";
 import { toast } from "sonner";
 
 export interface BrandingConfig {
+  slug: string | null;
   logo_url: string | null;
   favicon_url: string | null;
   primary_color: string;
@@ -18,6 +19,7 @@ interface BrandingContextValue {
   loading: boolean;
   refreshBranding: () => Promise<void>;
   updateBranding: (newBranding: Partial<BrandingConfig>) => Promise<boolean>;
+  loadBrandingBySlug: (slug: string) => Promise<any>;
 }
 
 const BrandingContext = createContext<BrandingContextValue | undefined>(undefined);
@@ -84,7 +86,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
         // 2. Get company branding
         const { data: company, error: companyError } = await supabase
           .from("empresas_clientes")
-          .select("logo_url, favicon_url, primary_color, secondary_color, font_primary, custom_domain")
+          .select("slug, logo_url, favicon_url, primary_color, secondary_color, font_primary, custom_domain")
           .eq("id", profile.empresa_id)
           .single();
 
@@ -92,6 +94,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
         if (company) {
           setBranding({
+            slug: company.slug,
             logo_url: company.logo_url,
             favicon_url: company.favicon_url,
             primary_color: company.primary_color || "#0284c7",
@@ -106,6 +109,36 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadBrandingBySlug = async (slug: string) => {
+    setLoading(true);
+    try {
+      const { data: company, error } = await supabase
+        .from("tenant_branding_pub")
+        .select("id, logo_url, favicon_url, primary_color, secondary_color, font_primary, custom_domain")
+        .eq("slug", slug)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (company) {
+        setBranding({
+          logo_url: company.logo_url,
+          favicon_url: company.favicon_url,
+          primary_color: company.primary_color || "#0284c7",
+          secondary_color: company.secondary_color || "#0f172a",
+          font_primary: company.font_primary || "Inter",
+          custom_domain: company.custom_domain,
+        });
+        return company;
+      }
+    } catch (err) {
+      console.error("Erro ao carregar branding pelo slug:", err);
+    } finally {
+      setLoading(false);
+    }
+    return null;
   };
 
   useEffect(() => {
@@ -222,6 +255,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
         loading,
         refreshBranding: fetchBranding,
         updateBranding,
+        loadBrandingBySlug,
       }}
     >
       {children}
