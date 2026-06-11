@@ -116,7 +116,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     try {
       const { data: company, error } = await supabase
         .from("tenant_branding_pub")
-        .select("id, logo_url, favicon_url, primary_color, secondary_color, font_primary, custom_domain")
+        .select("id, razao_social, slug, logo_url, favicon_url, primary_color, secondary_color, font_primary, custom_domain")
         .eq("slug", slug)
         .maybeSingle();
 
@@ -124,6 +124,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
       if (company) {
         setBranding({
+          slug: company.slug,
           logo_url: company.logo_url,
           favicon_url: company.favicon_url,
           primary_color: company.primary_color || "#0284c7",

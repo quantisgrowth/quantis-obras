@@ -18,7 +18,7 @@ export const Route = createFileRoute("/cliente-$slug")({
 function ClienteTenantLogin() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, roles } = useAuth();
   const { branding, loadBrandingBySlug, loading: brandingLoading } = useBranding();
 
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -59,6 +59,12 @@ function ClienteTenantLogin() {
 
   async function checkAndRedirectUser() {
     if (!user || !companyId) return;
+
+    // Se for administrador do sistema (role 'admin'), redireciona direto e ignora a vinculação
+    if (roles.includes("admin")) {
+      navigate({ to: "/dashboard", replace: true });
+      return;
+    }
 
     try {
       const { data: profile } = await supabase
