@@ -136,65 +136,6 @@ export function BrandingSettings() {
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       {/* Coluna de Configuração */}
       <div className="lg:col-span-7 space-y-6">
-        {branding?.slug && (
-          <Card className="border border-border bg-card shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <Link2 className="h-5 w-5 text-primary" />
-                Seus Links de Acesso Compartilháveis
-              </CardTitle>
-              <CardDescription>
-                Copie os links abaixo para enviar aos seus clientes (construtores) e técnicos da sua equipe.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-foreground">Portal para seus Clientes (Construtoras)</Label>
-                <div className="flex items-center gap-2">
-                  <Input 
-                    readOnly 
-                    value={`${window.location.origin}/cliente-${branding.slug}`} 
-                    className="bg-muted text-xs font-mono select-all" 
-                  />
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/cliente-${branding.slug}`);
-                      toast.success("Link do cliente copiado!");
-                    }}
-                    className="gap-1 px-3"
-                  >
-                    <Copy className="h-3.5 w-3.5" /> Copiar
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-foreground">Portal para seus Técnicos de Campo</Label>
-                <div className="flex items-center gap-2">
-                  <Input 
-                    readOnly 
-                    value={`${window.location.origin}/tecnico-${branding.slug}`} 
-                    className="bg-muted text-xs font-mono select-all" 
-                  />
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/tecnico-${branding.slug}`);
-                      toast.success("Link do técnico copiado!");
-                    }}
-                    className="gap-1 px-3"
-                  >
-                    <Copy className="h-3.5 w-3.5" /> Copiar
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         <Card className="border border-border bg-card shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg font-bold flex items-center gap-2">

@@ -1,10 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "./use-auth";
 import { toast } from "sonner";
 
 export interface BrandingConfig {
-  slug: string | null;
   logo_url: string | null;
   favicon_url: string | null;
   primary_color: string;
@@ -15,11 +13,9 @@ export interface BrandingConfig {
 
 interface BrandingContextValue {
   branding: BrandingConfig | null;
-  isAdminEmpresa: boolean;
   loading: boolean;
   refreshBranding: () => Promise<void>;
   updateBranding: (newBranding: Partial<BrandingConfig>) => Promise<boolean>;
-  loadBrandingBySlug: (slug: string) => Promise<any>;
 }
 
 const BrandingContext = createContext<BrandingContextValue | undefined>(undefined);
@@ -55,54 +51,29 @@ export function darkenColor(hexColor: string, percent = 15): string {
 }
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
   const [branding, setBranding] = useState<BrandingConfig | null>(null);
-  const [isAdminEmpresa, setIsAdminEmpresa] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [empresaId, setEmpresaId] = useState<string | null>(null);
 
   const fetchBranding = async () => {
-    if (!user) {
-      setBranding(null);
-      setIsAdminEmpresa(false);
-      setLoading(false);
-      return;
-    }
-
     try {
-      // 1. Get user profile to find empresa_id and is_admin_empresa
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("empresa_id, is_admin_empresa")
-        .eq("id", user.id)
-        .single();
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "empresa_plataforma")
+        .maybeSingle();
 
-      if (profileError) throw profileError;
+      if (error) throw error;
 
-      if (profile?.empresa_id) {
-        setEmpresaId(profile.empresa_id);
-        setIsAdminEmpresa(profile.is_admin_empresa || false);
-
-        // 2. Get company branding
-        const { data: company, error: companyError } = await supabase
-          .from("empresas_clientes")
-          .select("slug, logo_url, favicon_url, primary_color, secondary_color, font_primary, custom_domain")
-          .eq("id", profile.empresa_id)
-          .single();
-
-        if (companyError) throw companyError;
-
-        if (company) {
-          setBranding({
-            slug: company.slug,
-            logo_url: company.logo_url,
-            favicon_url: company.favicon_url,
-            primary_color: company.primary_color || "#0284c7",
-            secondary_color: company.secondary_color || "#0f172a",
-            font_primary: company.font_primary || "Inter",
-            custom_domain: company.custom_domain,
-          });
-        }
+      if (data && data.value) {
+        const company = data.value as any;
+        setBranding({
+          logo_url: company.logo_url || null,
+          favicon_url: company.favicon_url || null,
+          primary_color: company.primary_color || "#0284c7",
+          secondary_color: company.secondary_color || "#0f172a",
+          font_primary: company.font_primary || "Inter",
+          custom_domain: company.custom_domain || null,
+        });
       }
     } catch (err) {
       console.error("Erro ao carregar configurações de branding:", err);
@@ -111,45 +82,14 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loadBrandingBySlug = async (slug: string) => {
-    setLoading(true);
-    try {
-      const { data: company, error } = await supabase
-        .from("tenant_branding_pub")
-        .select("id, razao_social, slug, logo_url, favicon_url, primary_color, secondary_color, font_primary, custom_domain")
-        .eq("slug", slug)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (company) {
-        setBranding({
-          slug: company.slug,
-          logo_url: company.logo_url,
-          favicon_url: company.favicon_url,
-          primary_color: company.primary_color || "#0284c7",
-          secondary_color: company.secondary_color || "#0f172a",
-          font_primary: company.font_primary || "Inter",
-          custom_domain: company.custom_domain,
-        });
-        return company;
-      }
-    } catch (err) {
-      console.error("Erro ao carregar branding pelo slug:", err);
-    } finally {
-      setLoading(false);
-    }
-    return null;
-  };
-
   useEffect(() => {
     fetchBranding();
-  }, [user]);
+  }, []);
 
   // Dynamically apply styles when branding state changes
   useEffect(() => {
     if (!branding) {
-      // Reset to defaults if not logged in or no branding
+      // Reset to defaults if not loaded
       document.documentElement.style.removeProperty("--primary");
       document.documentElement.style.removeProperty("--primary-foreground");
       document.documentElement.style.removeProperty("--secondary");
@@ -211,28 +151,41 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   }, [branding]);
 
   const updateBranding = async (newBranding: Partial<BrandingConfig>): Promise<boolean> => {
-    if (!empresaId || !isAdminEmpresa) {
-      toast.error("Você não tem permissão para alterar as configurações desta empresa.");
-      return false;
-    }
-
     try {
+      // 1. Get current values first to preserve registration details
+      const { data: current, error: fetchErr } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "empresa_plataforma")
+        .maybeSingle();
+
+      if (fetchErr) throw fetchErr;
+      
+      const currentVal = (current?.value as any) || {};
+      const updatedValue = {
+        ...currentVal,
+        ...newBranding
+      };
+
       const { error } = await supabase
-        .from("empresas_clientes")
-        .update({
-          logo_url: newBranding.logo_url,
-          favicon_url: newBranding.favicon_url,
-          primary_color: newBranding.primary_color,
-          secondary_color: newBranding.secondary_color,
-          font_primary: newBranding.font_primary,
-          custom_domain: newBranding.custom_domain,
-        })
-        .eq("id", empresaId);
+        .from("app_settings")
+        .upsert({
+          key: "empresa_plataforma",
+          value: updatedValue,
+          descricao: "Dados da Empresa e Identidade Visual da Instância"
+        });
 
       if (error) throw error;
 
       setBranding((prev) => {
-        if (!prev) return null;
+        if (!prev) return {
+          logo_url: updatedValue.logo_url || null,
+          favicon_url: updatedValue.favicon_url || null,
+          primary_color: updatedValue.primary_color || "#0284c7",
+          secondary_color: updatedValue.secondary_color || "#0f172a",
+          font_primary: updatedValue.font_primary || "Inter",
+          custom_domain: updatedValue.custom_domain || null,
+        } as any;
         return {
           ...prev,
           ...newBranding,
@@ -252,11 +205,9 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     <BrandingContext.Provider
       value={{
         branding,
-        isAdminEmpresa,
         loading,
         refreshBranding: fetchBranding,
         updateBranding,
-        loadBrandingBySlug,
       }}
     >
       {children}

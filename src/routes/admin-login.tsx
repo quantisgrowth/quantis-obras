@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { ShieldCheck, ChevronLeft, Eye, EyeOff } from "lucide-react";
+import { ShieldCheck, ChevronLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/admin-login")({
   head: () => ({ meta: [{ title: "Acesso Administrativo — Quantis Obras" }] }),
@@ -115,7 +115,10 @@ function AdminLoginPage() {
           Voltar para Login Geral
         </Link>
 
-        <Card className="bg-zinc-900/60 border-zinc-800/80 backdrop-blur-xl shadow-2xl">
+        <Card className="bg-zinc-900/60 border-zinc-800/80 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+          {loading && (
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-amber-500/20 via-amber-500 to-amber-500/20 animate-pulse" />
+          )}
           <CardHeader className="space-y-3 text-center border-b border-zinc-800/50 pb-6">
             <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 shadow-[0_0_20px_rgba(245,158,11,0.1)]">
               <ShieldCheck className="h-6 w-6" />
@@ -137,10 +140,11 @@ function AdminLoginPage() {
                   id="email"
                   type="email"
                   required
+                  disabled={loading}
                   placeholder="admin@quantis.com.br"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-amber-500 focus-visible:border-amber-500"
+                  className="bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-amber-500 focus-visible:border-amber-500 disabled:opacity-50"
                 />
               </div>
               <div className="space-y-2">
@@ -162,10 +166,11 @@ function AdminLoginPage() {
                     id="password"
                     type={showPassword ? "text" : "password"}
                     required
+                    disabled={loading}
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-amber-500 focus-visible:border-amber-500 pr-10"
+                    className="bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-amber-500 focus-visible:border-amber-500 pr-10 disabled:opacity-50"
                   />
                   <button
                     type="button"
@@ -178,10 +183,17 @@ function AdminLoginPage() {
               </div>
               <Button
                 type="submit"
-                className="w-full bg-amber-600 hover:bg-amber-700 text-zinc-950 font-bold transition-all mt-2"
+                className="w-full bg-amber-600 hover:bg-amber-700 text-zinc-950 font-bold transition-all mt-2 flex items-center justify-center gap-2"
                 disabled={loading || authLoading}
               >
-                {loading ? "Verificando Acesso…" : "Entrar no Sistema"}
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Verificando Acesso…</span>
+                  </>
+                ) : (
+                  "Entrar no Sistema"
+                )}
               </Button>
             </form>
           </CardContent>

@@ -9,22 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TecnicoSlugRouteImport } from './routes/tecnico-$slug'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as ClienteSlugRouteImport } from './routes/cliente-$slug'
 import { Route as AdminLoginRouteImport } from './routes/admin-login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedNovoAgendamentoRouteImport } from './routes/_authenticated/novo-agendamento'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 
-const TecnicoSlugRoute = TecnicoSlugRouteImport.update({
-  id: '/tecnico-$slug',
-  path: '/tecnico-$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -38,11 +31,6 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClienteSlugRoute = ClienteSlugRouteImport.update({
-  id: '/cliente-$slug',
-  path: '/cliente-$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
@@ -74,22 +62,18 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin-login': typeof AdminLoginRoute
-  '/cliente-$slug': typeof ClienteSlugRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
-  '/tecnico-$slug': typeof TecnicoSlugRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin-login': typeof AdminLoginRoute
-  '/cliente-$slug': typeof ClienteSlugRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
-  '/tecnico-$slug': typeof TecnicoSlugRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
 }
@@ -98,11 +82,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/admin-login': typeof AdminLoginRoute
-  '/cliente-$slug': typeof ClienteSlugRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
-  '/tecnico-$slug': typeof TecnicoSlugRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
 }
@@ -111,22 +93,18 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin-login'
-    | '/cliente-$slug'
     | '/login'
     | '/reset-password'
     | '/signup'
-    | '/tecnico-$slug'
     | '/dashboard'
     | '/novo-agendamento'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/admin-login'
-    | '/cliente-$slug'
     | '/login'
     | '/reset-password'
     | '/signup'
-    | '/tecnico-$slug'
     | '/dashboard'
     | '/novo-agendamento'
   id:
@@ -134,11 +112,9 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/admin-login'
-    | '/cliente-$slug'
     | '/login'
     | '/reset-password'
     | '/signup'
-    | '/tecnico-$slug'
     | '/_authenticated/dashboard'
     | '/_authenticated/novo-agendamento'
   fileRoutesById: FileRoutesById
@@ -147,22 +123,13 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AdminLoginRoute: typeof AdminLoginRoute
-  ClienteSlugRoute: typeof ClienteSlugRoute
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
-  TecnicoSlugRoute: typeof TecnicoSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/tecnico-$slug': {
-      id: '/tecnico-$slug'
-      path: '/tecnico-$slug'
-      fullPath: '/tecnico-$slug'
-      preLoaderRoute: typeof TecnicoSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -182,13 +149,6 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cliente-$slug': {
-      id: '/cliente-$slug'
-      path: '/cliente-$slug'
-      fullPath: '/cliente-$slug'
-      preLoaderRoute: typeof ClienteSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin-login': {
@@ -247,11 +207,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AdminLoginRoute: AdminLoginRoute,
-  ClienteSlugRoute: ClienteSlugRoute,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
-  TecnicoSlugRoute: TecnicoSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

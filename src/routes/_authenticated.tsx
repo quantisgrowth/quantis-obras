@@ -4,6 +4,17 @@ import { useAuth, primaryRole } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
 import { Button } from "@/components/ui/button";
 import { FlaskConical, LogOut } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated")({ component: AuthLayout });
 
@@ -47,9 +58,27 @@ function AuthLayout() {
           </Link>
           <div className="flex items-center gap-3">
             <span className="hidden text-sm text-muted-foreground sm:inline">{user.email}</span>
-            <Button variant="ghost" size="sm" onClick={() => signOut()}>
-              <LogOut className="mr-1 h-4 w-4" /> Sair
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <LogOut className="mr-1 h-4 w-4" /> Sair
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Deseja mesmo sair?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Você será desconectado da sua conta atual e precisará fazer login novamente para acessar a plataforma.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => signOut()}>
+                    Sim, sair
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </header>
