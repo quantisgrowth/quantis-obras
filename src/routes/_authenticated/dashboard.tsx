@@ -6267,7 +6267,7 @@ function AdminDash() {
                     Alocar Técnico
                   </DialogTitle>
                   <DialogDescription>
-                    Selecione o técnico para este agendamento. Após confirmar, o status será alterado para <strong>Confirmado</strong> e o técnico será notificado via WhatsApp.
+                    Selecione o técnico para este agendamento. Após confirmar, a alocação ficará como <strong>Aguardando Técnico</strong> e precisará da aprovação do gestor para ser confirmada.
                   </DialogDescription>
                 </DialogHeader>
 

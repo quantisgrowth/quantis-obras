@@ -2795,12 +2795,12 @@ export const allocateTechnicianManually = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Update booking to Confirmado with the allocated technician
+    // Update booking to Pendente_Tecnico with the allocated technician
     const { error } = await supabaseAdmin
       .from("agendamentos_medicoes")
       .update({
         tecnico_id: input.tecnicoId,
-        status_agendamento: "Confirmado",
+        status_agendamento: "Pendente_Tecnico",
         convidado_em: new Date().toISOString(),
         autorizado_atraso: false, // Reset delay override on reallocation
       })
@@ -2842,15 +2842,15 @@ export const allocateTechnicianManually = createServerFn({ method: "POST" })
             
           if (booking) {
             const messageText = 
-              `📅 *Quantis Obras - Nova Escala Confirmada*\n\n` +
+              `📅 *Quantis Obras - Nova Escala Reservada*\n\n` +
               `Olá, *${tecnico.nome}*!\n` +
-              `Você foi escalado para um novo serviço.\n\n` +
+              `Você foi escalado para uma nova medição (aguardando aprovação final do gestor).\n\n` +
               `📝 *Código do Pedido:* ${booking.codigo_pedido}\n` +
               `📅 *Data:* ${new Date(booking.data_servico + "T00:00:00").toLocaleDateString("pt-BR")}\n` +
               `⏰ *Horário na Obra:* ${booking.horario_na_obra?.substring(0, 5)}\n` +
               `🏗️ *Obra:* ${(booking.obra as any)?.nome_obra}\n` +
               `📍 *Endereço:* ${(booking.obra as any)?.endereco}\n\n` +
-              `Por favor, acesse seu painel para mais detalhes. Bom trabalho!`;
+              `Por favor, acesse seu painel para verificar.`;
               
             await sendServerWhatsappMessage(profile.telefone, messageText);
           }
