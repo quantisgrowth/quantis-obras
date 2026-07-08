@@ -907,7 +907,21 @@ function NovoAgendamento() {
       </div>
 
       {/* Progress */}
-      <div className="grid grid-cols-4 gap-2 text-center text-xs font-semibold sm:text-sm">
+      {/* Mobile-only Step Indicator */}
+      <div className="sm:hidden space-y-2 py-2 mb-4 animate-in fade-in duration-200">
+        <div className="flex justify-between items-center text-xs font-semibold">
+          <span className="text-muted-foreground">Passo {step} de 4</span>
+          <span className="text-primary font-bold">
+            {step === 1 ? "Identificação da Obra" : step === 2 ? "Seleção de Serviços" : step === 3 ? "Agendamento da Data" : "Resumo e Pagamento"}
+          </span>
+        </div>
+        <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
+          <div className="bg-primary h-full transition-all duration-300" style={{ width: `${(step / 4) * 100}%` }} />
+        </div>
+      </div>
+
+      {/* Desktop Step Indicator */}
+      <div className="hidden sm:grid grid-cols-4 gap-2 text-center text-xs font-semibold sm:text-sm">
         {[
           { num: 1, label: "Obra", icon: Building },
           { num: 2, label: "Serviço", icon: HardHat },
@@ -922,6 +936,7 @@ function NovoAgendamento() {
           </div>
         ))}
       </div>
+
 
       <Card className="shadow-[var(--shadow-elegant)]">
         <CardContent className="pt-6">

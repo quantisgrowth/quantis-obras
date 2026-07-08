@@ -958,7 +958,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
       />
 
       {/* ── Cards de Resumo ── */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card className="border border-border bg-card">
           <CardContent className="pt-5">
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total de Pedidos</p>
@@ -1096,7 +1096,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 
       {/* ── Abas do Painel ── */}
       <Tabs defaultValue="pendentes" onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex flex-wrap gap-2 md:gap-3 bg-transparent p-0 h-auto justify-start mb-6">
+        <TabsList className="flex overflow-x-auto whitespace-nowrap scrollbar-none pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:overflow-visible gap-2 md:gap-3 bg-transparent p-0 h-auto justify-start mb-6">
           <TabsTrigger 
             value="solicitar" 
             className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
@@ -2716,7 +2716,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
       </div>
 
       <Tabs value={tecnicoActiveTab} onValueChange={setTecnicoActiveTab} className="w-full animate-in fade-in-50 duration-200">
-        <TabsList className="flex flex-wrap gap-2 md:gap-3 bg-transparent p-0 h-auto justify-start mb-6">
+        <TabsList className="flex overflow-x-auto whitespace-nowrap scrollbar-none pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:overflow-visible gap-2 md:gap-3 bg-transparent p-0 h-auto justify-start mb-6">
           <TabsTrigger
             value="execucao"
             className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
@@ -2855,7 +2855,7 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                     ) : (
                       <div className="space-y-2">
                         <p className="text-xs text-muted-foreground">Tire uma foto ao chegar no canteiro para iniciar.</p>
-                        <Label htmlFor="checkin-file" className="w-full flex items-center justify-center gap-1 px-3 py-2 border rounded-md cursor-pointer hover:bg-muted text-xs font-semibold">
+                        <Label htmlFor="checkin-file" className="w-full flex items-center justify-center gap-1.5 px-3 py-3 border border-indigo-500/30 rounded-md cursor-pointer hover:bg-indigo-500/10 text-xs font-bold bg-indigo-500/5 text-indigo-600 dark:text-indigo-400">
                           <Camera className="h-4 w-4" /> Capturar Foto Chegada
                         </Label>
                         <Input id="checkin-file" type="file" accept="image/*" capture="environment" className="hidden" onChange={handleCheckin} disabled={uploadingCheckin} />
@@ -2942,9 +2942,18 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                               ))}
                             </div>
 
-                            <div className="space-y-1">
-                              <Label htmlFor="cycle-photo">Foto do Ensaio / Slump (Obrigatório)</Label>
-                              <Input id="cycle-photo" type="file" accept="image/*" capture="environment" required onChange={(e) => setCyclePhoto(e.target.files ? e.target.files[0] : null)} />
+                            <div className="space-y-2">
+                              <Label htmlFor="cycle-photo" className="font-semibold">Foto do Ensaio / Slump (Obrigatório)</Label>
+                              <Label htmlFor="cycle-photo" className="w-full flex items-center justify-center gap-1.5 px-3 py-3 border border-dashed border-indigo-500/40 rounded-md cursor-pointer hover:bg-indigo-500/10 text-xs font-bold bg-indigo-500/5 text-indigo-600 dark:text-indigo-400">
+                                <Camera className="h-4 w-4" />
+                                {cyclePhoto ? "✓ Alterar Foto Capturada" : "Capturar Foto do Ensaio"}
+                              </Label>
+                              <Input id="cycle-photo" type="file" accept="image/*" capture="environment" required className="hidden" onChange={(e) => setCyclePhoto(e.target.files ? e.target.files[0] : null)} />
+                              {cyclePhoto && (
+                                <p className="text-[10px] text-emerald-600 font-semibold text-center mt-1">
+                                  Foto pronta: {cyclePhoto.name}
+                                </p>
+                              )}
                             </div>
                             <DialogFooter className="pt-2">
                               <Button type="button" variant="outline" onClick={() => setCycleDialogOpen(false)} disabled={savingCycle}>Cancelar</Button>
@@ -3025,12 +3034,30 @@ function TecnicoDash({ email, userId }: { email: string; userId: string }) {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="photo-final">Foto Panorâmica dos CPs Organizados (Opcional)</Label>
-                            <Input id="photo-final" type="file" accept="image/*" capture="environment" onChange={(e) => setPhotoFinal(e.target.files ? e.target.files[0] : null)} />
+                            <Label htmlFor="photo-final" className="font-medium">Foto Panorâmica dos CPs Organizados (Opcional)</Label>
+                            <Label htmlFor="photo-final" className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 border border-dashed border-border rounded-md cursor-pointer hover:bg-muted text-xs font-semibold">
+                              <Camera className="h-4 w-4" /> 
+                              {photoFinal ? "✓ Alterar Foto Panorâmica" : "Capturar Foto Panorâmica"}
+                            </Label>
+                            <Input id="photo-final" type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => setPhotoFinal(e.target.files ? e.target.files[0] : null)} />
+                            {photoFinal && (
+                              <p className="text-[10px] text-emerald-600 font-semibold text-center mt-1">
+                                Foto final pronta: {photoFinal.name}
+                              </p>
+                            )}
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="photo-retorno">Foto de Retorno de Carga / Betoneira Limpa (Opcional)</Label>
-                            <Input id="photo-retorno" type="file" accept="image/*" capture="environment" onChange={(e) => setPhotoRetorno(e.target.files ? e.target.files[0] : null)} />
+                            <Label htmlFor="photo-retorno" className="font-medium">Foto de Retorno de Carga / Betoneira Limpa (Opcional)</Label>
+                            <Label htmlFor="photo-retorno" className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 border border-dashed border-border rounded-md cursor-pointer hover:bg-muted text-xs font-semibold">
+                              <Camera className="h-4 w-4" /> 
+                              {photoRetorno ? "✓ Alterar Foto de Retorno" : "Capturar Foto de Retorno"}
+                            </Label>
+                            <Input id="photo-retorno" type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => setPhotoRetorno(e.target.files ? e.target.files[0] : null)} />
+                            {photoRetorno && (
+                              <p className="text-[10px] text-emerald-600 font-semibold text-center mt-1">
+                                Foto retorno pronta: {photoRetorno.name}
+                              </p>
+                            )}
                           </div>
                           <DialogFooter className="pt-2">
                             <Button type="button" variant="outline" onClick={() => setConcludeDialogOpen(false)} disabled={finalizing}>Cancelar</Button>
