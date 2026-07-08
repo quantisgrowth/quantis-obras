@@ -7,7 +7,7 @@ import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera, Building2,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
   Upload, Eye, EyeOff, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
-  Star, Settings2, LogOut, HardHat, Filter, FileDown, Printer, Trash2, Search
+  Star, Settings2, LogOut, HardHat, Filter, FileDown, Printer, Trash2, Search, LayoutGrid, List
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,17 @@ import { toast } from "sonner";
 import { useBranding } from "@/hooks/use-branding";
 import { BrandingSettings } from "@/components/branding-settings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -3777,6 +3788,15 @@ function AdminDash() {
   const [servicoCpExcedente, setServicoCpExcedente] = useState(0);
   const [servicoSaving, setServicoSaving] = useState(false);
 
+  // Product view and filtering states
+  const [productViewMode, setProductViewMode] = useState<"grid" | "list">("grid");
+  const [productFilterCategory, setProductFilterCategory] = useState("all");
+  const [productFilterCobranca, setProductFilterCobranca] = useState("all");
+  const [productFilterStatus, setProductFilterStatus] = useState("all");
+  const [productFilterSearch, setProductFilterSearch] = useState("");
+  const [deletingServicoId, setDeletingServicoId] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
   // City pricing states
   const [precosCidadeOpen, setPrecosCidadeOpen] = useState(false);
   const [pricingCityRates, setPricingCityRates] = useState<{ [cidadeId: string]: { valorFixo: number; limiteUnidades: number; id?: string } }>({});
@@ -4894,6 +4914,26 @@ function AdminDash() {
     }
   };
 
+  const handleDeleteServico = async () => {
+    if (!deletingServicoId) return;
+    try {
+      const { error } = await supabase
+        .from("servicos_catalogo")
+        .delete()
+        .eq("id", deletingServicoId);
+
+      if (error) throw error;
+
+      toast.success("Serviço excluído com sucesso!");
+      setDeleteConfirmOpen(false);
+      setDeletingServicoId(null);
+      fetchAllServicos();
+    } catch (err: any) {
+      console.error("Error deleting servico:", err);
+      toast.error(err?.message || "Erro ao excluir serviço.");
+    }
+  };
+
   const handleOpenPrecosCidade = async (serv: any) => {
     setSelectedServico(serv);
     setPrecosCidadeOpen(true);
@@ -5879,6 +5919,44 @@ function AdminDash() {
       toast.error(err?.message || "Erro ao vincular hospedagem.");
     }
   };
+
+  const filteredServicos = servicos.filter((serv) => {
+    // 1. Search text filter (Name or SKU)
+    if (productFilterSearch) {
+      const searchLower = productFilterSearch.toLowerCase();
+      const nameMatch = serv.nome_servico?.toLowerCase().includes(searchLower);
+      const skuMatch = serv.sku?.toLowerCase().includes(searchLower);
+      const descMatch = serv.descricao?.toLowerCase().includes(searchLower);
+      if (!nameMatch && !skuMatch && !descMatch) return false;
+    }
+
+    // 2. Category filter
+    if (productFilterCategory !== "all") {
+      const catLower = serv.categoria?.toLowerCase();
+      const filterLower = productFilterCategory.toLowerCase();
+      if (filterLower === "outros") {
+        if (["concreto", "solo", "argamassa", "bloco"].includes(catLower)) {
+          return false;
+        }
+      } else {
+        if (catLower !== filterLower) return false;
+      }
+    }
+
+    // 3. Billing type filter
+    if (productFilterCobranca !== "all") {
+      if (serv.tipo_cobranca !== productFilterCobranca) return false;
+    }
+
+    // 4. Status filter
+    if (productFilterStatus !== "all") {
+      const isAtivo = serv.ativo === true;
+      if (productFilterStatus === "ativo" && !isAtivo) return false;
+      if (productFilterStatus === "inativo" && isAtivo) return false;
+    }
+
+    return true;
+  });
 
   // Sidebar nav items definition
   const sidebarItems = [
@@ -7694,14 +7772,95 @@ function AdminDash() {
             </Button>
           </div>
 
-          {loadingServicos && servicos.length === 0 ? (
+          {/* Filtros e Controles de Visualização */}
+          <div className="flex flex-col gap-4 bg-muted/30 p-4 rounded-lg border border-border shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome, SKU ou descrição..."
+                  value={productFilterSearch}
+                  onChange={(e) => setProductFilterSearch(e.target.value)}
+                  className="pl-9 h-9 text-xs bg-background border-border text-foreground"
+                />
+              </div>
+              
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <Button
+                  variant={productViewMode === "grid" ? "default" : "outline"}
+                  size="icon"
+                  className="h-9 w-9 cursor-pointer"
+                  onClick={() => setProductViewMode("grid")}
+                  title="Visualizar em Blocos"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={productViewMode === "list" ? "default" : "outline"}
+                  size="icon"
+                  className="h-9 w-9 cursor-pointer"
+                  onClick={() => setProductViewMode("list")}
+                  title="Visualizar em Lista"
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tipo de Serviço (Categoria)</Label>
+                <select
+                  value={productFilterCategory}
+                  onChange={(e) => setProductFilterCategory(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
+                >
+                  <option value="all">Todas as Categorias</option>
+                  <option value="Concreto">Concreto</option>
+                  <option value="Solo">Solo</option>
+                  <option value="Argamassa">Argamassa</option>
+                  <option value="Bloco">Bloco</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Modelo de Cobrança</Label>
+                <select
+                  value={productFilterCobranca}
+                  onChange={(e) => setProductFilterCobranca(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
+                >
+                  <option value="all">Todas as Cobranças</option>
+                  <option value="Por Execucao">Por Execução (Fixo)</option>
+                  <option value="Por Unidade">Por Unidade</option>
+                  <option value="Por Hora">Por Hora</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</Label>
+                <select
+                  value={productFilterStatus}
+                  onChange={(e) => setProductFilterStatus(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
+                >
+                  <option value="all">Todos os Status</option>
+                  <option value="ativo">Ativo</option>
+                  <option value="inativo">Inativo</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {loadingServicos && filteredServicos.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground animate-pulse">Carregando catálogo...</div>
-          ) : servicos.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground border border-dashed rounded-lg">Nenhum serviço cadastrado ainda.</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {servicos.map((serv) => (
-                <Card key={serv.id} className="border border-border bg-card shadow-sm hover:shadow-md transition-all">
+          ) : filteredServicos.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground border border-dashed rounded-lg">Nenhum serviço correspondente aos filtros foi encontrado.</div>
+          ) : productViewMode === "grid" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-200">
+              {filteredServicos.map((serv) => (
+                <Card key={serv.id} className="border border-border bg-card shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <Badge variant={serv.ativo ? "default" : "secondary"}>
@@ -7726,7 +7885,9 @@ function AdminDash() {
                       </div>
                       <div>
                         <span className="text-muted-foreground block text-[10px]">Cobrança</span>
-                        <span className="font-semibold text-foreground">{serv.tipo_cobranca}</span>
+                        <span className="font-semibold text-foreground">
+                          {serv.tipo_cobranca === "Por Execucao" ? "Por Execução (Fixo)" : serv.tipo_cobranca === "Por Unidade" ? "Por Unidade" : serv.tipo_cobranca === "Por Hora" ? "Por Hora" : serv.tipo_cobranca}
+                        </span>
                       </div>
                       <div>
                         <span className="text-muted-foreground block text-[10px]">Unidade</span>
@@ -7736,7 +7897,7 @@ function AdminDash() {
                         <span className="text-muted-foreground block text-[10px]">Mínimo à Vista</span>
                         <span className="font-semibold text-foreground text-[11px]">R$ {Number(serv.regra_minimo_a_vista).toFixed(2)}</span>
                       </div>
-                      <div>
+                      <div className="col-span-2">
                         <span className="text-muted-foreground block text-[10px]">CP Excedente</span>
                         <span className="font-semibold text-foreground text-[11px]">R$ {Number(serv.valor_cp_excedente ?? 0).toFixed(2)}</span>
                       </div>
@@ -7746,24 +7907,135 @@ function AdminDash() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="flex-1 text-xs"
+                        className="flex-1 text-xs cursor-pointer"
                         onClick={() => handleOpenServicoDialog(serv)}
                       >
                         Editar
                       </Button>
                       <Button
                         size="sm"
-                        className="flex-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                        className="flex-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
                         onClick={() => handleOpenPrecosCidade(serv)}
                       >
                         Cidades e Preços
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/50 shrink-0 h-9 w-9 cursor-pointer"
+                        onClick={() => {
+                          setDeletingServicoId(serv.id);
+                          setDeleteConfirmOpen(true);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
+          ) : (
+            <div className="border border-border rounded-lg overflow-hidden bg-card shadow-sm animate-in fade-in duration-200">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-muted/40 border-b border-border text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
+                      <th className="p-4 w-28">SKU</th>
+                      <th className="p-4">Serviço / Descrição</th>
+                      <th className="p-4 w-32">Categoria</th>
+                      <th className="p-4 w-36">Cobrança</th>
+                      <th className="p-4 w-32">Mínimo à Vista</th>
+                      <th className="p-4 w-24">Status</th>
+                      <th className="p-4 w-44 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredServicos.map((serv) => (
+                      <tr key={serv.id} className="hover:bg-muted/20 transition-colors text-foreground">
+                        <td className="p-4 font-mono font-medium text-muted-foreground">
+                          {serv.sku}
+                        </td>
+                        <td className="p-4">
+                          <div className="space-y-0.5">
+                            <span className="font-bold text-sm block">{serv.nome_servico}</span>
+                            <span className="text-xs text-muted-foreground line-clamp-1 block">{serv.descricao || "Sem descrição cadastrada."}</span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <Badge variant="outline">{serv.categoria}</Badge>
+                        </td>
+                        <td className="p-4 font-medium">
+                          {serv.tipo_cobranca === "Por Execucao" ? "Por Execução (Fixo)" : serv.tipo_cobranca === "Por Unidade" ? "Por Unidade" : serv.tipo_cobranca === "Por Hora" ? "Por Hora" : serv.tipo_cobranca}
+                        </td>
+                        <td className="p-4 font-semibold">
+                          R$ {Number(serv.regra_minimo_a_vista).toFixed(2)}
+                        </td>
+                        <td className="p-4">
+                          <Badge variant={serv.ativo ? "default" : "secondary"}>
+                            {serv.ativo ? "Ativo" : "Inativo"}
+                          </Badge>
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-2.5 text-xs font-semibold cursor-pointer"
+                              onClick={() => handleOpenServicoDialog(serv)}
+                              title="Editar"
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-8 px-2.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold cursor-pointer"
+                              onClick={() => handleOpenPrecosCidade(serv)}
+                              title="Cidades e Preços"
+                            >
+                              Cidades
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/50 h-8 w-8 cursor-pointer"
+                              onClick={() => {
+                                setDeletingServicoId(serv.id);
+                                setDeleteConfirmOpen(true);
+                              }}
+                              title="Excluir"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
+
+          {/* AlertDialog de Confirmação de Exclusão */}
+          <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Deseja mesmo excluir este serviço?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Essa ação excluirá permanentemente o produto/serviço do catálogo e todas as precificações por cidade associadas. Essa operação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => { setDeleteConfirmOpen(false); setDeletingServicoId(null); }} className="cursor-pointer">
+                  Cancelar
+                </AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteServico} className="bg-red-600 hover:bg-red-700 text-white cursor-pointer">
+                  Confirmar Exclusão
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>}
 
         {/* ── PAINEL: CONFIGURAÇÕES GLOBAIS ── */}
