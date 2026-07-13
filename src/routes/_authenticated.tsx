@@ -122,8 +122,7 @@ function AuthLayout() {
             {role === "cliente" && (
               <>
                 <Link
-                  to="/dashboard"
-                  search={{ tab: "pendentes" }}
+                  to="/dashboard?tab=pendentes"
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
                     isTabActive("pendentes")
                       ? "bg-primary/10 text-primary border-primary/20 font-medium"
@@ -135,8 +134,7 @@ function AuthLayout() {
                 </Link>
 
                 <Link
-                  to="/dashboard"
-                  search={{ tab: "confirmados" }}
+                  to="/dashboard?tab=confirmados"
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
                     isTabActive("confirmados")
                       ? "bg-primary/10 text-primary border-primary/20 font-medium"
@@ -148,8 +146,7 @@ function AuthLayout() {
                 </Link>
 
                 <Link
-                  to="/dashboard"
-                  search={{ tab: "realizados" }}
+                  to="/dashboard?tab=realizados"
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
                     isTabActive("realizados")
                       ? "bg-primary/10 text-primary border-primary/20 font-medium"
