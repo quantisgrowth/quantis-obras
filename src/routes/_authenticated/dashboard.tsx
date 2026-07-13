@@ -1122,8 +1122,8 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
       </Card>
 
       {/* ── Abas do Painel ── */}
-      <Tabs defaultValue="pendentes" onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex overflow-x-auto whitespace-nowrap scrollbar-none pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:overflow-visible gap-2 md:gap-3 bg-transparent p-0 h-auto justify-start mb-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="flex md:hidden overflow-x-auto whitespace-nowrap scrollbar-none pb-2 -mx-4 px-4 gap-2 bg-transparent p-0 h-auto justify-start mb-6">
           <TabsTrigger 
             value="solicitar" 
             className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
