@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.crm_pipelines (
 ALTER TABLE public.crm_pipelines ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de Segurança (RLS) para crm_pipelines
+DROP POLICY IF EXISTS "Empresas acessam apenas seus pipelines" ON public.crm_pipelines;
 CREATE POLICY "Empresas acessam apenas seus pipelines" ON public.crm_pipelines
   FOR ALL TO authenticated
   USING (
@@ -34,7 +35,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER tg_check_max_pipelines
+DROP TRIGGER IF EXISTS tg_check_max_pipelines ON public.crm_pipelines;
+CREATE TRIGGER tg_check_max_pipelines
   BEFORE INSERT ON public.crm_pipelines
   FOR EACH ROW EXECUTE FUNCTION public.check_max_pipelines();
 
@@ -52,6 +54,7 @@ CREATE TABLE IF NOT EXISTS public.crm_pipeline_etapas (
 ALTER TABLE public.crm_pipeline_etapas ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de Segurança (RLS) para crm_pipeline_etapas
+DROP POLICY IF EXISTS "Empresas acessam apenas etapas de seus pipelines" ON public.crm_pipeline_etapas;
 CREATE POLICY "Empresas acessam apenas etapas de seus pipelines" ON public.crm_pipeline_etapas
   FOR ALL TO authenticated
   USING (
@@ -73,7 +76,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER tg_check_max_pipeline_stages
+DROP TRIGGER IF EXISTS tg_check_max_pipeline_stages ON public.crm_pipeline_etapas;
+CREATE TRIGGER tg_check_max_pipeline_stages
   BEFORE INSERT ON public.crm_pipeline_etapas
   FOR EACH ROW EXECUTE FUNCTION public.check_max_pipeline_stages();
 
@@ -88,7 +92,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER tg_check_min_pipeline_stages
+DROP TRIGGER IF EXISTS tg_check_min_pipeline_stages ON public.crm_pipeline_etapas;
+CREATE TRIGGER tg_check_min_pipeline_stages
   BEFORE DELETE ON public.crm_pipeline_etapas
   FOR EACH ROW EXECUTE FUNCTION public.check_min_pipeline_stages();
 
@@ -114,6 +119,7 @@ CREATE TABLE IF NOT EXISTS public.crm_oportunidades (
 ALTER TABLE public.crm_oportunidades ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de Segurança (RLS) para crm_oportunidades
+DROP POLICY IF EXISTS "Empresas acessam apenas suas oportunidades" ON public.crm_oportunidades;
 CREATE POLICY "Empresas acessam apenas suas oportunidades" ON public.crm_oportunidades
   FOR ALL TO authenticated
   USING (
@@ -132,6 +138,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER tg_update_crm_oportunidade_timestamp
+DROP TRIGGER IF EXISTS tg_update_crm_oportunidade_timestamp ON public.crm_oportunidades;
+CREATE TRIGGER tg_update_crm_oportunidade_timestamp
   BEFORE UPDATE ON public.crm_oportunidades
   FOR EACH ROW EXECUTE FUNCTION public.update_crm_oportunidade_timestamp();
