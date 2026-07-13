@@ -161,6 +161,18 @@ function AuthLayout() {
                 </Link>
 
                 <Link
+                  to="/financeiro-cliente"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    isRouteActive("/financeiro-cliente")
+                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                  }`}
+                >
+                  <CircleDollarSign className="h-4 w-4 shrink-0" />
+                  <span>Financeiro</span>
+                </Link>
+
+                <Link
                   to="/minhas-obras"
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
                     isRouteActive("/minhas-obras")
@@ -302,6 +314,18 @@ function AuthLayout() {
           >
             <HardHat className="h-5 w-5" />
             <span>Obras</span>
+          </Link>
+        )}
+
+        {role === "cliente" && (
+          <Link
+            to="/financeiro-cliente"
+            activeProps={{ className: "text-primary" }}
+            inactiveProps={{ className: "text-muted-foreground" }}
+            className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-2.5 transition-colors"
+          >
+            <CircleDollarSign className="h-5 w-5" />
+            <span>Financ.</span>
           </Link>
         )}
 
