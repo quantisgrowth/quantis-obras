@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useLocation } from "@tanstack/react-router";
 import { useAuth, primaryRole } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,17 +59,8 @@ import {
   allocateTechnicianManually
 } from "@/lib/booking.functions";
 
-type DashboardSearch = {
-  tab?: string;
-};
-
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Painel — Quantis Obras" }] }),
-  validateSearch: (search: Record<string, unknown>): DashboardSearch => {
-    return {
-      tab: search.tab as string | undefined,
-    };
-  },
   component: Dashboard,
 });
 
@@ -189,7 +180,8 @@ const STATUS_LABELS: Record<string, string> = {
 // ── CLIENTE DASHBOARD ──────────────────────────────────────────────────────
 function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const navigate = useNavigate();
-  const { tab } = Route.useSearch();
+  const location = useLocation();
+  const tab = (location.search as any)?.tab;
 
   const [agendamentos, setAgendamentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
