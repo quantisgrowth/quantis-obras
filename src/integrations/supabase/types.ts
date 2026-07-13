@@ -443,6 +443,15 @@ export type Database = {
           razao_social: string
           total_servicos_concluidos: number
           requer_aprovacao_tecnico: boolean
+          nome_fantasia: string | null
+          telefone_financeiro: string | null
+          email_financeiro: string | null
+          endereco_faturamento: string | null
+          numero_faturamento: string | null
+          bairro_faturamento: string | null
+          cidade_faturamento: string | null
+          estado_faturamento: string | null
+          cep_faturamento: string | null
         }
         Insert: {
           cnpj: string
@@ -453,6 +462,15 @@ export type Database = {
           razao_social: string
           total_servicos_concluidos?: number
           requer_aprovacao_tecnico?: boolean
+          nome_fantasia?: string | null
+          telefone_financeiro?: string | null
+          email_financeiro?: string | null
+          endereco_faturamento?: string | null
+          numero_faturamento?: string | null
+          bairro_faturamento?: string | null
+          cidade_faturamento?: string | null
+          estado_faturamento?: string | null
+          cep_faturamento?: string | null
         }
         Update: {
           cnpj?: string
@@ -463,6 +481,15 @@ export type Database = {
           razao_social?: string
           total_servicos_concluidos?: number
           requer_aprovacao_tecnico?: boolean
+          nome_fantasia?: string | null
+          telefone_financeiro?: string | null
+          email_financeiro?: string | null
+          endereco_faturamento?: string | null
+          numero_faturamento?: string | null
+          bairro_faturamento?: string | null
+          cidade_faturamento?: string | null
+          estado_faturamento?: string | null
+          cep_faturamento?: string | null
         }
         Relationships: []
       }

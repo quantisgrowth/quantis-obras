@@ -16,6 +16,7 @@ import { Route as AdminLoginRouteImport } from './routes/admin-login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedNovoAgendamentoRouteImport } from './routes/_authenticated/novo-agendamento'
+import { Route as AuthenticatedMeusDadosRouteImport } from './routes/_authenticated/meus-dados'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCrmRouteImport } from './routes/_authenticated/crm'
 
@@ -54,6 +55,11 @@ const AuthenticatedNovoAgendamentoRoute =
     path: '/novo-agendamento',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedMeusDadosRoute = AuthenticatedMeusDadosRouteImport.update({
+  id: '/meus-dados',
+  path: '/meus-dados',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/meus-dados': typeof AuthenticatedMeusDadosRoute
   '/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
 }
 export interface FileRoutesByTo {
@@ -83,6 +90,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/meus-dados': typeof AuthenticatedMeusDadosRoute
   '/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
 }
 export interface FileRoutesById {
@@ -95,6 +103,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/_authenticated/crm': typeof AuthenticatedCrmRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/meus-dados': typeof AuthenticatedMeusDadosRoute
   '/_authenticated/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
 }
 export interface FileRouteTypes {
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/crm'
     | '/dashboard'
+    | '/meus-dados'
     | '/novo-agendamento'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/crm'
     | '/dashboard'
+    | '/meus-dados'
     | '/novo-agendamento'
   id:
     | '__root__'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/_authenticated/crm'
     | '/_authenticated/dashboard'
+    | '/_authenticated/meus-dados'
     | '/_authenticated/novo-agendamento'
   fileRoutesById: FileRoutesById
 }
@@ -191,6 +203,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedNovoAgendamentoRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/meus-dados': {
+      id: '/_authenticated/meus-dados'
+      path: '/meus-dados'
+      fullPath: '/meus-dados'
+      preLoaderRoute: typeof AuthenticatedMeusDadosRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -211,12 +230,14 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedCrmRoute: typeof AuthenticatedCrmRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedMeusDadosRoute: typeof AuthenticatedMeusDadosRoute
   AuthenticatedNovoAgendamentoRoute: typeof AuthenticatedNovoAgendamentoRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCrmRoute: AuthenticatedCrmRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedMeusDadosRoute: AuthenticatedMeusDadosRoute,
   AuthenticatedNovoAgendamentoRoute: AuthenticatedNovoAgendamentoRoute,
 }
 
