@@ -14,6 +14,137 @@ export type Database = {
   }
   public: {
     Tables: {
+      crm_pipelines: {
+        Row: {
+          id: string
+          empresa_id: string
+          nome: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          empresa_id: string
+          nome: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          empresa_id?: string
+          nome?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_pipelines_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas_clientes"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      crm_pipeline_etapas: {
+        Row: {
+          id: string
+          pipeline_id: string
+          nome: string
+          posicao: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          pipeline_id: string
+          nome: string
+          posicao: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          pipeline_id?: string
+          nome?: string
+          posicao?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_pipeline_etapas_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "crm_pipelines"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      crm_oportunidades: {
+        Row: {
+          id: string
+          pipeline_id: string
+          etapa_id: string
+          empresa_id: string
+          nome_oportunidade: string
+          valor_estimado: number
+          cliente_contato_nome: string | null
+          cliente_contato_email: string | null
+          cliente_contato_telefone: string | null
+          status: string
+          posicao_etapa: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          pipeline_id: string
+          etapa_id: string
+          empresa_id: string
+          nome_oportunidade: string
+          valor_estimado?: number
+          cliente_contato_nome?: string | null
+          cliente_contato_email?: string | null
+          cliente_contato_telefone?: string | null
+          status?: string
+          posicao_etapa?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          pipeline_id?: string
+          etapa_id?: string
+          empresa_id?: string
+          nome_oportunidade?: string
+          valor_estimado?: number
+          cliente_contato_nome?: string | null
+          cliente_contato_email?: string | null
+          cliente_contato_telefone?: string | null
+          status?: string
+          posicao_etapa?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_oportunidades_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "crm_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_oportunidades_etapa_id_fkey"
+            columns: ["etapa_id"]
+            isOneToOne: false
+            referencedRelation: "crm_pipeline_etapas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_oportunidades_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas_clientes"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       agendamentos_medicoes: {
         Row: {
           codigo_pedido: string

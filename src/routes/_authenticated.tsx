@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useAuth, primaryRole } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
 import { Button } from "@/components/ui/button";
-import { FlaskConical, LogOut, LayoutDashboard, CalendarPlus } from "lucide-react";
+import { FlaskConical, LogOut, LayoutDashboard, CalendarPlus, FolderKanban } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,24 +39,58 @@ function AuthLayout() {
       {/* Desktop Header */}
       <header className="hidden md:block border-b border-border bg-card">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <Link to="/dashboard" className="flex items-center gap-2">
-            {branding?.logo_url ? (
-              <div className="flex items-center gap-2">
-                <img src={branding.logo_url} alt="Logo" className="h-8 max-w-[150px] object-contain" />
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground">{roleLabel}</span>
-              </div>
-            ) : (
-              <>
-                <div className="grid h-9 w-9 place-items-center rounded-md bg-primary text-primary-foreground">
-                  <FlaskConical className="h-5 w-5" />
+          <div className="flex items-center gap-6">
+            <Link to="/dashboard" className="flex items-center gap-2">
+              {branding?.logo_url ? (
+                <div className="flex items-center gap-2">
+                  <img src={branding.logo_url} alt="Logo" className="h-8 max-w-[150px] object-contain" />
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground">{roleLabel}</span>
                 </div>
-                <div className="leading-tight">
-                  <div className="text-sm font-bold text-foreground">Quantis Obras</div>
-                  <div className="text-xs text-muted-foreground">{roleLabel}</div>
-                </div>
-              </>
-            )}
-          </Link>
+              ) : (
+                <>
+                  <div className="grid h-9 w-9 place-items-center rounded-md bg-primary text-primary-foreground">
+                    <FlaskConical className="h-5 w-5" />
+                  </div>
+                  <div className="leading-tight">
+                    <div className="text-sm font-bold text-foreground">Quantis Obras</div>
+                    <div className="text-xs text-muted-foreground">{roleLabel}</div>
+                  </div>
+                </>
+              )}
+            </Link>
+
+            <nav className="flex items-center gap-4 ml-6 pl-6 border-l border-border">
+              <Link
+                to="/dashboard"
+                activeProps={{ className: "text-primary font-medium" }}
+                inactiveProps={{ className: "text-muted-foreground hover:text-foreground" }}
+                className="text-sm transition-colors"
+              >
+                Painel
+              </Link>
+              {role === "admin" && (
+                <Link
+                  to="/crm"
+                  activeProps={{ className: "text-primary font-medium" }}
+                  inactiveProps={{ className: "text-muted-foreground hover:text-foreground" }}
+                  className="text-sm transition-colors"
+                >
+                  CRM
+                </Link>
+              )}
+              {(role === "cliente" || role === "admin") && (
+                <Link
+                  to="/novo-agendamento"
+                  activeProps={{ className: "text-primary font-medium" }}
+                  inactiveProps={{ className: "text-muted-foreground hover:text-foreground" }}
+                  className="text-sm transition-colors"
+                >
+                  Novo Pedido
+                </Link>
+              )}
+            </nav>
+          </div>
+          
           <div className="flex items-center gap-3">
             <span className="hidden text-sm text-muted-foreground sm:inline">{user.email}</span>
             <AlertDialog>
@@ -111,6 +145,18 @@ function AuthLayout() {
           <LayoutDashboard className="h-5 w-5" />
           <span>Painel</span>
         </Link>
+
+        {role === "admin" && (
+          <Link
+            to="/crm"
+            activeProps={{ className: "text-primary" }}
+            inactiveProps={{ className: "text-muted-foreground" }}
+            className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-3 transition-colors"
+          >
+            <FolderKanban className="h-5 w-5" />
+            <span>CRM</span>
+          </Link>
+        )}
 
         {(role === "cliente" || role === "admin") && (
           <Link
