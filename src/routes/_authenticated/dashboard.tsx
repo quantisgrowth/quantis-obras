@@ -1125,12 +1125,6 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="flex md:hidden overflow-x-auto whitespace-nowrap scrollbar-none pb-2 -mx-4 px-4 gap-2 bg-transparent p-0 h-auto justify-start mb-6">
           <TabsTrigger 
-            value="solicitar" 
-            className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
-          >
-            <CalendarPlus className="h-4 w-4" /> Solicitação
-          </TabsTrigger>
-          <TabsTrigger 
             value="pendentes" 
             className="flex items-center gap-2 px-4 py-2.5 h-auto text-sm font-semibold rounded-full border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
           >
@@ -1150,33 +1144,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
           </TabsTrigger>
         </TabsList>
 
-        {/* ── TAB: SOLICITAÇÃO ── */}
-        <TabsContent value="solicitar">
-          <Card className="border border-border bg-card max-w-2xl">
-            <CardHeader>
-              <CardTitle className="text-xl font-bold flex items-center gap-2">
-                <CalendarPlus className="h-5 w-5 text-primary" />
-                Solicitar Novo Agendamento
-              </CardTitle>
-              <CardDescription>
-                Agende ensaios de concreto e controle tecnológico para a sua obra com antecedência de no mínimo 48 horas.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Nossos laboratórios e técnicos móveis atendem Sorocaba e região de Segunda a Sábado. Ao registrar a sua solicitação, calculamos a melhor rota e escalamos os profissionais mais bem avaliados para prestar o atendimento no canteiro.
-              </p>
-              <Button
-                onClick={() => navigate({ to: "/novo-agendamento" })}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 shadow-sm"
-                size="lg"
-              >
-                <Plus className="h-5 w-5" />
-                Iniciar Nova Solicitação
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
+
 
         {/* ── TAB: AGUARDANDO TÉCNICO ── */}
         <TabsContent value="pendentes" className="space-y-4">
@@ -1187,7 +1155,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
               <CardContent className="space-y-3">
                 <Clock className="h-10 w-10 text-muted-foreground/30 mx-auto" />
                 <p className="text-sm text-muted-foreground">Nenhum agendamento aguardando aceitação de técnico.</p>
-                <Button onClick={() => setActiveTab("solicitar")} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                <Button onClick={() => navigate({ to: "/novo-agendamento" })} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
                   Agendar agora
                 </Button>
               </CardContent>

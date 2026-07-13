@@ -121,73 +121,44 @@ function AuthLayout() {
             {/* CLIENTE NAV */}
             {role === "cliente" && (
               <>
-                {/* Main Dashboard Link */}
                 <Link
                   to="/dashboard"
+                  search={{ tab: "pendentes" }}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isRouteActive("/dashboard")
-                      ? "bg-primary/10 text-primary border-primary/20 font-semibold"
+                    isTabActive("pendentes")
+                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                   }`}
                 >
-                  <LayoutDashboard className="h-4 w-4 shrink-0" />
-                  <span>Painel do Cliente</span>
+                  <Clock className="h-4 w-4 shrink-0" />
+                  <span>Aguardando Técnico</span>
                 </Link>
 
-                {/* Indented Client Dashboard Sub-tabs */}
-                <div className="flex flex-col pl-3 border-l border-border/70 ml-4 my-1 gap-1">
-                  <Link
-                    to="/dashboard"
-                    search={{ tab: "solicitar" }}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all border ${
-                      isTabActive("solicitar")
-                        ? "bg-primary/5 text-primary border-primary/10 font-medium"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
-                    }`}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Solicitação</span>
-                  </Link>
+                <Link
+                  to="/dashboard"
+                  search={{ tab: "confirmados" }}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    isTabActive("confirmados")
+                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                  }`}
+                >
+                  <Calendar className="h-4 w-4 shrink-0" />
+                  <span>Confirmados</span>
+                </Link>
 
-                  <Link
-                    to="/dashboard"
-                    search={{ tab: "pendentes" }}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all border ${
-                      isTabActive("pendentes")
-                        ? "bg-primary/5 text-primary border-primary/10 font-medium"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
-                    }`}
-                  >
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>Aguardando Técnico</span>
-                  </Link>
-
-                  <Link
-                    to="/dashboard"
-                    search={{ tab: "confirmados" }}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all border ${
-                      isTabActive("confirmados")
-                        ? "bg-primary/5 text-primary border-primary/10 font-medium"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
-                    }`}
-                  >
-                    <Calendar className="h-3.5 w-3.5" />
-                    <span>Confirmados</span>
-                  </Link>
-
-                  <Link
-                    to="/dashboard"
-                    search={{ tab: "realizados" }}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all border ${
-                      isTabActive("realizados")
-                        ? "bg-primary/5 text-primary border-primary/10 font-medium"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
-                    }`}
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Realizados</span>
-                  </Link>
-                </div>
+                <Link
+                  to="/dashboard"
+                  search={{ tab: "realizados" }}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    isTabActive("realizados")
+                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                  }`}
+                >
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>Realizados</span>
+                </Link>
 
                 <Link
                   to="/minhas-obras"
