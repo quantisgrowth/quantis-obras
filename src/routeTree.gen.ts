@@ -16,6 +16,7 @@ import { Route as AdminLoginRouteImport } from './routes/admin-login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedNovoAgendamentoRouteImport } from './routes/_authenticated/novo-agendamento'
+import { Route as AuthenticatedMinhasObrasRouteImport } from './routes/_authenticated/minhas-obras'
 import { Route as AuthenticatedMeusDadosRouteImport } from './routes/_authenticated/meus-dados'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCrmRouteImport } from './routes/_authenticated/crm'
@@ -55,6 +56,12 @@ const AuthenticatedNovoAgendamentoRoute =
     path: '/novo-agendamento',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedMinhasObrasRoute =
+  AuthenticatedMinhasObrasRouteImport.update({
+    id: '/minhas-obras',
+    path: '/minhas-obras',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedMeusDadosRoute = AuthenticatedMeusDadosRouteImport.update({
   id: '/meus-dados',
   path: '/meus-dados',
@@ -80,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/meus-dados': typeof AuthenticatedMeusDadosRoute
+  '/minhas-obras': typeof AuthenticatedMinhasObrasRoute
   '/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
 }
 export interface FileRoutesByTo {
@@ -91,6 +99,7 @@ export interface FileRoutesByTo {
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/meus-dados': typeof AuthenticatedMeusDadosRoute
+  '/minhas-obras': typeof AuthenticatedMinhasObrasRoute
   '/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
 }
 export interface FileRoutesById {
@@ -104,6 +113,7 @@ export interface FileRoutesById {
   '/_authenticated/crm': typeof AuthenticatedCrmRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/meus-dados': typeof AuthenticatedMeusDadosRoute
+  '/_authenticated/minhas-obras': typeof AuthenticatedMinhasObrasRoute
   '/_authenticated/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
 }
 export interface FileRouteTypes {
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/crm'
     | '/dashboard'
     | '/meus-dados'
+    | '/minhas-obras'
     | '/novo-agendamento'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/crm'
     | '/dashboard'
     | '/meus-dados'
+    | '/minhas-obras'
     | '/novo-agendamento'
   id:
     | '__root__'
@@ -140,6 +152,7 @@ export interface FileRouteTypes {
     | '/_authenticated/crm'
     | '/_authenticated/dashboard'
     | '/_authenticated/meus-dados'
+    | '/_authenticated/minhas-obras'
     | '/_authenticated/novo-agendamento'
   fileRoutesById: FileRoutesById
 }
@@ -203,6 +216,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedNovoAgendamentoRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/minhas-obras': {
+      id: '/_authenticated/minhas-obras'
+      path: '/minhas-obras'
+      fullPath: '/minhas-obras'
+      preLoaderRoute: typeof AuthenticatedMinhasObrasRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/meus-dados': {
       id: '/_authenticated/meus-dados'
       path: '/meus-dados'
@@ -231,6 +251,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCrmRoute: typeof AuthenticatedCrmRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedMeusDadosRoute: typeof AuthenticatedMeusDadosRoute
+  AuthenticatedMinhasObrasRoute: typeof AuthenticatedMinhasObrasRoute
   AuthenticatedNovoAgendamentoRoute: typeof AuthenticatedNovoAgendamentoRoute
 }
 
@@ -238,6 +259,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCrmRoute: AuthenticatedCrmRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedMeusDadosRoute: AuthenticatedMeusDadosRoute,
+  AuthenticatedMinhasObrasRoute: AuthenticatedMinhasObrasRoute,
   AuthenticatedNovoAgendamentoRoute: AuthenticatedNovoAgendamentoRoute,
 }
 

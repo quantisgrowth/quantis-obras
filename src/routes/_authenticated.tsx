@@ -1,9 +1,12 @@
-import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, Link, useLocation } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useAuth, primaryRole } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
 import { Button } from "@/components/ui/button";
-import { FlaskConical, LogOut, LayoutDashboard, CalendarPlus, FolderKanban } from "lucide-react";
+import {
+  FlaskConical, LogOut, LayoutDashboard, CalendarPlus, FolderKanban,
+  Building, Clock, Calendar, CheckCircle2, HardHat, Plus
+} from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +25,7 @@ function AuthLayout() {
   const { user, loading, roles, signOut } = useAuth();
   const { branding } = useBranding();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login", replace: true });
@@ -34,37 +38,25 @@ function AuthLayout() {
   const role = primaryRole(roles);
   const roleLabel = role === "admin" ? "Administrador" : role === "tecnico" ? "Técnico" : "Cliente";
 
-  // Sidebar Links config based on role
-  const getSidebarLinks = () => {
-    if (role === "admin") {
-      return [
-        { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
-        { to: "/crm", label: "CRM & Vendas", icon: FolderKanban },
-        { to: "/novo-agendamento", label: "Novo Pedido", icon: CalendarPlus },
-      ];
-    } else if (role === "cliente") {
-      return [
-        { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
-        { to: "/novo-agendamento", label: "Novo Pedido", icon: CalendarPlus },
-        { to: "/meus-dados", label: "Meus Dados", icon: FolderKanban }, // Using FolderKanban or another icon
-      ];
-    }
-    // Técnico role
-    return [
-      { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
-    ];
+  // Helper to check active status of main routes
+  const isRouteActive = (path: string) => {
+    return location.pathname === path;
   };
 
-  const navLinks = getSidebarLinks();
+  // Helper to check active status of dashboard tabs
+  const isTabActive = (tabName: string) => {
+    const currentTab = new URLSearchParams(location.search).get("tab") || "pendentes";
+    return location.pathname === "/dashboard" && currentTab === tabName;
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row pb-16 md:pb-0">
       
       {/* Desktop Sidebar (Left Side) */}
       <aside className="hidden md:flex w-64 border-r border-border bg-card flex-col justify-between h-screen sticky top-0 z-30 select-none">
-        <div className="flex flex-col gap-6 py-6 px-4">
+        <div className="flex flex-col gap-6 py-6 px-4 overflow-y-auto">
           {/* Logo Area */}
-          <Link to="/dashboard" className="flex items-center gap-2 px-2">
+          <Link to="/dashboard" className="flex items-center gap-2 px-2 shrink-0">
             {branding?.logo_url ? (
               <div className="flex flex-col gap-1.5">
                 <img src={branding.logo_url} alt="Logo" className="h-8 max-w-[180px] object-contain" />
@@ -84,29 +76,181 @@ function AuthLayout() {
           </Link>
 
           {/* Navigation Links */}
-          <nav className="flex flex-col gap-1.5 mt-4">
-            {navLinks.map((link) => {
-              const LinkIcon = link.icon;
-              return (
+          <nav className="flex flex-col gap-1 mt-2">
+            {/* ADMIN NAV */}
+            {role === "admin" && (
+              <>
                 <Link
-                  key={link.to}
-                  to={link.to}
-                  activeProps={{ className: "bg-primary/10 text-primary border-primary/20 font-medium" }}
-                  inactiveProps={{ className: "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent" }}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border"
+                  to="/dashboard"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    isRouteActive("/dashboard")
+                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                  }`}
                 >
-                  <LinkIcon className="h-4 w-4 shrink-0" />
-                  <span>{link.label}</span>
+                  <LayoutDashboard className="h-4 w-4 shrink-0" />
+                  <span>Painel Geral</span>
                 </Link>
-              );
-            })}
+
+                <Link
+                  to="/crm"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    isRouteActive("/crm")
+                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                  }`}
+                >
+                  <FolderKanban className="h-4 w-4 shrink-0" />
+                  <span>CRM & Vendas</span>
+                </Link>
+
+                <Link
+                  to="/novo-agendamento"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    isRouteActive("/novo-agendamento")
+                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                  }`}
+                >
+                  <CalendarPlus className="h-4 w-4 shrink-0" />
+                  <span>Novo Pedido</span>
+                </Link>
+              </>
+            )}
+
+            {/* CLIENTE NAV */}
+            {role === "cliente" && (
+              <>
+                {/* Main Dashboard Link */}
+                <Link
+                  to="/dashboard"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    isRouteActive("/dashboard")
+                      ? "bg-primary/10 text-primary border-primary/20 font-semibold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                  }`}
+                >
+                  <LayoutDashboard className="h-4 w-4 shrink-0" />
+                  <span>Painel do Cliente</span>
+                </Link>
+
+                {/* Indented Client Dashboard Sub-tabs */}
+                <div className="flex flex-col pl-3 border-l border-border/70 ml-4 my-1 gap-1">
+                  <Link
+                    to="/dashboard"
+                    search={{ tab: "solicitar" }}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all border ${
+                      isTabActive("solicitar")
+                        ? "bg-primary/5 text-primary border-primary/10 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
+                    }`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Solicitação</span>
+                  </Link>
+
+                  <Link
+                    to="/dashboard"
+                    search={{ tab: "pendentes" }}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all border ${
+                      isTabActive("pendentes")
+                        ? "bg-primary/5 text-primary border-primary/10 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
+                    }`}
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>Aguardando Técnico</span>
+                  </Link>
+
+                  <Link
+                    to="/dashboard"
+                    search={{ tab: "confirmados" }}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all border ${
+                      isTabActive("confirmados")
+                        ? "bg-primary/5 text-primary border-primary/10 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
+                    }`}
+                  >
+                    <Calendar className="h-3.5 w-3.5" />
+                    <span>Confirmados</span>
+                  </Link>
+
+                  <Link
+                    to="/dashboard"
+                    search={{ tab: "realizados" }}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all border ${
+                      isTabActive("realizados")
+                        ? "bg-primary/5 text-primary border-primary/10 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
+                    }`}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Realizados</span>
+                  </Link>
+                </div>
+
+                <Link
+                  to="/minhas-obras"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    isRouteActive("/minhas-obras")
+                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                  }`}
+                >
+                  <HardHat className="h-4 w-4 shrink-0" />
+                  <span>Minhas Obras</span>
+                </Link>
+
+                <Link
+                  to="/novo-agendamento"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    isRouteActive("/novo-agendamento")
+                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                  }`}
+                >
+                  <CalendarPlus className="h-4 w-4 shrink-0" />
+                  <span>Novo Pedido</span>
+                </Link>
+              </>
+            )}
+
+            {/* TECNICO NAV */}
+            {role === "tecnico" && (
+              <Link
+                to="/dashboard"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                  isRouteActive("/dashboard")
+                    ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                }`}
+              >
+                <LayoutDashboard className="h-4 w-4 shrink-0" />
+                <span>Painel Técnico</span>
+              </Link>
+            )}
           </nav>
         </div>
 
-        {/* Desktop Footer (User Profile & Sign Out) */}
-        <div className="p-4 border-t border-border bg-muted/20 space-y-3">
+        {/* Desktop Footer (Fixed Bottom section) */}
+        <div className="p-4 border-t border-border bg-muted/20 space-y-3 shrink-0">
+          {/* Meus Dados fixed at the bottom for client */}
+          {role === "cliente" && (
+            <Link
+              to="/meus-dados"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border w-full ${
+                isRouteActive("/meus-dados")
+                  ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+              }`}
+            >
+              <Building className="h-4 w-4 shrink-0" />
+              <span>Meus Dados</span>
+            </Link>
+          )}
+
           <div className="flex flex-col px-2">
-            <span className="text-xs text-muted-foreground truncate" title={user.email}>
+            <span className="text-[10px] text-muted-foreground truncate" title={user.email}>
               {user.email}
             </span>
           </div>
@@ -155,12 +299,12 @@ function AuthLayout() {
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/80 backdrop-blur-md border-t border-border z-40 px-4 items-center justify-around shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+      <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/80 backdrop-blur-md border-t border-border z-40 px-2 items-center justify-around shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
         <Link
           to="/dashboard"
           activeProps={{ className: "text-primary" }}
           inactiveProps={{ className: "text-muted-foreground" }}
-          className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-3 transition-colors"
+          className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-2.5 transition-colors"
         >
           <LayoutDashboard className="h-5 w-5" />
           <span>Painel</span>
@@ -171,10 +315,22 @@ function AuthLayout() {
             to="/crm"
             activeProps={{ className: "text-primary" }}
             inactiveProps={{ className: "text-muted-foreground" }}
-            className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-3 transition-colors"
+            className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-2.5 transition-colors"
           >
             <FolderKanban className="h-5 w-5" />
             <span>CRM</span>
+          </Link>
+        )}
+
+        {role === "cliente" && (
+          <Link
+            to="/minhas-obras"
+            activeProps={{ className: "text-primary" }}
+            inactiveProps={{ className: "text-muted-foreground" }}
+            className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-2.5 transition-colors"
+          >
+            <HardHat className="h-5 w-5" />
+            <span>Obras</span>
           </Link>
         )}
 
@@ -183,7 +339,7 @@ function AuthLayout() {
             to="/novo-agendamento"
             activeProps={{ className: "text-primary" }}
             inactiveProps={{ className: "text-muted-foreground" }}
-            className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-3 transition-colors"
+            className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-2.5 transition-colors"
           >
             <CalendarPlus className="h-5 w-5" />
             <span>Pedido</span>
@@ -195,16 +351,16 @@ function AuthLayout() {
             to="/meus-dados"
             activeProps={{ className: "text-primary" }}
             inactiveProps={{ className: "text-muted-foreground" }}
-            className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-3 transition-colors"
+            className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-2.5 transition-colors"
           >
-            <FolderKanban className="h-5 w-5" />
+            <Building className="h-5 w-5" />
             <span>Dados</span>
           </Link>
         )}
 
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <button className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-3 text-muted-foreground hover:text-red-500 transition-colors bg-transparent border-0 cursor-pointer focus-visible:outline-none">
+            <button className="flex flex-col items-center gap-1 text-[10px] font-medium py-1 px-2.5 text-muted-foreground hover:text-red-500 transition-colors bg-transparent border-0 cursor-pointer focus-visible:outline-none">
               <LogOut className="h-5 w-5" />
               <span>Sair</span>
             </button>

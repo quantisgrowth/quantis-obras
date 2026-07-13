@@ -59,8 +59,17 @@ import {
   allocateTechnicianManually
 } from "@/lib/booking.functions";
 
+type DashboardSearch = {
+  tab?: string;
+};
+
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Painel — Quantis Obras" }] }),
+  validateSearch: (search: Record<string, unknown>): DashboardSearch => {
+    return {
+      tab: search.tab as string | undefined,
+    };
+  },
   component: Dashboard,
 });
 
@@ -180,10 +189,17 @@ const STATUS_LABELS: Record<string, string> = {
 // ── CLIENTE DASHBOARD ──────────────────────────────────────────────────────
 function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const navigate = useNavigate();
+  const { tab } = Route.useSearch();
 
   const [agendamentos, setAgendamentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("pendentes");
+  const [activeTab, setActiveTab] = useState(tab || "pendentes");
+
+  useEffect(() => {
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [tab]);
   const [clientCompany, setClientCompany] = useState<any>(null);
   const [approvingTec, setApprovingTec] = useState<string | null>(null);
   const [reallocatingTec, setReallocatingTec] = useState<string | null>(null);

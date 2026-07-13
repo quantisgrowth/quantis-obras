@@ -31,8 +31,17 @@ import {
   CalendarPlus,
 } from "lucide-react";
 
+type NovoAgendamentoSearch = {
+  obraId?: string;
+};
+
 export const Route = createFileRoute("/_authenticated/novo-agendamento")({
   head: () => ({ meta: [{ title: "Novo Agendamento — Quantis Obras" }] }),
+  validateSearch: (search: Record<string, unknown>): NovoAgendamentoSearch => {
+    return {
+      obraId: search.obraId as string | undefined,
+    };
+  },
   component: NovoAgendamento,
 });
 
@@ -119,6 +128,7 @@ interface ConfiguredService {
 function NovoAgendamento() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { obraId } = Route.useSearch();
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -380,7 +390,13 @@ function NovoAgendamento() {
           console.error("[Supabase Error - obras]:", obrasErr);
           toast.error(`Erro ao carregar obras: ${obrasErr.message}`);
         }
-        if (listObras && listObras.length > 0) { setObras(listObras); setSelectedObraId(listObras[0].id); }
+        if (listObras && listObras.length > 0) {
+          setObras(listObras);
+          const initialObra = obraId && listObras.some((o: any) => o.id === obraId)
+            ? obraId
+            : listObras[0].id;
+          setSelectedObraId(initialObra);
+        }
       }
 
       const { data: listServicos, error: servicosErr } = await supabase
