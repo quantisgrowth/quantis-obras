@@ -45,7 +45,7 @@ function AuthLayout() {
 
   // Helper to check active status of dashboard tabs
   const isTabActive = (tabName: string) => {
-    const currentTab = new URLSearchParams(location.search).get("tab") || "pendentes";
+    const currentTab = (location.search as any)?.tab || "pendentes";
     return location.pathname === "/dashboard" && currentTab === tabName;
   };
 
