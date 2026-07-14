@@ -744,7 +744,9 @@ function MeusDadosPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="py-3 px-4">{formatDate(member.created_at)}</td>
+                            <td className="py-3 px-4">
+                              {member.created_at ? new Date(member.created_at).toLocaleDateString("pt-BR") : "—"}
+                            </td>
                           </tr>
                         ))}
 
