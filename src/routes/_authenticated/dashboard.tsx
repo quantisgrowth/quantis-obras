@@ -8,7 +8,7 @@ import {
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
   Upload, Eye, EyeOff, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
   Star, Settings2, LogOut, HardHat, Filter, FileDown, Printer, Trash2, Search, LayoutGrid, List,
-  DollarSign, TrendingUp, Wallet
+  DollarSign, TrendingUp, Wallet, CircleDollarSign, Loader2
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -4282,6 +4282,7 @@ function AdminDash() {
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [clientesSearch, setClientesSearch] = useState("");
   const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
+  const [clienteViewMode, setClienteViewMode] = useState<"list" | "form">("list");
   const [clienteSaving, setClienteSaving] = useState(false);
 
   // Form states for Cliente/Empresa
@@ -4289,6 +4290,7 @@ function AdminDash() {
   const [clienteRazaoSocial, setClienteRazaoSocial] = useState("");
   const [clienteCnpj, setClienteCnpj] = useState("");
   const [clienteRequerAprovacaoTecnico, setClienteRequerAprovacaoTecnico] = useState(false);
+  const [clienteFormasPagamento, setClienteFormasPagamento] = useState<string[]>(["Boleto_28", "Pix", "Cartao", "Dinheiro"]);
 
   // Admin Agendamentos panel states
   const [adminAgendamentos, setAdminAgendamentos] = useState<any[]>([]);
@@ -4441,7 +4443,8 @@ function AdminDash() {
       const payload = {
         razao_social: clienteRazaoSocial,
         cnpj: clienteCnpj,
-        requer_aprovacao_tecnico: clienteRequerAprovacaoTecnico
+        requer_aprovacao_tecnico: clienteRequerAprovacaoTecnico,
+        formas_pagamento_habilitadas: clienteFormasPagamento,
       };
 
       if (clienteId) {
@@ -4458,6 +4461,7 @@ function AdminDash() {
         if (error) throw error;
         toast.success("Empresa cliente cadastrada com sucesso!");
       }
+      setClienteViewMode("list");
       setClienteDialogOpen(false);
       fetchEmpresasClientes();
     } catch (err: any) {
@@ -4497,6 +4501,8 @@ function AdminDash() {
     setClienteRazaoSocial("");
     setClienteCnpj("");
     setClienteRequerAprovacaoTecnico(false);
+    setClienteFormasPagamento(["Boleto_28", "Pix", "Cartao", "Dinheiro"]);
+    setClienteViewMode("form");
     setClienteDialogOpen(true);
   };
 
@@ -4505,6 +4511,8 @@ function AdminDash() {
     setClienteRazaoSocial(emp.razao_social);
     setClienteCnpj(emp.cnpj);
     setClienteRequerAprovacaoTecnico(emp.requer_aprovacao_tecnico || false);
+    setClienteFormasPagamento(emp.formas_pagamento_habilitadas || ["Boleto_28", "Pix", "Cartao", "Dinheiro"]);
+    setClienteViewMode("form");
     setClienteDialogOpen(true);
   };
 
@@ -8660,7 +8668,198 @@ function AdminDash() {
         )}
 
         {/* ── PAINEL: GESTÃO DE CLIENTES ── */}
-        {activeTab === "clientes" && (
+        {activeTab === "clientes" && (() => {
+          // Full-page form view
+          if (clienteViewMode === "form") {
+            const allPaymentMethods = [
+              { id: "Boleto_28", label: "Faturado (Boleto 28 Dias)", description: "Pagamento via boleto bancário com vencimento em 28 dias após execução" },
+              { id: "Pix",       label: "Pix (à Vista)",              description: "Liquidação imediata via transferência Pix — geralmente com desconto" },
+              { id: "Cartao",    label: "Cartão de Crédito",          description: "Parcelamento via maquininha ou link de pagamento" },
+              { id: "Dinheiro",  label: "Dinheiro / À Vista",         description: "Pagamento presencial em espécie ou transferência direta" },
+            ];
+            const togglePagamento = (id: string) => {
+              setClienteFormasPagamento(prev =>
+                prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+              );
+            };
+
+            return (
+              <div className="space-y-6 animate-in fade-in-50 duration-200">
+                {/* Header */}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setClienteViewMode("list")}
+                    className="flex items-center justify-center h-9 w-9 rounded-lg border border-border bg-card hover:bg-accent text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                  >
+                    <ChevronRight className="h-4 w-4 rotate-180" />
+                  </button>
+                  <div>
+                    <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-primary" />
+                      {clienteId ? "Editar Empresa Cliente" : "Cadastrar Nova Empresa Cliente"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {clienteId ? "Atualize os dados cadastrais e configure as formas de pagamento disponíveis." : "Preencha os dados da Construtora ou Incorporadora que será cliente da plataforma."}
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveCliente} className="space-y-6">
+                  {/* Seção 1: Dados Cadastrais */}
+                  <Card className="border border-border bg-card">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base font-bold flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-primary" /> Dados Cadastrais
+                      </CardTitle>
+                      <CardDescription>Identificação oficial da empresa contratante.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="cli-razao" className="font-bold">Razão Social *</Label>
+                          <Input
+                            id="cli-razao"
+                            required
+                            value={clienteRazaoSocial}
+                            onChange={(e) => setClienteRazaoSocial(e.target.value)}
+                            placeholder="Ex: Construtora Alfa S.A."
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="cli-cnpj" className="font-bold">CNPJ *</Label>
+                          <Input
+                            id="cli-cnpj"
+                            required
+                            value={clienteCnpj}
+                            onChange={(e) => setClienteCnpj(e.target.value)}
+                            placeholder="00.000.000/0001-00"
+                            className="h-10"
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Seção 2: Formas de Pagamento Habilitadas */}
+                  <Card className="border border-border bg-card">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base font-bold flex items-center gap-2">
+                        <CircleDollarSign className="h-4 w-4 text-primary" /> Formas de Pagamento Habilitadas
+                      </CardTitle>
+                      <CardDescription>
+                        Selecione quais modalidades de pagamento estarão disponíveis nos agendamentos desta empresa. Ao menos uma deve ser selecionada.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {allPaymentMethods.map((method) => {
+                          const isEnabled = clienteFormasPagamento.includes(method.id);
+                          return (
+                            <button
+                              key={method.id}
+                              type="button"
+                              onClick={() => togglePagamento(method.id)}
+                              className={`relative flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                                isEnabled
+                                  ? "border-primary bg-primary/5 shadow-sm"
+                                  : "border-border bg-card hover:bg-accent/40 hover:border-primary/40"
+                              }`}
+                            >
+                              <div className={`mt-0.5 h-5 w-5 shrink-0 rounded-md border-2 flex items-center justify-center transition-all ${
+                                isEnabled
+                                  ? "bg-primary border-primary"
+                                  : "border-muted-foreground/40 bg-transparent"
+                              }`}>
+                                {isEnabled && (
+                                  <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none">
+                                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className={`text-sm font-bold leading-tight ${ isEnabled ? "text-primary" : "text-foreground" }`}>
+                                  {method.label}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{method.description}</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {clienteFormasPagamento.length === 0 && (
+                        <p className="text-xs text-red-500 font-semibold mt-3 flex items-center gap-1">
+                          <AlertTriangle className="h-3.5 w-3.5" /> Selecione ao menos uma forma de pagamento.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Seção 3: Configurações Operacionais */}
+                  <Card className="border border-border bg-card">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base font-bold flex items-center gap-2">
+                        <Settings className="h-4 w-4 text-primary" /> Configurações Operacionais
+                      </CardTitle>
+                      <CardDescription>Regras de aprovação e controle de fluxo de serviço.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <label
+                        htmlFor="cli-aprovacao-req"
+                        className="flex items-start justify-between gap-4 cursor-pointer p-4 rounded-xl border border-border bg-card hover:bg-accent/30 transition-all group"
+                      >
+                        <div className="space-y-1">
+                          <p className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">
+                            Exigir aprovação de alocação de técnicos
+                          </p>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            Se ativado, quando um técnico aceitar um serviço desta empresa, a alocação precisará de aprovação explícita de um gestor da plataforma antes de ser confirmada.
+                          </p>
+                        </div>
+                        <div className="pt-0.5 shrink-0">
+                          <input
+                            type="checkbox"
+                            id="cli-aprovacao-req"
+                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                            checked={clienteRequerAprovacaoTecnico}
+                            onChange={(e) => setClienteRequerAprovacaoTecnico(e.target.checked)}
+                          />
+                        </div>
+                      </label>
+                    </CardContent>
+                  </Card>
+
+                  {/* Actions */}
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setClienteViewMode("list")}
+                      disabled={clienteSaving}
+                      className="font-bold cursor-pointer"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={clienteSaving || clienteFormasPagamento.length === 0}
+                      className="bg-primary hover:bg-primary/90 font-bold cursor-pointer gap-2"
+                    >
+                      {clienteSaving ? (
+                        <><Loader2 className="h-4 w-4 animate-spin" /> Salvando...</>
+                      ) : (
+                        <><Check className="h-4 w-4" /> {clienteId ? "Salvar Alterações" : "Cadastrar Empresa"}</>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            );
+          }
+
+          // List view
+          return (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -8719,48 +8918,67 @@ function AdminDash() {
                         <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs uppercase tracking-wider">
                           <th className="p-4">Razão Social</th>
                           <th className="p-4">CNPJ</th>
+                          <th className="p-4 text-center">Formas de Pagamento</th>
                           <th className="p-4 text-center">Aprovação Alocação</th>
                           <th className="p-4 text-center">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {filteredClientes.map((emp) => (
-                          <tr key={emp.id} className="hover:bg-muted/10 transition-colors">
-                            <td className="p-4 font-bold text-foreground">
-                              {emp.razao_social}
-                            </td>
-                            <td className="p-4 text-muted-foreground font-mono text-xs">
-                              {emp.cnpj}
-                            </td>
-                            <td className="p-4 text-center">
-                              {emp.requer_aprovacao_tecnico ? (
-                                <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-bold text-[10px]">Ativa</Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-muted-foreground font-medium text-[10px]">Inativa</Badge>
-                              )}
-                            </td>
-                            <td className="p-4 text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleOpenEditCliente(emp)}
-                                  className="h-8 px-2 text-xs font-bold"
-                                >
-                                  Editar
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => handleDeleteCliente(emp.id)}
-                                  className="h-8 px-2 text-xs font-bold"
-                                >
-                                  Excluir
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                        {filteredClientes.map((emp) => {
+                          const formas: string[] = emp.formas_pagamento_habilitadas || ["Boleto_28", "Pix", "Cartao", "Dinheiro"];
+                          const formaLabels: Record<string, string> = {
+                            Boleto_28: "Boleto",
+                            Pix: "Pix",
+                            Cartao: "Cartão",
+                            Dinheiro: "Dinheiro",
+                          };
+                          return (
+                            <tr key={emp.id} className="hover:bg-muted/10 transition-colors">
+                              <td className="p-4 font-bold text-foreground">
+                                {emp.razao_social}
+                              </td>
+                              <td className="p-4 text-muted-foreground font-mono text-xs">
+                                {emp.cnpj}
+                              </td>
+                              <td className="p-4">
+                                <div className="flex flex-wrap gap-1 justify-center">
+                                  {formas.map(f => (
+                                    <span key={f} className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary border border-primary/20">
+                                      {formaLabels[f] || f}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="p-4 text-center">
+                                {emp.requer_aprovacao_tecnico ? (
+                                  <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-bold text-[10px]">Ativa</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-muted-foreground font-medium text-[10px]">Inativa</Badge>
+                                )}
+                              </td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleOpenEditCliente(emp)}
+                                    className="h-8 px-2 text-xs font-bold"
+                                  >
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleDeleteCliente(emp.id)}
+                                    className="h-8 px-2 text-xs font-bold"
+                                  >
+                                    Excluir
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -8768,7 +8986,8 @@ function AdminDash() {
               );
             })()}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── PAINEL: GESTÃO DE OBRAS ── */}
         {activeTab === "obras" && (
@@ -9670,73 +9889,7 @@ function AdminDash() {
           </div>
         )}
 
-      {/* ── DIALOG: Nova / Edição de Cliente ── */}
-      <Dialog open={clienteDialogOpen} onOpenChange={setClienteDialogOpen}>
-        <DialogContent className="max-w-md border border-border bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
-              <Building2 className="h-5 w-5 text-primary" />
-              {clienteId ? "Editar Cliente" : "Cadastrar Novo Cliente"}
-            </DialogTitle>
-            <DialogDescription>
-              Insira a Razão Social e o CNPJ da empresa cliente.
-            </DialogDescription>
-          </DialogHeader>
 
-          <form onSubmit={handleSaveCliente} className="space-y-4 pt-2">
-            <div className="space-y-1">
-              <Label htmlFor="cli-razao" className="font-bold">Razão Social *</Label>
-              <Input
-                id="cli-razao"
-                required
-                value={clienteRazaoSocial}
-                onChange={(e) => setClienteRazaoSocial(e.target.value)}
-                placeholder="Ex: Construtora Alfa S.A."
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="cli-cnpj" className="font-bold">CNPJ *</Label>
-              <Input
-                id="cli-cnpj"
-                required
-                value={clienteCnpj}
-                onChange={(e) => setClienteCnpj(e.target.value)}
-                placeholder="00.000.000/0001-00"
-              />
-            </div>
-
-
-
-            <div className="flex items-center justify-between border-t border-border pt-4 mt-4">
-              <div className="space-y-1">
-                <Label htmlFor="cli-aprovacao-req" className="font-bold text-foreground cursor-pointer">Exigir aprovação de alocação de técnicos</Label>
-                <p className="text-[11px] text-muted-foreground leading-relaxed pr-4">
-                  Se ativado, quando um técnico aceitar um serviço desta empresa, a alocação precisará de aprovação de um gestor da plataforma.
-                </p>
-              </div>
-              <div className="flex items-center h-5">
-                <input
-                  type="checkbox"
-                  id="cli-aprovacao-req"
-                  className="h-4.5 w-4.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
-                  checked={clienteRequerAprovacaoTecnico}
-                  onChange={(e) => setClienteRequerAprovacaoTecnico(e.target.checked)}
-                />
-              </div>
-            </div>
-
-            <DialogFooter className="mt-6 border-t pt-4">
-              <Button type="button" variant="outline" onClick={() => setClienteDialogOpen(false)} disabled={clienteSaving}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={clienteSaving} className="bg-primary hover:bg-primary/90 font-bold">
-                {clienteSaving ? "Salvando..." : "Salvar Cliente"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       {/* ── DIALOG: Nova / Edição de Obra ── */}
       <Dialog open={obraDialogOpen} onOpenChange={setObraDialogOpen}>
