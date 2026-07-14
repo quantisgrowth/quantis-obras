@@ -191,28 +191,46 @@ function MeusDadosPage() {
   const fetchTeam = async (compId: string) => {
     try {
       setLoadingTeam(true);
-      // 1. Fetch profiles under the company
+      // 1. Fetch profiles under the company (including tecnico_id)
       const { data: profiles, error: profilesErr } = await supabase
         .from("profiles")
-        .select("id, nome_completo, telefone, sub_role, permissoes, created_at")
+        .select("id, nome_completo, telefone, sub_role, permissoes, created_at, tecnico_id")
         .eq("empresa_id", compId)
         .order("nome_completo", { ascending: true });
 
       if (profilesErr) throw profilesErr;
 
-      // 2. Fetch user roles for these profiles and filter to only show 'cliente' role users
+      // 2. Fetch all user roles for these profiles to analyze potential duplicate assignments
       if (profiles && profiles.length > 0) {
         const profileIds = profiles.map((p) => p.id);
         const { data: rolesData, error: rolesErr } = await supabase
           .from("user_roles")
           .select("user_id, role")
-          .in("user_id", profileIds)
-          .eq("role", "cliente");
+          .in("user_id", profileIds);
 
         if (rolesErr) throw rolesErr;
 
-        const clienteUserIds = new Set((rolesData || []).map((r) => r.user_id));
-        const filteredTeam = profiles.filter((p) => clienteUserIds.has(p.id));
+        // Group roles by user
+        const userRolesMap = new Map<string, string[]>();
+        (rolesData || []).forEach((r) => {
+          const list = userRolesMap.get(r.user_id) || [];
+          list.push(r.role);
+          userRolesMap.set(r.user_id, list);
+        });
+
+        // Filter profiles strictly:
+        // A user belongs in the customer team ONLY if:
+        // - They have the 'cliente' role.
+        // - They DO NOT have the 'admin' or 'tecnico' role.
+        // - They are not linked to a technician profile (tecnico_id is null).
+        const filteredTeam = profiles.filter((p) => {
+          const userRoles = userRolesMap.get(p.id) || [];
+          const hasCliente = userRoles.includes("cliente");
+          const hasAdminOrTecnico = userRoles.includes("admin") || userRoles.includes("tecnico");
+          const hasNoTechnicianLink = !p.tecnico_id;
+          return hasCliente && !hasAdminOrTecnico && hasNoTechnicianLink;
+        });
+
         setTeam(filteredTeam as TeamMember[]);
       } else {
         setTeam([]);

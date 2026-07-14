@@ -246,11 +246,6 @@ function AuthLayout() {
             </Link>
           )}
 
-          <div className="flex flex-col px-2">
-            <span className="text-[10px] text-muted-foreground truncate" title={user.email}>
-              {user.email}
-            </span>
-          </div>
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
