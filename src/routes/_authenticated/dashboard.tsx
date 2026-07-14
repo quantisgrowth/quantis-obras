@@ -1282,7 +1282,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" />
                     <XAxis dataKey="name" stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
                     <YAxis stroke="#888888" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip />
+                    <RechartsTooltip />
                     <Area type="monotone" dataKey="total" name="Total Pedidos" stroke="#d97706" strokeWidth={2} fillOpacity={1} fill="url(#colorPend)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -1461,7 +1461,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" />
                     <XAxis dataKey="name" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
                     <YAxis stroke="#888888" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip />
+                    <RechartsTooltip />
                     <Bar dataKey="value" name="Agendamentos" fill="#025287" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -1637,7 +1637,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                               <Cell key={`cell-${index}`} fill={COLORS_PIE[index % COLORS_PIE.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, "Faturamento"]} />
+                          <RechartsTooltip formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, "Faturamento"]} />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
