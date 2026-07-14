@@ -366,8 +366,10 @@ function NovoAgendamento() {
   };
 
   // Step 4 — Pagamento
-  type FormaPagamento = "Pix" | "Cartao" | "Boleto_14" | "Boleto_28" | "Faturar_Depois";
-  const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>("Pix");
+  const [formaPagamento, setFormaPagamento] = useState<string>("Boleto_28");
+  const [formasPagamentoDisponiveis, setFormasPagamentoDisponiveis] = useState<string[]>(["Boleto_28", "Pix", "Cartao", "Dinheiro"]);
+  const [regrasParcelamento, setRegrasParcelamento] = useState<any>(null);
+  const [quantidadeParcelas, setQuantidadeParcelas] = useState<number>(1);
 
   // ── Derived values ────────────────────────────────────────────────────
   // Encontra serviço atualmente selecionado no seletor
@@ -423,6 +425,14 @@ function NovoAgendamento() {
       }
 
       if (profile?.empresa_id) {
+        const { data: empData } = await supabase.from("empresas_clientes").select("formas_pagamento_habilitadas, regras_parcelamento").eq("id", profile.empresa_id).single();
+        if (empData) {
+          const habilitadas = empData.formas_pagamento_habilitadas || ["Boleto_28", "Pix", "Cartao", "Dinheiro"];
+          setFormasPagamentoDisponiveis(habilitadas);
+          setFormaPagamento(habilitadas.length > 0 ? habilitadas[0] : "Boleto_28");
+          setRegrasParcelamento(empData.regras_parcelamento || null);
+        }
+
         const { data: listObras, error: obrasErr } = await supabase.from("obras").select("*").eq("empresa_id", profile.empresa_id);
         if (obrasErr) {
           console.error("[Supabase Error - obras]:", obrasErr);
@@ -792,6 +802,16 @@ function NovoAgendamento() {
           data_servico: dataServico,
           horario_na_obra: horarioNaObra,
           forma_pagamento: formaPagamento,
+          quantidade_parcelas: quantidadeParcelas,
+          valor_entrada: regrasParcelamento?.entrada_obrigatoria_pct ? total * (regrasParcelamento.entrada_obrigatoria_pct / 100) : 0,
+          valor_juros_total: (() => {
+             if (formaPagamento.startsWith("Boleto") && regrasParcelamento?.habilitado && quantidadeParcelas > 1) {
+                const jurosMes = regrasParcelamento.taxa_juros_mensal_pct || 0;
+                const saldo = total - (regrasParcelamento?.entrada_obrigatoria_pct ? total * (regrasParcelamento.entrada_obrigatoria_pct / 100) : 0);
+                return saldo * (jurosMes / 100) * quantidadeParcelas;
+             }
+             return 0;
+          })(),
           observacoes: observacoes || null,
           servicos: selectedServices.map(s => ({
             servico_id: s.servico_id,
@@ -1872,26 +1892,100 @@ function NovoAgendamento() {
               </div>
 
               {/* Forma de pagamento */}
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <Label className="text-base font-bold flex items-center gap-2">
                   <CreditCard className="h-5 w-5 text-primary" />
                   Escolha a Forma de Pagamento
                 </Label>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                  {[
-                    { val: "Pix", label: "Pix (5% desc)", desc: "Imediato" },
-                    { val: "Cartao", label: "Cartão (5% desc)", desc: "1x sem juros" },
-                    { val: "Boleto_14", label: "Boleto 14 dias", desc: "Sujeito a crédito" },
-                    { val: "Boleto_28", label: "Boleto 28 dias", desc: "Sujeito a crédito" },
-                    { val: "Faturar_Depois", label: "Faturar Depois", desc: "Financeiro entrará em contato" },
-                  ].map((p) => (
-                    <button key={p.val} type="button" onClick={() => setFormaPagamento(p.val as typeof formaPagamento)}
-                      className={`flex flex-col items-center justify-center p-3 rounded-lg border text-center transition-all ${formaPagamento === p.val ? "border-primary bg-primary/5 text-primary shadow-sm" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>
-                      <span className="text-sm font-bold block">{p.label}</span>
-                      <span className="text-[10px] block opacity-80 mt-1">{p.desc}</span>
-                    </button>
-                  ))}
-                </div>
+                
+                {(() => {
+                  const methodLabels: Record<string, { label: string, desc: string }> = {
+                    Boleto_Vista: { label: "Boleto à Vista", desc: "Pagamento imediato" },
+                    Boleto_7: { label: "Boleto 7 dias", desc: "Venc. 7 dias" },
+                    Boleto_14: { label: "Boleto 14 dias", desc: "Venc. 14 dias" },
+                    Boleto_21: { label: "Boleto 21 dias", desc: "Venc. 21 dias" },
+                    Boleto_28: { label: "Boleto 28 dias", desc: "Venc. 28 dias" },
+                    Pix: { label: "Pix (5% desc)", desc: "Imediato" },
+                    Cartao: { label: "Cartão (5% desc)", desc: "1x sem juros" },
+                    Dinheiro: { label: "Dinheiro", desc: "À Vista" },
+                    Faturar_Depois: { label: "Faturar Depois", desc: "Financeiro entrará em contato" }
+                  };
+
+                  return (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+                      {formasPagamentoDisponiveis.map((val) => {
+                        const m = methodLabels[val] || { label: val, desc: "Opção de pagamento" };
+                        return (
+                          <button key={val} type="button" onClick={() => { setFormaPagamento(val); setQuantidadeParcelas(1); }}
+                            className={`flex flex-col items-center justify-center p-3 rounded-lg border text-center transition-all ${formaPagamento === val ? "border-primary bg-primary/5 text-primary shadow-sm ring-1 ring-primary" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>
+                            <span className="text-sm font-bold block">{m.label}</span>
+                            <span className="text-[10px] block opacity-80 mt-1">{m.desc}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                {/* Parcelamento e Detalhes do Boleto */}
+                {formaPagamento.startsWith("Boleto") && regrasParcelamento?.habilitado && (() => {
+                  const faixas = regrasParcelamento.faixas || [];
+                  const faixaValida = [...faixas].reverse().find((f: any) => total >= f.valor_minimo);
+                  const maxParcelas = faixaValida ? faixaValida.max_parcelas : 1;
+
+                  if (maxParcelas > 1) {
+                    const jurosMes = regrasParcelamento.taxa_juros_mensal_pct || 0;
+                    const entradaPct = regrasParcelamento.entrada_obrigatoria_pct || 0;
+                    
+                    const entrada = total * (entradaPct / 100);
+                    const saldo = total - entrada;
+                    const juros = quantidadeParcelas > 1 ? saldo * (jurosMes / 100) * quantidadeParcelas : 0;
+                    const totalComJuros = saldo + juros;
+                    const valorParcela = totalComJuros / quantidadeParcelas;
+
+                    return (
+                      <div className="mt-4 p-4 rounded-lg border-2 border-primary/20 bg-primary/5 space-y-4">
+                        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                          <div>
+                            <h4 className="font-bold text-sm text-primary flex items-center gap-1.5">
+                              <Calculator className="h-4 w-4" /> Opções de Parcelamento
+                            </h4>
+                            <p className="text-xs text-muted-foreground mt-0.5">Seu contrato permite parcelar este serviço em até {maxParcelas}x.</p>
+                          </div>
+                          <select
+                            value={quantidadeParcelas}
+                            onChange={(e) => setQuantidadeParcelas(Number(e.target.value))}
+                            className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary min-w-[150px]"
+                          >
+                            {Array.from({ length: maxParcelas }, (_, i) => i + 1).map(n => (
+                              <option key={n} value={n}>{n}x {n === 1 ? 'sem juros' : 'parcelado'}</option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-primary/10">
+                          <div>
+                            <span className="block text-[10px] text-muted-foreground font-bold uppercase">Entrada ({entradaPct}%)</span>
+                            <span className="font-mono text-sm font-bold text-foreground">R$ {entrada.toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[10px] text-muted-foreground font-bold uppercase">Juros a.m.</span>
+                            <span className="font-mono text-sm font-bold text-foreground">{quantidadeParcelas > 1 ? `${jurosMes}%` : 'Isento'}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[10px] text-muted-foreground font-bold uppercase">Valor da Parcela</span>
+                            <span className="font-mono text-sm font-bold text-primary">R$ {valorParcela.toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[10px] text-muted-foreground font-bold uppercase">Total Parcelado</span>
+                            <span className="font-mono text-sm font-bold text-foreground">R$ {(entrada + totalComJuros).toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {formaPagamento === "Faturar_Depois" ? (
@@ -1963,6 +2057,7 @@ function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps)
   // Financial
   const [valorTotal, setValorTotal] = useState<number>(0);
   const [formaPagamento, setFormaPagamento] = useState("Boleto_28");
+  const [quantidadeParcelasAdmin, setQuantidadeParcelasAdmin] = useState(1);
   const [observacoes, setObservacoes] = useState("");
 
   // Modals for creating new entities
@@ -2151,6 +2246,9 @@ function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps)
         status_agendamento: statusAgendamento,
         status_pagamento: statusPagamento,
         forma_pagamento: formaPagamento,
+        quantidade_parcelas: quantidadeParcelasAdmin,
+        valor_entrada: 0,
+        valor_juros_total: 0,
         valor_total: Number(valorTotal) || 0,
         valor_subtotal: Number(valorTotal) || 0,
         valor_desconto: 0,
@@ -2337,7 +2435,7 @@ function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps)
           </div>
 
           {/* 6. Financeiro e Pagamento */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
                 <CreditCard className="h-4 w-4 text-primary" /> Valor Total Customizado (R$)
@@ -2359,12 +2457,29 @@ function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps)
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Boleto_28">Faturado (Boleto 28 Dias)</SelectItem>
+                  <SelectItem value="Boleto_Vista">Boleto à Vista</SelectItem>
+                  <SelectItem value="Boleto_7">Boleto 7 dias</SelectItem>
+                  <SelectItem value="Boleto_14">Boleto 14 dias</SelectItem>
+                  <SelectItem value="Boleto_21">Boleto 21 dias</SelectItem>
+                  <SelectItem value="Boleto_28">Boleto 28 dias</SelectItem>
                   <SelectItem value="Pix">Pix (Desconto 5%)</SelectItem>
                   <SelectItem value="Cartao">Cartão de Crédito</SelectItem>
                   <SelectItem value="Dinheiro">Dinheiro / À Vista</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                <Calculator className="h-4 w-4 text-primary" /> Qtd. Parcelas
+              </Label>
+              <Input
+                type="number"
+                min="1"
+                max="12"
+                value={quantidadeParcelasAdmin}
+                onChange={(e) => setQuantidadeParcelasAdmin(Number(e.target.value) || 1)}
+              />
             </div>
           </div>
 

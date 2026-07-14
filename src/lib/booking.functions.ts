@@ -44,7 +44,10 @@ const BookingSchema = z.object({
   nova_obra: NovaObraSchema.nullable(),
   data_servico: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   horario_na_obra: z.string().regex(/^\d{2}:\d{2}$/),
-  forma_pagamento: z.enum(["Pix", "Cartao", "Boleto_14", "Boleto_28", "Faturar_Depois"]),
+  forma_pagamento: z.string(),
+  quantidade_parcelas: z.number().int().min(1).optional().nullable(),
+  valor_entrada: z.number().optional().nullable(),
+  valor_juros_total: z.number().optional().nullable(),
   observacoes: z.string().max(2000).nullable().optional(),
   servicos: z.array(SelectedServiceSchema).min(1),
 });
@@ -364,6 +367,9 @@ export const createBooking = createServerFn({ method: "POST" })
         valor_desconto: desconto,
         valor_imposto_12: imposto,
         valor_total: total,
+        quantidade_parcelas: data.quantidade_parcelas || 1,
+        valor_entrada: data.valor_entrada || 0,
+        valor_juros_total: data.valor_juros_total || 0,
         observacoes: data.observacoes || null,
         memoria_calculo: {
           servicePrice,

@@ -4231,6 +4231,9 @@ function AdminDash() {
   // Finance states
   const [financeSummary, setFinanceSummary] = useState<any>(null);
   const [loadingFinance, setLoadingFinance] = useState(false);
+  const [adminFinTab, setAdminFinTab] = useState<"dashboard" | "extrato" | "analises">("dashboard");
+  const [adminFinCardFilter, setAdminFinCardFilter] = useState<"all" | "pendente" | "execucao" | "pago" | "apagar">("all");
+  const [adminFinSearchText, setAdminFinSearchText] = useState("");
   const [adminFinStartDate, setAdminFinStartDate] = useState("");
   const [adminFinEndDate, setAdminFinEndDate] = useState("");
   const [adminFinClientId, setAdminFinClientId] = useState("all");
@@ -9527,7 +9530,10 @@ function AdminDash() {
 
                   {/* PREMIUM KPI CARDS */}
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    <Card className="border border-border bg-card shadow-sm">
+                    <Card
+                      className={`border cursor-pointer hover:border-primary/50 transition-all ${adminFinCardFilter === "all" ? "border-primary ring-1 ring-primary/20 shadow-md" : "border-border shadow-sm"}`}
+                      onClick={() => { setAdminFinCardFilter("all"); setAdminFinTab("extrato"); }}
+                    >
                       <CardContent className="pt-5">
                         <div className="flex justify-between items-start">
                           <div>
@@ -9544,7 +9550,10 @@ function AdminDash() {
                       </CardContent>
                     </Card>
 
-                    <Card className="border border-border bg-card shadow-sm">
+                    <Card
+                      className={`border cursor-pointer hover:border-emerald-500/50 transition-all ${adminFinCardFilter === "pago" ? "border-emerald-500 ring-1 ring-emerald-500/20 shadow-md" : "border-border shadow-sm"}`}
+                      onClick={() => { setAdminFinCardFilter("pago"); setAdminFinTab("extrato"); }}
+                    >
                       <CardContent className="pt-5">
                         <div className="flex justify-between items-start">
                           <div>
@@ -9561,7 +9570,10 @@ function AdminDash() {
                       </CardContent>
                     </Card>
 
-                    <Card className="border border-border bg-card shadow-sm">
+                    <Card
+                      className={`border cursor-pointer hover:border-amber-500/50 transition-all ${adminFinCardFilter === "pendente" ? "border-amber-500 ring-1 ring-amber-500/20 shadow-md" : "border-border shadow-sm"}`}
+                      onClick={() => { setAdminFinCardFilter("pendente"); setAdminFinTab("extrato"); }}
+                    >
                       <CardContent className="pt-5">
                         <div className="flex justify-between items-start">
                           <div>
@@ -9578,7 +9590,7 @@ function AdminDash() {
                       </CardContent>
                     </Card>
 
-                    <Card className="border border-border bg-card shadow-sm">
+                    <Card className="border border-border bg-card shadow-sm cursor-default">
                       <CardContent className="pt-5">
                         <div className="flex justify-between items-start">
                           <div>
@@ -9596,241 +9608,387 @@ function AdminDash() {
                     </Card>
                   </div>
 
-                  {/* PROGRESS BAR FOR RECEIPT STATUS */}
-                  <Card className="border border-border bg-card p-5 shadow-sm">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-muted-foreground">Progresso de Liquidação Financeira</span>
-                        <span className="text-primary font-bold">
-                          {((totalPago / (adminTotalAcumulado || 1)) * 100).toFixed(1)}% Liquidado
-                        </span>
-                      </div>
-                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden flex">
-                        <div
-                          className="bg-emerald-500 h-full transition-all duration-500"
-                          style={{ width: `${(totalPago / (adminTotalAcumulado || 1)) * 100}%` }}
-                        />
-                        <div
-                          className="bg-amber-500 h-full transition-all duration-500"
-                          style={{ width: `${(totalPendente / (adminTotalAcumulado || 1)) * 100}%` }}
-                        />
-                      </div>
-                      <div className="flex gap-4 text-[10px] text-muted-foreground pt-1">
-                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Pago (R$ {totalPago.toLocaleString("pt-BR")})</span>
-                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500 inline-block" /> Pendente (R$ {totalPendente.toLocaleString("pt-BR")})</span>
-                      </div>
+                  {/* SUB-TABS DO MÓDULO FINANCEIRO */}
+                  <Tabs value={adminFinTab} onValueChange={(val: any) => setAdminFinTab(val)} className="w-full">
+                    <div className="border-b border-border bg-card px-4 pt-2">
+                      <TabsList className="bg-transparent gap-4 p-0 h-auto">
+                        <TabsTrigger
+                          value="dashboard"
+                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-2 py-3 text-sm font-semibold"
+                        >
+                          Dashboard Resumo
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="extrato"
+                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-2 py-3 text-sm font-semibold"
+                        >
+                          Extrato e Lançamentos
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="analises"
+                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-2 py-3 text-sm font-semibold"
+                        >
+                          Análises e Gráficos
+                        </TabsTrigger>
+                      </TabsList>
                     </div>
-                  </Card>
 
-                  {/* CRONOGRAMA & CLIENTES TWO-COLUMN LAYOUT */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Cronograma de Recebimentos */}
-                    <Card className="border border-border bg-card shadow-sm flex flex-col">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base font-bold flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-primary" />
-                          Cronograma de Recebimentos Futuros
-                        </CardTitle>
-                        <CardDescription>Fluxo de caixa projetado com base em faturamentos pendentes.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex-1 space-y-4">
+                    <TabsContent value="dashboard" className="mt-6 space-y-6">
+                      {/* PROGRESS BAR FOR RECEIPT STATUS */}
+                      <Card className="border border-border bg-card p-5 shadow-sm">
                         <div className="space-y-2">
-                          {/* Item 1: Hoje / Atrasado */}
-                          <div className="flex items-center justify-between p-3 rounded-lg border border-red-500/10 bg-red-500/5 hover:bg-red-500/10 transition-all">
-                            <div>
-                              <span className="text-xs font-bold text-red-600 block">Hoje ou Em Atraso</span>
-                              <span className="text-[10px] text-muted-foreground">Liquidações imediatas pendentes</span>
-                            </div>
-                            <span className="font-mono text-sm font-bold text-red-600">R$ {forecastToday.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          <div className="flex justify-between text-xs font-semibold">
+                            <span className="text-muted-foreground">Progresso de Liquidação Financeira</span>
+                            <span className="text-primary font-bold">
+                              {((totalPago / (adminTotalAcumulado || 1)) * 100).toFixed(1)}% Liquidado
+                            </span>
                           </div>
-
-                          {/* Item 2: Próximos 7 Dias */}
-                          <div className="flex items-center justify-between p-3 rounded-lg border border-teal-500/10 bg-teal-500/5 hover:bg-teal-500/10 transition-all">
-                            <div>
-                              <span className="text-xs font-bold text-teal-600 block">Próximos 7 Dias</span>
-                              <span className="text-[10px] text-muted-foreground">Projeções de caixa a curto prazo</span>
-                            </div>
-                            <span className="font-mono text-sm font-bold text-teal-600">R$ {forecastNext7.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          <div className="h-2 w-full bg-muted rounded-full overflow-hidden flex">
+                            <div
+                              className="bg-emerald-500 h-full transition-all duration-500"
+                              style={{ width: `${(totalPago / (adminTotalAcumulado || 1)) * 100}%` }}
+                            />
+                            <div
+                              className="bg-amber-500 h-full transition-all duration-500"
+                              style={{ width: `${(totalPendente / (adminTotalAcumulado || 1)) * 100}%` }}
+                            />
                           </div>
-
-                          {/* Item 3: Próximos 30 Dias */}
-                          <div className="flex items-center justify-between p-3 rounded-lg border border-indigo-500/10 bg-indigo-500/5 hover:bg-indigo-500/10 transition-all">
-                            <div>
-                              <span className="text-xs font-bold text-indigo-600 block">De 8 a 30 Dias</span>
-                              <span className="text-[10px] text-muted-foreground">Recebimentos agendados de faturados</span>
-                            </div>
-                            <span className="font-mono text-sm font-bold text-indigo-600">R$ {forecastNext30.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                          </div>
-
-                          {/* Item 4: Longo Prazo */}
-                          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-all">
-                            <div>
-                              <span className="text-xs font-bold text-muted-foreground block">A Longo Prazo (30d+)</span>
-                              <span className="text-[10px] text-muted-foreground">Previsões além do mês vigente</span>
-                            </div>
-                            <span className="font-mono text-sm font-bold text-muted-foreground">R$ {forecastLater.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          <div className="flex gap-4 text-[10px] text-muted-foreground pt-1">
+                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Pago (R$ {totalPago.toLocaleString("pt-BR")})</span>
+                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500 inline-block" /> Pendente (R$ {totalPendente.toLocaleString("pt-BR")})</span>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
+                      </Card>
 
-                    {/* Faturamento por Cliente */}
-                    <Card className="border border-border bg-card shadow-sm flex flex-col">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base font-bold flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-primary" />
-                          Faturamento por Cliente
-                        </CardTitle>
-                        <CardDescription>Receita acumulada agrupada por empresa contratante.</CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex-1 overflow-y-auto max-h-[300px]">
-                        {adminPorClienteList.length === 0 ? (
-                          <p className="text-xs text-muted-foreground py-8 text-center">Nenhum faturamento registrado.</p>
-                        ) : (
-                          <div className="rounded-lg border border-border overflow-hidden">
-                            <table className="w-full text-left border-collapse text-xs">
-                              <thead>
-                                <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground">
-                                  <th className="p-2.5">Cliente</th>
-                                  <th className="p-2.5 text-right">Pago</th>
-                                  <th className="p-2.5 text-right">Pendente</th>
-                                  <th className="p-2.5 text-right">Total</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-border">
-                                {adminPorClienteList.map((c: any, i: number) => (
-                                  <tr key={i} className="hover:bg-muted/10 transition-all">
-                                    <td className="p-2.5 font-semibold text-foreground truncate max-w-[150px]">{c.cliente}</td>
-                                    <td className="p-2.5 text-right font-mono font-bold text-emerald-600">R$ {Number(c.pago).toLocaleString("pt-BR")}</td>
-                                    <td className="p-2.5 text-right font-mono font-bold text-amber-600">R$ {Number(c.pendente).toLocaleString("pt-BR")}</td>
-                                    <td className="p-2.5 text-right font-mono font-bold text-foreground">R$ {Number(c.total).toLocaleString("pt-BR")}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                      {/* CRONOGRAMA & CLIENTES TWO-COLUMN LAYOUT */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Cronograma de Recebimentos */}
+                        <Card className="border border-border bg-card shadow-sm flex flex-col">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base font-bold flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-primary" />
+                              Cronograma de Recebimentos Futuros
+                            </CardTitle>
+                            <CardDescription>Fluxo de caixa projetado com base em faturamentos pendentes.</CardDescription>
+                          </CardHeader>
+                          <CardContent className="flex-1 space-y-4">
+                            <div className="space-y-2">
+                              {/* Item 1: Hoje / Atrasado */}
+                              <div className="flex items-center justify-between p-3 rounded-lg border border-red-500/10 bg-red-500/5 hover:bg-red-500/10 transition-all">
+                                <div>
+                                  <span className="text-xs font-bold text-red-600 block">Hoje ou Em Atraso</span>
+                                  <span className="text-[10px] text-muted-foreground">Liquidações imediatas pendentes</span>
+                                </div>
+                                <span className="font-mono text-sm font-bold text-red-600">R$ {forecastToday.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              </div>
+
+                              {/* Item 2: Próximos 7 Dias */}
+                              <div className="flex items-center justify-between p-3 rounded-lg border border-teal-500/10 bg-teal-500/5 hover:bg-teal-500/10 transition-all">
+                                <div>
+                                  <span className="text-xs font-bold text-teal-600 block">Próximos 7 Dias</span>
+                                  <span className="text-[10px] text-muted-foreground">Projeções de caixa a curto prazo</span>
+                                </div>
+                                <span className="font-mono text-sm font-bold text-teal-600">R$ {forecastNext7.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              </div>
+
+                              {/* Item 3: Próximos 30 Dias */}
+                              <div className="flex items-center justify-between p-3 rounded-lg border border-indigo-500/10 bg-indigo-500/5 hover:bg-indigo-500/10 transition-all">
+                                <div>
+                                  <span className="text-xs font-bold text-indigo-600 block">De 8 a 30 Dias</span>
+                                  <span className="text-[10px] text-muted-foreground">Recebimentos agendados de faturados</span>
+                                </div>
+                                <span className="font-mono text-sm font-bold text-indigo-600">R$ {forecastNext30.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              </div>
+
+                              {/* Item 4: Longo Prazo */}
+                              <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-all">
+                                <div>
+                                  <span className="text-xs font-bold text-muted-foreground block">A Longo Prazo (30d+)</span>
+                                  <span className="text-[10px] text-muted-foreground">Previsões além do mês vigente</span>
+                                </div>
+                                <span className="font-mono text-sm font-bold text-muted-foreground">R$ {forecastLater.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Faturamento por Cliente */}
+                        <Card className="border border-border bg-card shadow-sm flex flex-col">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base font-bold flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-primary" />
+                              Faturamento por Cliente
+                            </CardTitle>
+                            <CardDescription>Receita acumulada agrupada por empresa contratante.</CardDescription>
+                          </CardHeader>
+                          <CardContent className="flex-1 overflow-y-auto max-h-[300px]">
+                            {adminPorClienteList.length === 0 ? (
+                              <p className="text-xs text-muted-foreground py-8 text-center">Nenhum faturamento registrado.</p>
+                            ) : (
+                              <div className="rounded-lg border border-border overflow-hidden">
+                                <table className="w-full text-left border-collapse text-xs">
+                                  <thead>
+                                    <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground">
+                                      <th className="p-2.5">Cliente</th>
+                                      <th className="p-2.5 text-right">Pago</th>
+                                      <th className="p-2.5 text-right">Pendente</th>
+                                      <th className="p-2.5 text-right">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border">
+                                    {adminPorClienteList.map((c: any, i: number) => (
+                                      <tr key={i} className="hover:bg-muted/10 transition-all">
+                                        <td className="p-2.5 font-semibold text-foreground truncate max-w-[150px]">{c.cliente}</td>
+                                        <td className="p-2.5 text-right font-mono font-bold text-emerald-600">R$ {Number(c.pago).toLocaleString("pt-BR")}</td>
+                                        <td className="p-2.5 text-right font-mono font-bold text-amber-600">R$ {Number(c.pendente).toLocaleString("pt-BR")}</td>
+                                        <td className="p-2.5 text-right font-mono font-bold text-foreground">R$ {Number(c.total).toLocaleString("pt-BR")}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="extrato" className="mt-6 space-y-6">
+                      {/* LANÇAMENTOS E EMISSÕES (TRANSACTIONS LIST) */}
+                      <Card className="border border-border bg-card shadow-sm">
+                        <CardHeader className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                          <div>
+                            <CardTitle className="text-base font-bold flex items-center gap-2">
+                              <ClipboardList className="h-4 w-4 text-primary" />
+                              Extrato de Lançamentos
+                            </CardTitle>
+                            <CardDescription>Gerencie notas fiscais eletrônicas e boletos bancários dos serviços prestados.</CardDescription>
                           </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <div className="relative w-full sm:w-64">
+                              <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                placeholder="Buscar lançamento..."
+                                className="pl-8 h-9 text-xs"
+                                value={adminFinSearchText}
+                                onChange={(e) => setAdminFinSearchText(e.target.value)}
+                              />
+                            </div>
+                            <Button 
+                              variant={adminFinCardFilter !== "all" ? "default" : "outline"} 
+                              size="sm" 
+                              onClick={() => setAdminFinCardFilter("all")}
+                              className="h-9 px-3 text-xs"
+                            >
+                              {adminFinCardFilter !== "all" ? "Limpar Filtro Card" : "Todos"}
+                            </Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          {(() => {
+                            const tableData = adminFiltered.filter((b: any) => {
+                              // Filter by KPI Card click
+                              if (adminFinCardFilter === "pago" && b.status_pagamento !== "Pago") return false;
+                              if (adminFinCardFilter === "pendente" && b.status_pagamento === "Pago") return false;
+                              
+                              // Filter by Search Text
+                              if (adminFinSearchText) {
+                                const search = adminFinSearchText.toLowerCase();
+                                const rSocial = (b.empresa?.razao_social || "").toLowerCase();
+                                const servico = (b.servico?.nome_servico || "").toLowerCase();
+                                const pCode = (b.codigo_pedido || "").toLowerCase();
+                                return rSocial.includes(search) || servico.includes(search) || pCode.includes(search);
+                              }
+                              return true;
+                            });
 
-                  {/* LANÇAMENTOS E EMISSÕES (TRANSACTIONS LIST) */}
-                  <Card className="border border-border bg-card shadow-sm">
-                    <CardHeader>
-                      <CardTitle className="text-base font-bold flex items-center gap-2">
-                        <ClipboardList className="h-4 w-4 text-primary" />
-                        Lançamentos e Emissões de Faturamento
-                      </CardTitle>
-                      <CardDescription>Gerencie notas fiscais eletrônicas e boletos bancários dos serviços prestados.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {adminFiltered.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-8 text-center">Nenhum lançamento encontrado para os filtros selecionados.</p>
-                      ) : (
-                        <div className="overflow-x-auto rounded-lg border border-border">
-                          <table className="w-full text-left border-collapse text-xs">
-                            <thead>
-                              <tr className="bg-muted/50 border-b border-border font-semibold text-muted-foreground">
-                                <th className="p-3">Data</th>
-                                <th className="p-3">Cliente / Obra</th>
-                                <th className="p-3">Serviço</th>
-                                <th className="p-3">Forma de Pagamento</th>
-                                <th className="p-3 text-right">Valor</th>
-                                <th className="p-3 text-center">Status</th>
-                                <th className="p-3 text-center">NF-e</th>
-                                <th className="p-3 text-center">Boleto</th>
-                                <th className="p-3 text-center">Ações</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                              {adminFiltered.map((b: any) => {
-                                const isPago = b.status_pagamento === "Pago";
-                                const isNfe = emittedNfes[b.id] === true;
-                                const isBoletoGen = generatedBoletos[b.id] === true;
-                                const isBoletoPayment = b.forma_pagamento?.toLowerCase().includes("boleto");
+                            if (tableData.length === 0) {
+                              return <p className="text-sm text-muted-foreground py-8 text-center">Nenhum lançamento encontrado para os filtros selecionados.</p>;
+                            }
 
-                                return (
-                                  <tr key={b.id} className="hover:bg-muted/5 transition-all">
-                                    <td className="p-3 font-medium text-muted-foreground whitespace-nowrap">
-                                      {b.data_servico ? new Date(b.data_servico + "T00:00:00").toLocaleDateString("pt-BR") : "--"}
-                                    </td>
-                                    <td className="p-3 whitespace-nowrap max-w-[200px] truncate">
-                                      <span className="font-bold text-foreground block">{b.empresa?.razao_social || "Empresa Desconhecida"}</span>
-                                      <span className="text-[10px] text-muted-foreground">{b.obra?.nome_obra || "Obra Principal"}</span>
-                                    </td>
-                                    <td className="p-3 text-muted-foreground max-w-[150px] truncate">
-                                      {b.servico?.nome_servico || "Controle Tecnológico"}
-                                    </td>
-                                    <td className="p-3">
-                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
-                                        {b.forma_pagamento === "Boleto_28" ? "Boleto (28d)" : b.forma_pagamento || "Faturado"}
-                                      </span>
-                                    </td>
-                                    <td className="p-3 text-right font-mono font-bold text-foreground whitespace-nowrap">
-                                      R$ {Number(b.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                    </td>
-                                    <td className="p-3 text-center whitespace-nowrap">
-                                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-                                        isPago
-                                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                                          : "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                                      }`}>
-                                        {isPago ? "● Pago" : "○ Pendente"}
-                                      </span>
-                                    </td>
-                                    <td className="p-3 text-center">
-                                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-                                        isNfe
-                                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                                          : "bg-slate-100 text-slate-400 border-slate-200"
-                                      }`}>
-                                        {isNfe ? "Emitida" : "Pendente"}
-                                      </span>
-                                    </td>
-                                    <td className="p-3 text-center">
-                                      {isBoletoPayment ? (
-                                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-                                          isBoletoGen
-                                            ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-                                            : "bg-slate-100 text-slate-400 border-slate-200"
-                                        }`}>
-                                          {isBoletoGen ? "Gerado" : "Pendente"}
-                                        </span>
-                                      ) : (
-                                        <span className="text-[10px] text-slate-300">--</span>
-                                      )}
-                                    </td>
-                                    <td className="p-3 text-center whitespace-nowrap">
-                                      <div className="flex items-center justify-center gap-1">
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => setSelectedBookingForNfe(b)}
-                                          className={`h-7 px-2 text-[10px] font-bold cursor-pointer ${isNfe ? "text-emerald-600 hover:bg-emerald-50" : "text-primary"}`}
-                                        >
-                                          {isNfe ? "Ver NF-e" : "Emitir NF-e"}
-                                        </Button>
-                                        {isBoletoPayment && (
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setSelectedBookingForBoleto(b)}
-                                            className={`h-7 px-2 text-[10px] font-bold cursor-pointer ${isBoletoGen ? "text-blue-600 hover:bg-blue-50" : "text-primary"}`}
-                                          >
-                                            {isBoletoGen ? "Baixar Boleto" : "Gerar Boleto"}
-                                          </Button>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                            return (
+                              <div className="overflow-x-auto rounded-lg border border-border">
+                                <table className="w-full text-left border-collapse text-xs">
+                                  <thead>
+                                    <tr className="bg-muted/50 border-b border-border font-semibold text-muted-foreground">
+                                      <th className="p-3">Pedido</th>
+                                      <th className="p-3">Data</th>
+                                      <th className="p-3">Cliente / Obra</th>
+                                      <th className="p-3">Serviço</th>
+                                      <th className="p-3">Forma de Pagamento</th>
+                                      <th className="p-3 text-right">Valor</th>
+                                      <th className="p-3 text-center">Status</th>
+                                      <th className="p-3 text-center">NF-e</th>
+                                      <th className="p-3 text-center">Boleto</th>
+                                      <th className="p-3 text-center">Ações</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border">
+                                    {tableData.map((b: any) => {
+                                      const isPago = b.status_pagamento === "Pago";
+                                      const isNfe = emittedNfes[b.id] === true;
+                                      const isBoletoGen = generatedBoletos[b.id] === true;
+                                      const isBoletoPayment = b.forma_pagamento?.toLowerCase().includes("boleto");
+
+                                      return (
+                                        <tr key={b.id} className="hover:bg-muted/5 transition-all">
+                                          <td className="p-3 font-mono text-[10px] text-muted-foreground">
+                                            #{b.codigo_pedido?.split("-")[1] || "---"}
+                                          </td>
+                                          <td className="p-3 font-medium text-muted-foreground whitespace-nowrap">
+                                            {b.data_servico ? new Date(b.data_servico + "T00:00:00").toLocaleDateString("pt-BR") : "--"}
+                                          </td>
+                                          <td className="p-3 whitespace-nowrap max-w-[200px] truncate">
+                                            <span className="font-bold text-foreground block">{b.empresa?.razao_social || "Empresa Desconhecida"}</span>
+                                            <span className="text-[10px] text-muted-foreground">{b.obra?.nome_obra || "Obra Principal"}</span>
+                                          </td>
+                                          <td className="p-3 text-muted-foreground max-w-[150px] truncate">
+                                            {b.servico?.nome_servico || "Controle Tecnológico"}
+                                          </td>
+                                          <td className="p-3">
+                                            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
+                                              {b.forma_pagamento === "Boleto_28" ? "Boleto (28d)" : (b.forma_pagamento?.replace("_", " ") || "Faturado")}
+                                            </span>
+                                            {b.quantidade_parcelas > 1 && (
+                                              <span className="ml-1 text-[9px] text-muted-foreground">({b.quantidade_parcelas}x)</span>
+                                            )}
+                                          </td>
+                                          <td className="p-3 text-right font-mono font-bold text-foreground whitespace-nowrap">
+                                            R$ {Number(b.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                          </td>
+                                          <td className="p-3 text-center whitespace-nowrap">
+                                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                                              isPago
+                                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                                : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                            }`}>
+                                              {isPago ? "● Pago" : "○ Pendente"}
+                                            </span>
+                                          </td>
+                                          <td className="p-3 text-center">
+                                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                                              isNfe
+                                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                                : "bg-slate-100 text-slate-400 border-slate-200"
+                                            }`}>
+                                              {isNfe ? "Emitida" : "Pendente"}
+                                            </span>
+                                          </td>
+                                          <td className="p-3 text-center">
+                                            {isBoletoPayment ? (
+                                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                                                isBoletoGen
+                                                  ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                                  : "bg-slate-100 text-slate-400 border-slate-200"
+                                              }`}>
+                                                {isBoletoGen ? "Gerado" : "Pendente"}
+                                              </span>
+                                            ) : (
+                                              <span className="text-[10px] text-slate-300">--</span>
+                                            )}
+                                          </td>
+                                          <td className="p-3 text-center whitespace-nowrap">
+                                            <div className="flex items-center justify-center gap-1">
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => setSelectedBookingForNfe(b)}
+                                                className={`h-7 px-2 text-[10px] font-bold cursor-pointer ${isNfe ? "text-emerald-600 hover:bg-emerald-50" : "text-primary"}`}
+                                              >
+                                                {isNfe ? "Ver NF-e" : "Emitir NF-e"}
+                                              </Button>
+                                              {isBoletoPayment && (
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  onClick={() => setSelectedBookingForBoleto(b)}
+                                                  className={`h-7 px-2 text-[10px] font-bold cursor-pointer ${isBoletoGen ? "text-blue-600 hover:bg-blue-50" : "text-primary"}`}
+                                                >
+                                                  {isBoletoGen ? "Baixar Boleto" : "Gerar Boleto"}
+                                                </Button>
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          })()}
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+
+                    <TabsContent value="analises" className="mt-6 space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Status Financeiro Pie Chart */}
+                        <Card className="border border-border bg-card shadow-sm">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-bold text-foreground">Status Financeiro (Recebido vs Pendente)</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="h-64">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                  <Pie
+                                    data={[
+                                      { name: "Recebido (Pago)", value: totalPago, color: "#10b981" },
+                                      { name: "Pendente", value: totalPendente, color: "#f59e0b" },
+                                    ]}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                  >
+                                    {[
+                                      { name: "Recebido (Pago)", value: totalPago, color: "#10b981" },
+                                      { name: "Pendente", value: totalPendente, color: "#f59e0b" },
+                                    ].map((entry, index) => (
+                                      <Cell key={`cell-${index}`} fill={entry.color} />
+                                    ))}
+                                  </Pie>
+                                  <RechartsTooltip formatter={(val: number) => `R$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />
+                                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Faturamento Top 5 Clientes Bar Chart */}
+                        <Card className="border border-border bg-card shadow-sm">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-bold text-foreground">Top 5 Clientes (Faturamento Total)</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="h-64">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                  data={adminPorClienteList
+                                    .sort((a, b) => b.total - a.total)
+                                    .slice(0, 5)}
+                                  layout="vertical"
+                                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                  <XAxis type="number" tickFormatter={(val) => `R$ ${val / 1000}k`} />
+                                  <YAxis type="category" dataKey="cliente" width={100} tick={{ fontSize: 10 }} />
+                                  <RechartsTooltip formatter={(val: number) => `R$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />
+                                  <Bar dataKey="pago" stackId="a" fill="#10b981" name="Pago" radius={[0, 0, 0, 0]} />
+                                  <Bar dataKey="pendente" stackId="a" fill="#f59e0b" name="Pendente" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
 
                   {/* ══ MOCK INTERACTIVE DIALOGS ══ */}
                   {/* NF-e Dialog */}
