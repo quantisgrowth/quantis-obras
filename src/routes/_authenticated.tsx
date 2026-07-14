@@ -5,7 +5,8 @@ import { useBranding } from "@/hooks/use-branding";
 import { Button } from "@/components/ui/button";
 import {
   FlaskConical, LogOut, LayoutDashboard, CalendarPlus, FolderKanban,
-  Building, Clock, Calendar, CheckCircle2, HardHat, Plus, CircleDollarSign
+  Building, Clock, Calendar, CheckCircle2, HardHat, Plus, CircleDollarSign,
+  ClipboardList, Users, Star, Building2, MapPin, AlertTriangle, Settings2, Settings, BarChart3
 } from "lucide-react";
 import {
   AlertDialog,
@@ -85,45 +86,90 @@ function AuthLayout() {
           {/* Navigation Links */}
           <nav className="flex flex-col gap-1 mt-2">
             {/* ADMIN NAV */}
-            {role === "admin" && (
-              <>
-                <Link
-                  to="/dashboard"
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isRouteActive("/dashboard")
-                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
-                  }`}
-                >
-                  <LayoutDashboard className="h-4 w-4 shrink-0" />
-                  <span>Painel Geral</span>
-                </Link>
+            {role === "admin" && (() => {
+              const adminSidebarItems = [
+                { id: "agendamentos", label: "Gestão de Escala", icon: ClipboardList },
+                { id: "tecnicos", label: "Gestão de Técnicos", icon: Users },
+                { id: "desempenho", label: "Desempenho de Técnicos", icon: Star },
+                { id: "obras", label: "Gestão de Obras", icon: HardHat },
+                { id: "clientes", label: "Gestão de Clientes", icon: Building2 },
+                { id: "locais", label: "Locais de Check-in", icon: MapPin },
+                { id: "alertas", label: "Alertas de Escopo", icon: AlertTriangle },
+                { id: "alertas-escala", label: "Alertas de Escala", icon: Clock },
+                { id: "bloqueios", label: "Bloqueios e Folgas", icon: Settings2 },
+                { id: "meus-dados", label: "Meus Dados", icon: Building2 },
+                { id: "configuracoes", label: "Configurações Globais", icon: Settings },
+                { id: "produtos", label: "Produtos e Serviços", icon: FlaskConical },
+                { id: "financeiro", label: "Módulo Financeiro", icon: BarChart3 },
+              ];
 
-                <Link
-                  to="/crm"
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isRouteActive("/crm")
-                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
-                  }`}
-                >
-                  <FolderKanban className="h-4 w-4 shrink-0" />
-                  <span>CRM & Vendas</span>
-                </Link>
+              return (
+                <>
+                  <Link
+                    to="/dashboard"
+                    search={{ tab: "tecnicos" }}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      isRouteActive("/dashboard")
+                        ? "bg-primary/10 text-primary border-primary/20 font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                    }`}
+                  >
+                    <LayoutDashboard className="h-4 w-4 shrink-0" />
+                    <span>Painel Geral</span>
+                  </Link>
 
-                <Link
-                  to="/novo-agendamento"
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isRouteActive("/novo-agendamento")
-                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
-                  }`}
-                >
-                  <CalendarPlus className="h-4 w-4 shrink-0" />
-                  <span>Novo Pedido</span>
-                </Link>
-              </>
-            )}
+                  {/* Sub-itens do Painel Geral para Admin (exibido apenas quando no /dashboard) */}
+                  {isRouteActive("/dashboard") && (
+                    <div className="ml-4 pl-3 border-l border-border flex flex-col gap-1 my-1 animate-in slide-in-from-top-1 duration-200">
+                      {adminSidebarItems.map((item) => {
+                        const Icon = item.icon;
+                        const currentTab = (location.search as any)?.tab || "tecnicos";
+                        const isSubActive = currentTab === item.id;
+                        return (
+                          <Link
+                            key={item.id}
+                            to="/dashboard"
+                            search={{ tab: item.id }}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-xs transition-all border ${
+                              isSubActive
+                                ? "bg-primary/10 text-primary border-primary/20 font-semibold"
+                                : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
+                            }`}
+                          >
+                            <Icon className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <Link
+                    to="/crm"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      isRouteActive("/crm")
+                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                    }`}
+                  >
+                    <FolderKanban className="h-4 w-4 shrink-0" />
+                    <span>CRM & Vendas</span>
+                  </Link>
+
+                  <Link
+                    to="/novo-agendamento"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      isRouteActive("/novo-agendamento")
+                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                    }`}
+                  >
+                    <CalendarPlus className="h-4 w-4 shrink-0" />
+                    <span>Agendamento Manual</span>
+                  </Link>
+                </>
+              );
+            })()}
 
             {/* CLIENTE NAV */}
             {role === "cliente" && (

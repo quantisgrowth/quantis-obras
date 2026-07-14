@@ -11,6 +11,7 @@ import { AddressAutocomplete, lookupCEP, PlaceResult } from "@/components/addres
 import { toast } from "sonner";
 import { createBooking } from "@/lib/booking.functions";
 import { sendWhatsappMessage } from "@/lib/whatsapp.functions";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   Building,
   ChevronLeft,
@@ -29,7 +30,9 @@ import {
   XCircle,
   ClipboardList,
   CalendarPlus,
-  ShieldAlert
+  ShieldAlert,
+  Clock,
+  PlusCircle
 } from "lucide-react";
 
 type NovoAgendamentoSearch = {
@@ -132,6 +135,11 @@ function NovoAgendamento() {
   const { obraId } = Route.useSearch();
 
   const role = primaryRole(roles);
+
+  if (role === "admin") {
+    return <AdminManualSchedulingForm navigate={navigate} />;
+  }
+
   const hasPermission = (permission: string) => {
     if (role !== "cliente") return true;
     if (!profile) return false;
@@ -1928,6 +1936,570 @@ function NovoAgendamento() {
 
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// ── Admin Manual Scheduling Form ───────────────────────────────────────────
+interface AdminManualSchedulingFormProps {
+  navigate: any;
+}
+
+function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps) {
+  const [loading, setLoading] = useState(false);
+  const [empresas, setEmpresas] = useState<any[]>([]);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>("");
+  const [obras, setObras] = useState<any[]>([]);
+  const [selectedObraId, setSelectedObraId] = useState<string>("");
+  const [servicos, setServicos] = useState<any[]>([]);
+  const [selectedServicoId, setSelectedServicoId] = useState<string>("");
+  const [tecnicos, setTecnicos] = useState<any[]>([]);
+  const [selectedTecnicoId, setSelectedTecnicoId] = useState<string>("");
+
+  // Date and Time
+  const [dataServico, setDataServico] = useState("");
+  const [horarioNaObra, setHorarioNaObra] = useState("08:00");
+
+  // Financial
+  const [valorTotal, setValorTotal] = useState<number>(0);
+  const [formaPagamento, setFormaPagamento] = useState("Boleto_28");
+  const [observacoes, setObservacoes] = useState("");
+
+  // Modals for creating new entities
+  const [novaEmpresaOpen, setNovaEmpresaOpen] = useState(false);
+  const [novaEmpresaNome, setNovaEmpresaNome] = useState("");
+  const [novaEmpresaCNPJ, setNovaEmpresaCNPJ] = useState("");
+
+  const [novaObraOpen, setNovaObraOpen] = useState(false);
+  const [novaObraNome, setNovaObraNome] = useState("");
+  const [novaObraEndereco, setNovaObraEndereco] = useState("");
+  const [novaObraCidade, setNovaObraCidade] = useState("Sorocaba");
+  const [novaObraBairro, setNovaObraBairro] = useState("");
+  const [novaObraCEP, setNovaObraCEP] = useState("");
+
+  useEffect(() => {
+    async function loadData() {
+      // 1. Fetch empresas_clientes
+      const { data: empData } = await supabase
+        .from("empresas_clientes")
+        .select("id, razao_social, cnpj")
+        .order("razao_social");
+      if (empData) setEmpresas(empData);
+
+      // 2. Fetch servicos_catalogo
+      const { data: svcData } = await supabase
+        .from("servicos_catalogo")
+        .select("id, sku, nome_servico, valor_venda_editavel")
+        .eq("ativo", true)
+        .order("nome_servico");
+      if (svcData) setServicos(svcData);
+
+      // 3. Fetch tecnicos
+      const { data: tecData } = await supabase
+        .from("tecnicos")
+        .select("id, nome, status")
+        .order("nome");
+      if (tecData) setTecnicos(tecData);
+    }
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    if (selectedEmpresaId) {
+      async function loadObras() {
+        const { data: obrasData } = await supabase
+          .from("obras")
+          .select("id, nome_obra, cidade, endereco")
+          .eq("empresa_id", selectedEmpresaId)
+          .order("nome_obra");
+        if (obrasData) {
+          setObras(obrasData);
+          setSelectedObraId("");
+        }
+      }
+      loadObras();
+    } else {
+      setObras([]);
+      setSelectedObraId("");
+    }
+  }, [selectedEmpresaId]);
+
+  useEffect(() => {
+    if (selectedServicoId) {
+      const svc = servicos.find(s => s.id === selectedServicoId);
+      if (svc) setValorTotal(Number(svc.valor_venda_editavel) || 0);
+    }
+  }, [selectedServicoId, servicos]);
+
+  const handleCreateEmpresa = async () => {
+    if (!novaEmpresaNome.trim()) {
+      toast.error("Preencha a Razão Social da empresa.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data: newEmp, error } = await supabase
+        .from("empresas_clientes")
+        .insert({
+          razao_social: novaEmpresaNome,
+          cnpj: novaEmpresaCNPJ || `TEMP-${Math.random().toString(36).substring(2, 9)}`,
+        })
+        .select("id, razao_social, cnpj")
+        .single();
+      if (error) throw error;
+      if (newEmp) {
+        setEmpresas((prev) => [...prev, newEmp]);
+        setSelectedEmpresaId(newEmp.id);
+        setNovaEmpresaOpen(false);
+        setNovaEmpresaNome("");
+        setNovaEmpresaCNPJ("");
+        toast.success("Empresa cliente criada com sucesso!");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao criar empresa: ${err?.message || err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateObra = async () => {
+    if (!selectedEmpresaId) {
+      toast.error("Selecione primeiro uma empresa cliente.");
+      return;
+    }
+    if (!novaObraNome.trim()) {
+      toast.error("Preencha o nome da obra.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data: newObra, error } = await supabase
+        .from("obras")
+        .insert({
+          empresa_id: selectedEmpresaId,
+          nome_obra: novaObraNome,
+          endereco: novaObraEndereco,
+          cidade: novaObraCidade,
+          bairro: novaObraBairro,
+          cep: novaObraCEP || null,
+        })
+        .select("id, nome_obra, cidade, endereco")
+        .single();
+      if (error) throw error;
+      if (newObra) {
+        setObras((prev) => [...prev, newObra]);
+        setSelectedObraId(newObra.id);
+        setNovaObraOpen(false);
+        setNovaObraNome("");
+        setNovaObraEndereco("");
+        setNovaObraCidade("Sorocaba");
+        setNovaObraBairro("");
+        setNovaObraCEP("");
+        toast.success("Obra cadastrada com sucesso!");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao criar obra: ${err?.message || err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmBooking = async () => {
+    if (!selectedEmpresaId) {
+      toast.error("Selecione a empresa cliente.");
+      return;
+    }
+    if (!selectedObraId) {
+      toast.error("Selecione a obra.");
+      return;
+    }
+    if (!selectedServicoId) {
+      toast.error("Selecione o serviço.");
+      return;
+    }
+    if (!dataServico) {
+      toast.error("Selecione a data do serviço.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const [h, m] = horarioNaObra.split(":").map(Number);
+      const fimMin = h * 60 + m + 9 * 60;
+      const fimHH = Math.floor(fimMin / 60) % 24;
+      const fimMM = fimMin % 60;
+      const horarioSaida = `${String(fimHH).padStart(2, "0")}:${String(fimMM).padStart(2, "0")}:00`;
+
+      const statusPagamento =
+        formaPagamento === "Pix" || formaPagamento === "Cartao"
+          ? "Pago"
+          : "Pendente";
+
+      const { data: adminUser } = await supabase.auth.getUser();
+      const creadoPor = adminUser?.user?.id;
+      const statusAgendamento = selectedTecnicoId && selectedTecnicoId !== "none" ? "Confirmado" : "Pendente_Tecnico";
+
+      const insertPayload = {
+        empresa_id: selectedEmpresaId,
+        obra_id: selectedObraId,
+        servico_id: selectedServicoId,
+        data_servico: dataServico,
+        horario_na_obra: horarioNaObra + ":00",
+        horario_saida_lab: horarioSaida,
+        tecnico_id: (selectedTecnicoId && selectedTecnicoId !== "none") ? selectedTecnicoId : null,
+        status_agendamento: statusAgendamento,
+        status_pagamento: statusPagamento,
+        forma_pagamento: formaPagamento,
+        valor_total: Number(valorTotal) || 0,
+        valor_subtotal: Number(valorTotal) || 0,
+        valor_desconto: 0,
+        valor_imposto_12: 0,
+        is_orcamento_manual: false,
+        orcamento_aprovado: true,
+        observacoes: observacoes || null,
+        criado_por: creadoPor,
+        volume_m3: 0,
+        qtd_caminhoes: 1,
+        cps_contratados: 1,
+        idades_cp: null,
+        idades_selecionadas: [],
+        memoria_calculo: {
+          servicePrice: Number(valorTotal) || 0,
+          cpsContratados: 1,
+          rawServiceCost: Number(valorTotal) || 0,
+          mobilizacao: 0,
+          pedagios: 0,
+          horasExtras: 0,
+          custoExtra: 0,
+          impostoPct: 0,
+          descontoPct: 0,
+          formaPagamentoOriginal: formaPagamento,
+        }
+      };
+
+      const { error } = await supabase
+        .from("agendamentos_medicoes")
+        .insert(insertPayload);
+
+      if (error) throw error;
+
+      toast.success("Agendamento criado com sucesso!");
+      navigate({ to: "/dashboard", search: { tab: "agendamentos" } });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao criar agendamento: ${err?.message || err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6 pb-12">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/dashboard", search: { tab: "agendamentos" } })}>
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
+            <CalendarPlus className="h-7 w-7 text-primary" />
+            Agendamento Manual
+          </h1>
+          <p className="text-sm text-muted-foreground">Registre um agendamento diretamente no sistema, vinculado a um cliente, obra e técnico.</p>
+        </div>
+      </div>
+
+      <Card className="border border-border bg-card shadow-[var(--shadow-elegant)]">
+        <CardContent className="p-6 md:p-8 space-y-6">
+          
+          {/* 1. Empresa Cliente */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                <Building className="h-4 w-4 text-primary" /> Empresa Cliente
+              </Label>
+              <Button
+                variant="link"
+                size="sm"
+                className="text-xs text-primary font-bold h-auto p-0 flex items-center gap-1 cursor-pointer"
+                onClick={() => setNovaEmpresaOpen(true)}
+              >
+                <PlusCircle className="h-3.5 w-3.5" /> + Nova Empresa
+              </Button>
+            </div>
+            <Select value={selectedEmpresaId} onValueChange={setSelectedEmpresaId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a empresa cliente..." />
+              </SelectTrigger>
+              <SelectContent>
+                {empresas.map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.razao_social} ({emp.cnpj})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 2. Obra */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                <HardHat className="h-4 w-4 text-primary" /> Obra de Destino
+              </Label>
+              <Button
+                variant="link"
+                size="sm"
+                className="text-xs text-primary font-bold h-auto p-0 flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                disabled={!selectedEmpresaId}
+                onClick={() => setNovaObraOpen(true)}
+              >
+                <PlusCircle className="h-3.5 w-3.5" /> + Nova Obra
+              </Button>
+            </div>
+            <Select value={selectedObraId} onValueChange={setSelectedObraId} disabled={!selectedEmpresaId}>
+              <SelectTrigger>
+                <SelectValue placeholder={selectedEmpresaId ? "Selecione a obra de destino..." : "Selecione a empresa primeiro"} />
+              </SelectTrigger>
+              <SelectContent>
+                {obras.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.nome_obra} - {o.cidade} ({o.endereco})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 3. Serviço */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+              <FlaskConical className="h-4 w-4 text-primary" /> Serviço de Controle
+            </Label>
+            <Select value={selectedServicoId} onValueChange={setSelectedServicoId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o serviço..." />
+              </SelectTrigger>
+              <SelectContent>
+                {servicos.map((svc) => (
+                  <SelectItem key={svc.id} value={svc.id}>
+                    {svc.nome_servico} (Custo base: R$ {svc.valor_venda_editavel})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 4. Data e Hora */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                <Calendar className="h-4 w-4 text-primary" /> Data do Serviço
+              </Label>
+              <Input
+                type="date"
+                value={dataServico}
+                onChange={(e) => setDataServico(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                <Clock className="h-4 w-4 text-primary" /> Horário na Obra
+              </Label>
+              <Input
+                type="time"
+                value={horarioNaObra}
+                onChange={(e) => setHorarioNaObra(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* 5. Técnico */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+              <UserCheck className="h-4 w-4 text-primary" /> Técnico Alocado (Opcional)
+            </Label>
+            <Select value={selectedTecnicoId} onValueChange={setSelectedTecnicoId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o técnico para alocação direta (ou deixe em aberto)..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">-- Sem técnico designado (Aguardando Alocação) --</SelectItem>
+                {tecnicos.map((tec) => (
+                  <SelectItem key={tec.id} value={tec.id}>
+                    {tec.nome} ({tec.status})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 6. Financeiro e Pagamento */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                <CreditCard className="h-4 w-4 text-primary" /> Valor Total Customizado (R$)
+              </Label>
+              <Input
+                type="number"
+                value={valorTotal}
+                onChange={(e) => setValorTotal(Number(e.target.value) || 0)}
+                placeholder="R$ 0,00"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                <CreditCard className="h-4 w-4 text-primary" /> Forma de Pagamento
+              </Label>
+              <Select value={formaPagamento} onValueChange={setFormaPagamento}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Boleto_28">Faturado (Boleto 28 Dias)</SelectItem>
+                  <SelectItem value="Pix">Pix (Desconto 5%)</SelectItem>
+                  <SelectItem value="Cartao">Cartão de Crédito</SelectItem>
+                  <SelectItem value="Dinheiro">Dinheiro / À Vista</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* 7. Observações */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold text-foreground">Observações internas</Label>
+            <textarea
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Digite observações sobre o local da concretagem, contatos na obra, etc..."
+            />
+          </div>
+
+          <div className="pt-4 flex justify-end gap-3 border-t border-border">
+            <Button
+              variant="outline"
+              onClick={() => navigate({ to: "/dashboard", search: { tab: "agendamentos" } })}
+              disabled={loading}
+              className="font-bold"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmBooking}
+              disabled={loading}
+              className="font-bold bg-primary hover:bg-primary/95 text-primary-foreground flex items-center gap-2 cursor-pointer"
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              Criar Agendamento Manual
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* DIALOG: Nova Empresa */}
+      <Dialog open={novaEmpresaOpen} onOpenChange={setNovaEmpresaOpen}>
+        <DialogContent className="bg-card border border-border">
+          <DialogHeader>
+            <DialogTitle>Cadastrar Nova Empresa Cliente</DialogTitle>
+            <DialogDescription>
+              Crie um cadastro rápido para a Construtora ou Incorporadora cliente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="emp-nome">Razão Social / Nome da Empresa</Label>
+              <Input
+                id="emp-nome"
+                required
+                value={novaEmpresaNome}
+                onChange={(e) => setNovaEmpresaNome(e.target.value)}
+                placeholder="Ex: Construtora Alpha Ltda"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="emp-cnpj">CNPJ (Opcional)</Label>
+              <Input
+                id="emp-cnpj"
+                value={novaEmpresaCNPJ}
+                onChange={(e) => setNovaEmpresaCNPJ(e.target.value)}
+                placeholder="Ex: 12.345.678/0001-99"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNovaEmpresaOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreateEmpresa} disabled={loading}>Salvar Empresa</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG: Nova Obra */}
+      <Dialog open={novaObraOpen} onOpenChange={setNovaObraOpen}>
+        <DialogContent className="bg-card border border-border">
+          <DialogHeader>
+            <DialogTitle>Cadastrar Nova Obra de Cliente</DialogTitle>
+            <DialogDescription>
+              Insira o canteiro de obras de destino para faturamento e geolocalização.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2 max-h-[400px] overflow-y-auto pr-1">
+            <div className="space-y-2">
+              <Label htmlFor="ob-nome">Nome da Obra</Label>
+              <Input
+                id="ob-nome"
+                required
+                value={novaObraNome}
+                onChange={(e) => setNovaObraNome(e.target.value)}
+                placeholder="Ex: Residencial Jardins - Torre A"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ob-end">Endereço Completo</Label>
+              <Input
+                id="ob-end"
+                value={novaObraEndereco}
+                onChange={(e) => setNovaObraEndereco(e.target.value)}
+                placeholder="Ex: Rua das Flores, 100"
+              />
+            </div>
+            <div className="grid gap-4 grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="ob-cid">Cidade</Label>
+                <Input
+                  id="ob-cid"
+                  value={novaObraCidade}
+                  onChange={(e) => setNovaObraCidade(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ob-bai">Bairro</Label>
+                <Input
+                  id="ob-bai"
+                  value={novaObraBairro}
+                  onChange={(e) => setNovaObraBairro(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ob-cep">CEP</Label>
+              <Input
+                id="ob-cep"
+                value={novaObraCEP}
+                onChange={(e) => setNovaObraCEP(e.target.value)}
+                placeholder="Ex: 18000-000"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNovaObraOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreateObra} disabled={loading}>Salvar Obra</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

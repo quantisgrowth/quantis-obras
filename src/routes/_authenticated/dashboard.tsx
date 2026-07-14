@@ -8,7 +8,7 @@ import {
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
   Upload, Eye, EyeOff, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
   Star, Settings2, LogOut, HardHat, Filter, FileDown, Printer, Trash2, Search, LayoutGrid, List,
-  DollarSign, TrendingUp
+  DollarSign, TrendingUp, Wallet
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -4174,7 +4174,41 @@ function AdminDash() {
   const [savingCityRates, setSavingCityRates] = useState<string | null>(null);
 
   // Sidebar navigation and modular features states
-  const [activeTab, setActiveTab] = useState("tecnicos");
+  const location = useLocation();
+  const tab = (location.search as any)?.tab;
+  const [activeTab, setActiveTab] = useState(tab || "tecnicos");
+
+  useEffect(() => {
+    if (tab) {
+      setActiveTab(tab);
+      if (tab === "agendamentos") {
+        fetchAdminAgendamentos();
+      } else if (tab === "desempenho") {
+        fetchDesempenho();
+      } else if (tab === "obras") {
+        fetchObrasGestor();
+        fetchEmpresasClientes();
+      } else if (tab === "clientes") {
+        fetchEmpresasClientes();
+      } else if (tab === "locais") {
+        fetchLocais();
+      } else if (tab === "alertas") {
+        fetchAlertas();
+      } else if (tab === "alertas-escala") {
+        fetchScaleAlerts();
+      } else if (tab === "bloqueios") {
+        fetchBlockerRequests();
+      } else if (tab === "meus-dados") {
+        fetchEmpresaPlataforma();
+      } else if (tab === "configuracoes") {
+        handleLoadGlobalConfigs();
+      } else if (tab === "produtos") {
+        fetchAllServicos();
+      } else if (tab === "financeiro") {
+        fetchFinancialSummary();
+      }
+    }
+  }, [tab]);
 
   // Global Configs states
   const [globalConfigs, setGlobalConfigs] = useState<any>({ eficiencia_cp: 95, coeficiente_he: 1.5, prazo_faturamento_dias: 28 });
@@ -4201,6 +4235,39 @@ function AdminDash() {
   const [adminFinEndDate, setAdminFinEndDate] = useState("");
   const [adminFinClientId, setAdminFinClientId] = useState("all");
   const [adminFinServiceId, setAdminFinServiceId] = useState("all");
+
+  // Mock billing states
+  const [selectedBookingForNfe, setSelectedBookingForNfe] = useState<any | null>(null);
+  const [selectedBookingForBoleto, setSelectedBookingForBoleto] = useState<any | null>(null);
+  const [nfeLoading, setNfeLoading] = useState(false);
+  const [emittedNfes, setEmittedNfes] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem("quantis_emitted_nfes");
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [generatedBoletos, setGeneratedBoletos] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem("quantis_generated_boletos");
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const markNfeAsEmitted = (bookingId: string) => {
+    const updated = { ...emittedNfes, [bookingId]: true };
+    setEmittedNfes(updated);
+    localStorage.setItem("quantis_emitted_nfes", JSON.stringify(updated));
+  };
+
+  const markBoletoAsGenerated = (bookingId: string) => {
+    const updated = { ...generatedBoletos, [bookingId]: true };
+    setGeneratedBoletos(updated);
+    localStorage.setItem("quantis_generated_boletos", JSON.stringify(updated));
+  };
 
   // Obras Management states
   const [obrasGestor, setObrasGestor] = useState<any[]>([]);
@@ -6347,52 +6414,10 @@ function AdminDash() {
   ];
 
   return (
-    <div className="flex -mx-4 -mt-8 min-h-[calc(100vh-4rem)] animate-in fade-in-50 duration-200">
-
-      {/* ══ SIDEBAR ESQUERDA FIXA ══ */}
-      <aside className="w-64 shrink-0 border-r border-border bg-card flex flex-col sticky top-0 h-screen overflow-y-auto z-10">
-        <div className="p-5 border-b border-border bg-gradient-to-br from-primary/10 to-primary/5">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="h-8 w-8 rounded-lg bg-primary/20 grid place-items-center">
-              <Settings className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <h2 className="font-bold text-sm text-foreground leading-tight">Painel do Gestor</h2>
-              <p className="text-[10px] text-muted-foreground">Administração</p>
-            </div>
-          </div>
-        </div>
-
-        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-          {sidebarItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                id={`sidebar-${item.id}`}
-                onClick={() => { item.onClick(); }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left group ${
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                }`}
-              >
-                <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"}`} />
-                <span className="flex-1 truncate">{item.label}</span>
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                    isActive ? "bg-primary-foreground/20 text-primary-foreground" : "bg-red-500 text-white"
-                  }`}>{item.badge}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+    <div className="flex -mx-4 -mt-8 min-h-[calc(100vh-4rem)] animate-in fade-in-50 duration-200 w-full">
 
       {/* ══ CONTEÚDO PRINCIPAL ══ */}
-      <main className="flex-1 min-w-0 p-8 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-8 overflow-y-auto w-full">
 
         {/* ── PAINEL: GESTÃO DE ESCALA ── */}
         {activeTab === "agendamentos" && (
@@ -8913,6 +8938,8 @@ function AdminDash() {
               let adminTotalRealizado = 0;
               let adminTotalACobrar = 0;
               let adminTotalAcumulado = 0;
+              let totalPago = 0;
+              let totalPendente = 0;
 
               adminFiltered.forEach((b: any) => {
                 const val = Number(b.valor_total) || 0;
@@ -8926,6 +8953,50 @@ function AdminDash() {
                 }
                 if (b.status_agendamento === "Validado" && b.status_pagamento !== "Pago") {
                   adminTotalACobrar += val;
+                }
+                
+                if (b.status_pagamento === "Pago") {
+                  totalPago += val;
+                } else {
+                  totalPendente += val;
+                }
+              });
+
+              // Cashflow forecast projection
+              const today = new Date();
+              const getForecastDate = (b: any) => {
+                const baseDate = new Date(b.data_servico + "T00:00:00");
+                if (b.forma_pagamento === "Pix" || b.forma_pagamento === "Dinheiro") {
+                  return baseDate; // D+0
+                } else if (b.forma_pagamento === "Cartao") {
+                  baseDate.setDate(baseDate.getDate() + 30); // D+30
+                  return baseDate;
+                } else {
+                  baseDate.setDate(baseDate.getDate() + 28); // D+28
+                  return baseDate;
+                }
+              };
+
+              let forecastToday = 0;
+              let forecastNext7 = 0;
+              let forecastNext30 = 0;
+              let forecastLater = 0;
+
+              adminFiltered.forEach((b: any) => {
+                if (b.status_pagamento === "Pago") return;
+                const val = Number(b.valor_total) || 0;
+                const fDate = getForecastDate(b);
+                const diffTime = fDate.getTime() - today.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays <= 0) {
+                  forecastToday += val;
+                } else if (diffDays <= 7) {
+                  forecastNext7 += val;
+                } else if (diffDays <= 30) {
+                  forecastNext30 += val;
+                } else {
+                  forecastLater += val;
                 }
               });
 
@@ -8962,7 +9033,7 @@ function AdminDash() {
                             variant="outline"
                             size="sm"
                             onClick={handleAdminExportCSV}
-                            className="text-xs font-bold gap-1.5 h-8 bg-card border-border hover:bg-accent"
+                            className="text-xs font-bold gap-1.5 h-8 bg-card border-border hover:bg-accent cursor-pointer"
                           >
                             <FileDown className="h-3.5 w-3.5" /> Exportar Excel
                           </Button>
@@ -8970,7 +9041,7 @@ function AdminDash() {
                             variant="outline"
                             size="sm"
                             onClick={handleAdminPrintPDF}
-                            className="text-xs font-bold gap-1.5 h-8 bg-card border-border hover:bg-accent"
+                            className="text-xs font-bold gap-1.5 h-8 bg-card border-border hover:bg-accent cursor-pointer"
                           >
                             <Printer className="h-3.5 w-3.5" /> Gerar PDF
                           </Button>
@@ -8984,7 +9055,7 @@ function AdminDash() {
                                 setAdminFinClientId("all");
                                 setAdminFinServiceId("all");
                               }}
-                              className="text-xs font-bold text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/25 h-8 px-2"
+                              className="text-xs font-bold text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/25 h-8 px-2 cursor-pointer"
                             >
                               Limpar Filtros
                             </Button>
@@ -9048,87 +9119,551 @@ function AdminDash() {
                     </CardContent>
                   </Card>
 
-                  {/* Cards de resumo */}
+                  {/* PREMIUM KPI CARDS */}
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    <Card className="border border-blue-500/30 bg-blue-500/5">
+                    <Card className="border border-border bg-card shadow-sm">
                       <CardContent className="pt-5">
-                        <p className="text-xs text-blue-600 font-bold uppercase tracking-wide">Agendado</p>
-                        <p className="text-3xl font-extrabold text-blue-600 mt-1">
-                          R$ {adminTotalAgendado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-1">Confirmados & em execução</p>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Faturamento Total</p>
+                            <p className="text-2xl font-extrabold text-foreground mt-1.5">
+                              R$ {adminTotalAcumulado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                            <CircleDollarSign className="h-5 w-5" />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-2">Valor bruto de todos os contratos</p>
                       </CardContent>
                     </Card>
-                    <Card className="border border-emerald-500/30 bg-emerald-500/5">
+
+                    <Card className="border border-border bg-card shadow-sm">
                       <CardContent className="pt-5">
-                        <p className="text-xs text-emerald-600 font-bold uppercase tracking-wide">Realizado</p>
-                        <p className="text-3xl font-extrabold text-emerald-600 mt-1">
-                          R$ {adminTotalRealizado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-1">Aguardando medição, no lab ou validado</p>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-xs text-emerald-600 font-bold uppercase tracking-wider">Receita Recebida</p>
+                            <p className="text-2xl font-extrabold text-emerald-600 mt-1.5">
+                              R$ {totalPago.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                            <Wallet className="h-5 w-5" />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-2">Total de faturamentos liquidados</p>
                       </CardContent>
                     </Card>
-                    <Card className="border border-amber-500/30 bg-amber-500/5">
+
+                    <Card className="border border-border bg-card shadow-sm">
                       <CardContent className="pt-5">
-                        <p className="text-xs text-amber-600 font-bold uppercase tracking-wide">A Cobrar</p>
-                        <p className="text-3xl font-extrabold text-amber-600 mt-1">
-                          R$ {adminTotalACobrar.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-1">Validados com pagamento pendente</p>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-xs text-amber-600 font-bold uppercase tracking-wider">Saldo a Receber</p>
+                            <p className="text-2xl font-extrabold text-amber-600 mt-1.5">
+                              R$ {totalPendente.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600">
+                            <Clock className="h-5 w-5" />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-2">Valores em aberto ou faturados</p>
                       </CardContent>
                     </Card>
-                    <Card className="border border-border bg-card">
+
+                    <Card className="border border-border bg-card shadow-sm">
                       <CardContent className="pt-5">
-                        <p className="text-xs text-muted-foreground font-bold uppercase tracking-wide">Acumulado Geral</p>
-                        <p className="text-3xl font-extrabold text-foreground mt-1">
-                          R$ {adminTotalAcumulado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-1">Soma de todos os registros filtrados</p>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">Previsão do Mês</p>
+                            <p className="text-2xl font-extrabold text-blue-600 mt-1.5">
+                              R$ {(forecastToday + forecastNext7 + forecastNext30).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600">
+                            <TrendingUp className="h-5 w-5" />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-2">Recebíveis previstos para os próximos 30 dias</p>
                       </CardContent>
                     </Card>
                   </div>
 
-                  {/* Tabela por cliente */}
-                  <Card className="border border-border bg-card">
+                  {/* PROGRESS BAR FOR RECEIPT STATUS */}
+                  <Card className="border border-border bg-card p-5 shadow-sm">
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span className="text-muted-foreground">Progresso de Liquidação Financeira</span>
+                        <span className="text-primary font-bold">
+                          {((totalPago / (adminTotalAcumulado || 1)) * 100).toFixed(1)}% Liquidado
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden flex">
+                        <div
+                          className="bg-emerald-500 h-full transition-all duration-500"
+                          style={{ width: `${(totalPago / (adminTotalAcumulado || 1)) * 100}%` }}
+                        />
+                        <div
+                          className="bg-amber-500 h-full transition-all duration-500"
+                          style={{ width: `${(totalPendente / (adminTotalAcumulado || 1)) * 100}%` }}
+                        />
+                      </div>
+                      <div className="flex gap-4 text-[10px] text-muted-foreground pt-1">
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Pago (R$ {totalPago.toLocaleString("pt-BR")})</span>
+                        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500 inline-block" /> Pendente (R$ {totalPendente.toLocaleString("pt-BR")})</span>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* CRONOGRAMA & CLIENTES TWO-COLUMN LAYOUT */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Cronograma de Recebimentos */}
+                    <Card className="border border-border bg-card shadow-sm flex flex-col">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base font-bold flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-primary" />
+                          Cronograma de Recebimentos Futuros
+                        </CardTitle>
+                        <CardDescription>Fluxo de caixa projetado com base em faturamentos pendentes.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex-1 space-y-4">
+                        <div className="space-y-2">
+                          {/* Item 1: Hoje / Atrasado */}
+                          <div className="flex items-center justify-between p-3 rounded-lg border border-red-500/10 bg-red-500/5 hover:bg-red-500/10 transition-all">
+                            <div>
+                              <span className="text-xs font-bold text-red-600 block">Hoje ou Em Atraso</span>
+                              <span className="text-[10px] text-muted-foreground">Liquidações imediatas pendentes</span>
+                            </div>
+                            <span className="font-mono text-sm font-bold text-red-600">R$ {forecastToday.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+
+                          {/* Item 2: Próximos 7 Dias */}
+                          <div className="flex items-center justify-between p-3 rounded-lg border border-teal-500/10 bg-teal-500/5 hover:bg-teal-500/10 transition-all">
+                            <div>
+                              <span className="text-xs font-bold text-teal-600 block">Próximos 7 Dias</span>
+                              <span className="text-[10px] text-muted-foreground">Projeções de caixa a curto prazo</span>
+                            </div>
+                            <span className="font-mono text-sm font-bold text-teal-600">R$ {forecastNext7.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+
+                          {/* Item 3: Próximos 30 Dias */}
+                          <div className="flex items-center justify-between p-3 rounded-lg border border-indigo-500/10 bg-indigo-500/5 hover:bg-indigo-500/10 transition-all">
+                            <div>
+                              <span className="text-xs font-bold text-indigo-600 block">De 8 a 30 Dias</span>
+                              <span className="text-[10px] text-muted-foreground">Recebimentos agendados de faturados</span>
+                            </div>
+                            <span className="font-mono text-sm font-bold text-indigo-600">R$ {forecastNext30.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+
+                          {/* Item 4: Longo Prazo */}
+                          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-all">
+                            <div>
+                              <span className="text-xs font-bold text-muted-foreground block">A Longo Prazo (30d+)</span>
+                              <span className="text-[10px] text-muted-foreground">Previsões além do mês vigente</span>
+                            </div>
+                            <span className="font-mono text-sm font-bold text-muted-foreground">R$ {forecastLater.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Faturamento por Cliente */}
+                    <Card className="border border-border bg-card shadow-sm flex flex-col">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base font-bold flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-primary" />
+                          Faturamento por Cliente
+                        </CardTitle>
+                        <CardDescription>Receita acumulada agrupada por empresa contratante.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex-1 overflow-y-auto max-h-[300px]">
+                        {adminPorClienteList.length === 0 ? (
+                          <p className="text-xs text-muted-foreground py-8 text-center">Nenhum faturamento registrado.</p>
+                        ) : (
+                          <div className="rounded-lg border border-border overflow-hidden">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground">
+                                  <th className="p-2.5">Cliente</th>
+                                  <th className="p-2.5 text-right">Pago</th>
+                                  <th className="p-2.5 text-right">Pendente</th>
+                                  <th className="p-2.5 text-right">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {adminPorClienteList.map((c: any, i: number) => (
+                                  <tr key={i} className="hover:bg-muted/10 transition-all">
+                                    <td className="p-2.5 font-semibold text-foreground truncate max-w-[150px]">{c.cliente}</td>
+                                    <td className="p-2.5 text-right font-mono font-bold text-emerald-600">R$ {Number(c.pago).toLocaleString("pt-BR")}</td>
+                                    <td className="p-2.5 text-right font-mono font-bold text-amber-600">R$ {Number(c.pendente).toLocaleString("pt-BR")}</td>
+                                    <td className="p-2.5 text-right font-mono font-bold text-foreground">R$ {Number(c.total).toLocaleString("pt-BR")}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* LANÇAMENTOS E EMISSÕES (TRANSACTIONS LIST) */}
+                  <Card className="border border-border bg-card shadow-sm">
                     <CardHeader>
-                      <CardTitle className="text-base font-bold">Faturamento por Cliente</CardTitle>
-                      <CardDescription>Receita agrupada por empresa cliente — pago e pendente.</CardDescription>
+                      <CardTitle className="text-base font-bold flex items-center gap-2">
+                        <ClipboardList className="h-4 w-4 text-primary" />
+                        Lançamentos e Emissões de Faturamento
+                      </CardTitle>
+                      <CardDescription>Gerencie notas fiscais eletrônicas e boletos bancários dos serviços prestados.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {adminPorClienteList.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-4 text-center">Nenhum faturamento registrado ainda.</p>
+                      {adminFiltered.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-8 text-center">Nenhum lançamento encontrado para os filtros selecionados.</p>
                       ) : (
                         <div className="overflow-x-auto rounded-lg border border-border">
-                          <table className="w-full text-left border-collapse text-sm">
+                          <table className="w-full text-left border-collapse text-xs">
                             <thead>
-                              <tr className="bg-muted/50 border-b border-border font-medium text-muted-foreground text-xs">
-                                <th className="p-3">Cliente</th>
-                                <th className="p-3 text-right">Pago (R$)</th>
-                                <th className="p-3 text-right">Pendente (R$)</th>
-                                <th className="p-3 text-right">Total (R$)</th>
+                              <tr className="bg-muted/50 border-b border-border font-semibold text-muted-foreground">
+                                <th className="p-3">Data</th>
+                                <th className="p-3">Cliente / Obra</th>
+                                <th className="p-3">Serviço</th>
+                                <th className="p-3">Forma de Pagamento</th>
+                                <th className="p-3 text-right">Valor</th>
+                                <th className="p-3 text-center">Status</th>
+                                <th className="p-3 text-center">NF-e</th>
+                                <th className="p-3 text-center">Boleto</th>
+                                <th className="p-3 text-center">Ações</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                              {adminPorClienteList.map((c: any, i: number) => (
-                                <tr key={i} className="hover:bg-muted/10 transition-all">
-                                  <td className="p-3 font-semibold text-foreground">{c.cliente}</td>
-                                  <td className="p-3 text-right font-mono text-xs text-emerald-600 font-bold">
-                                    {Number(c.pago).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                  </td>
-                                  <td className="p-3 text-right font-mono text-xs text-amber-600 font-bold">
-                                    {Number(c.pendente).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                  </td>
-                                  <td className="p-3 text-right font-mono text-xs font-bold text-foreground">
-                                    {Number(c.total).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                  </td>
-                                </tr>
-                              ))}
+                              {adminFiltered.map((b: any) => {
+                                const isPago = b.status_pagamento === "Pago";
+                                const isNfe = emittedNfes[b.id] === true;
+                                const isBoletoGen = generatedBoletos[b.id] === true;
+                                const isBoletoPayment = b.forma_pagamento?.toLowerCase().includes("boleto");
+
+                                return (
+                                  <tr key={b.id} className="hover:bg-muted/5 transition-all">
+                                    <td className="p-3 font-medium text-muted-foreground whitespace-nowrap">
+                                      {b.data_servico ? new Date(b.data_servico + "T00:00:00").toLocaleDateString("pt-BR") : "--"}
+                                    </td>
+                                    <td className="p-3 whitespace-nowrap max-w-[200px] truncate">
+                                      <span className="font-bold text-foreground block">{b.empresa?.razao_social || "Empresa Desconhecida"}</span>
+                                      <span className="text-[10px] text-muted-foreground">{b.obra?.nome_obra || "Obra Principal"}</span>
+                                    </td>
+                                    <td className="p-3 text-muted-foreground max-w-[150px] truncate">
+                                      {b.servico?.nome_servico || "Controle Tecnológico"}
+                                    </td>
+                                    <td className="p-3">
+                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
+                                        {b.forma_pagamento === "Boleto_28" ? "Boleto (28d)" : b.forma_pagamento || "Faturado"}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-bold text-foreground whitespace-nowrap">
+                                      R$ {Number(b.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="p-3 text-center whitespace-nowrap">
+                                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                                        isPago
+                                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                          : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                      }`}>
+                                        {isPago ? "● Pago" : "○ Pendente"}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-center">
+                                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                                        isNfe
+                                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                          : "bg-slate-100 text-slate-400 border-slate-200"
+                                      }`}>
+                                        {isNfe ? "Emitida" : "Pendente"}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-center">
+                                      {isBoletoPayment ? (
+                                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                                          isBoletoGen
+                                            ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                            : "bg-slate-100 text-slate-400 border-slate-200"
+                                        }`}>
+                                          {isBoletoGen ? "Gerado" : "Pendente"}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-300">--</span>
+                                      )}
+                                    </td>
+                                    <td className="p-3 text-center whitespace-nowrap">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => setSelectedBookingForNfe(b)}
+                                          className={`h-7 px-2 text-[10px] font-bold cursor-pointer ${isNfe ? "text-emerald-600 hover:bg-emerald-50" : "text-primary"}`}
+                                        >
+                                          {isNfe ? "Ver NF-e" : "Emitir NF-e"}
+                                        </Button>
+                                        {isBoletoPayment && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setSelectedBookingForBoleto(b)}
+                                            className={`h-7 px-2 text-[10px] font-bold cursor-pointer ${isBoletoGen ? "text-blue-600 hover:bg-blue-50" : "text-primary"}`}
+                                          >
+                                            {isBoletoGen ? "Baixar Boleto" : "Gerar Boleto"}
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
                       )}
                     </CardContent>
                   </Card>
+
+                  {/* ══ MOCK INTERACTIVE DIALOGS ══ */}
+                  {/* NF-e Dialog */}
+                  <Dialog open={!!selectedBookingForNfe} onOpenChange={(open) => { if (!open) setSelectedBookingForNfe(null); }}>
+                    <DialogContent className="max-w-2xl border border-border bg-card">
+                      <DialogHeader>
+                        <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-emerald-500" />
+                          Nota Fiscal de Serviços Eletrônica (NFS-e)
+                        </DialogTitle>
+                        <DialogDescription>
+                          Espelho simulado de faturamento de serviço de controle tecnológico.
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="border border-slate-300 rounded-lg p-5 bg-white text-black font-sans text-[11px] space-y-3.5 shadow-sm">
+                        {/* Cabeçalho NF-e */}
+                        <div className="flex justify-between items-center border-b border-black pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="h-9 w-9 border border-black rounded flex items-center justify-center font-bold text-sm bg-slate-100 text-slate-800">Q</div>
+                            <div>
+                              <p className="font-extrabold text-[9px] uppercase leading-none">Prefeitura Municipal de Sorocaba</p>
+                              <p className="font-bold text-[11px] uppercase text-slate-700 leading-tight">Secretaria da Fazenda</p>
+                            </div>
+                          </div>
+                          <div className="text-right border-l border-black pl-4 leading-tight">
+                            <p className="font-extrabold text-[9px]">NÚMERO DA NOTA</p>
+                            <p className="font-extrabold text-sm text-primary">2026{selectedBookingForNfe?.codigo_pedido?.replace(/\D/g, "") || "0921"}</p>
+                            <p className="text-[8px] text-slate-500">Data de Emissão: {new Date().toLocaleDateString("pt-BR")}</p>
+                          </div>
+                        </div>
+
+                        {/* Prestador */}
+                        <div className="border border-black p-2 rounded bg-slate-50/50">
+                          <p className="font-extrabold text-[9px] text-slate-500 uppercase">PRESTADOR DE SERVIÇOS</p>
+                          <p className="font-bold text-[11px]">QUANTIS CONTROLE TECNOLÓGICO LTDA</p>
+                          <p>CNPJ: 45.123.456/0001-89 | Inscrição Municipal: 998.776-5</p>
+                          <p>Endereço: Av. Barão de Tatuí, 1200 - Jd. Vergueiro - Sorocaba/SP</p>
+                        </div>
+
+                        {/* Tomador */}
+                        <div className="border border-black p-2 rounded">
+                          <p className="font-extrabold text-[9px] text-slate-500 uppercase">TOMADOR DE SERVIÇOS</p>
+                          <p className="font-bold text-[11px] uppercase">{selectedBookingForNfe?.empresa?.razao_social || "Empresa Cliente"}</p>
+                          <p>CNPJ/CPF: {selectedBookingForNfe?.empresa?.cnpj || "CNPJ não cadastrado"}</p>
+                          <p>Obra de Destino: {selectedBookingForNfe?.obra?.nome_obra || "Obra Principal"} ({selectedBookingForNfe?.obra?.endereco || "Sorocaba/SP"})</p>
+                        </div>
+
+                        {/* Serviços */}
+                        <div className="border border-black p-2 rounded min-h-[60px]">
+                          <p className="font-extrabold text-[9px] text-slate-500 uppercase mb-1">DISCRIMINAÇÃO DOS SERVIÇOS</p>
+                          <p className="font-semibold text-slate-800">
+                            Prestação de serviço de controle tecnológico de concreto conforme NBR 5738 e NBR 5739.
+                          </p>
+                          <p className="text-slate-600 mt-1">
+                            Serviço realizado: {selectedBookingForNfe?.servico?.nome_servico || "Moldagem e Ensaio de Corpos de Prova"}
+                          </p>
+                          <p className="text-[8px] text-slate-400 mt-1">
+                            Data de execução: {selectedBookingForNfe?.data_servico ? new Date(selectedBookingForNfe.data_servico + "T00:00:00").toLocaleDateString("pt-BR") : "--"}
+                          </p>
+                        </div>
+
+                        {/* Retenções e Valores */}
+                        <div className="grid grid-cols-4 border border-black divide-x divide-black text-center font-mono text-[9px]">
+                          <div className="p-1">
+                            <p className="text-[7px] text-slate-500">VALOR DO SERVIÇO</p>
+                            <p className="font-bold">R$ {Number(selectedBookingForNfe?.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div className="p-1">
+                            <p className="text-[7px] text-slate-500">PIS (0,65%)</p>
+                            <p className="font-bold">R$ {Number((selectedBookingForNfe?.valor_total || 0) * 0.0065).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div className="p-1">
+                            <p className="text-[7px] text-slate-500">COFINS (3,00%)</p>
+                            <p className="font-bold">R$ {Number((selectedBookingForNfe?.valor_total || 0) * 0.03).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div className="p-1">
+                            <p className="text-[7px] text-slate-500">ISSQD (2,00%)</p>
+                            <p className="font-bold">R$ {Number((selectedBookingForNfe?.valor_total || 0) * 0.02).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-right font-bold text-xs bg-slate-100 p-2 rounded">
+                          <span>VALOR LÍQUIDO DA NOTA:</span>
+                          <span className="text-sm text-primary">
+                            R$ {Number(selectedBookingForNfe?.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+
+                      <DialogFooter className="mt-4 gap-2">
+                        <Button variant="outline" onClick={() => setSelectedBookingForNfe(null)}>
+                          Fechar
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setNfeLoading(true);
+                            setTimeout(() => {
+                              markNfeAsEmitted(selectedBookingForNfe.id);
+                              setNfeLoading(false);
+                              setSelectedBookingForNfe(null);
+                              toast.success("Nota Fiscal emitida e enviada para a SEFAZ com sucesso!");
+                            }, 1000);
+                          }}
+                          disabled={nfeLoading}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          {nfeLoading ? "Processando..." : "Transmitir e Autorizar NF-e"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+
+                  {/* Boleto Dialog */}
+                  <Dialog open={!!selectedBookingForBoleto} onOpenChange={(open) => { if (!open) setSelectedBookingForBoleto(null); }}>
+                    <DialogContent className="max-w-2xl border border-border bg-card">
+                      <DialogHeader>
+                        <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                          <CreditCard className="h-5 w-5 text-blue-500" />
+                          Boleto Bancário (Simulado)
+                        </DialogTitle>
+                        <DialogDescription>
+                          Segunda via mockada do boleto para cobrança de faturamento da obra.
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="border border-slate-300 rounded-lg p-5 bg-white text-black font-mono text-[9px] space-y-3.5 shadow-sm">
+                        {/* Linha Digitável */}
+                        <div className="flex justify-between border-b border-black pb-2 font-bold text-[10px]">
+                          <span>BANCO DO BRASIL | 001-9</span>
+                          <span className="text-[10px]">00190.00009 01234.567890 12345.678901 2 985700000{Math.floor(selectedBookingForBoleto?.valor_total || 250)}</span>
+                        </div>
+
+                        {/* Dados do Cedente/Valores */}
+                        <div className="grid grid-cols-6 border border-black divide-x divide-black">
+                          <div className="col-span-4 p-1">
+                            <p className="text-[6px] text-slate-500">LOCAL DE PAGAMENTO</p>
+                            <p className="font-bold">QUALQUER BANCO ATÉ O VENCIMENTO</p>
+                          </div>
+                          <div className="col-span-2 p-1">
+                            <p className="text-[6px] text-slate-500">VENCIMENTO</p>
+                            <p className="font-bold">
+                              {(() => {
+                                const d = new Date(selectedBookingForBoleto?.data_servico + "T00:00:00");
+                                d.setDate(d.getDate() + 28);
+                                return d.toLocaleDateString("pt-BR");
+                              })()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-6 border-x border-b border-black divide-x divide-black">
+                          <div className="col-span-4 p-1">
+                            <p className="text-[6px] text-slate-500">BENEFICIÁRIO</p>
+                            <p className="font-bold text-[8px]">QUANTIS CONTROLE TECNOLÓGICO LTDA - CNPJ: 45.123.456/0001-89</p>
+                          </div>
+                          <div className="col-span-2 p-1">
+                            <p className="text-[6px] text-slate-500">AGÊNCIA / CÓDIGO BENEFICIÁRIO</p>
+                            <p className="font-bold">2921-1 / 102938-4</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-6 border-x border-b border-black divide-x divide-black text-center">
+                          <div className="p-1">
+                            <p className="text-[6px] text-slate-500">DATA DOCUMENTO</p>
+                            <p className="font-bold">{new Date().toLocaleDateString("pt-BR")}</p>
+                          </div>
+                          <div className="p-1">
+                            <p className="text-[6px] text-slate-500">NÚMERO DOC</p>
+                            <p className="font-bold">{selectedBookingForBoleto?.codigo_pedido || "0921"}</p>
+                          </div>
+                          <div className="p-1 col-span-2">
+                            <p className="text-[6px] text-slate-500">CARTEIRA</p>
+                            <p className="font-bold">17 - REGISTRADA</p>
+                          </div>
+                          <div className="p-1 col-span-2 text-right pr-2">
+                            <p className="text-[6px] text-slate-500">VALOR DO DOCUMENTO</p>
+                            <p className="font-bold text-sm">
+                              R$ {Number(selectedBookingForBoleto?.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Pagador */}
+                        <div className="border border-black p-2 rounded">
+                          <p className="text-[6px] text-slate-500 font-bold uppercase">PAGADOR</p>
+                          <p className="font-bold uppercase text-[9px]">{selectedBookingForBoleto?.empresa?.razao_social || "Empresa Cliente"}</p>
+                          <p>CNPJ/CPF: {selectedBookingForBoleto?.empresa?.cnpj || "CNPJ não cadastrado"}</p>
+                          <p>Canteiro de obras de faturamento: {selectedBookingForBoleto?.obra?.nome_obra || "Obra Principal"} ({selectedBookingForBoleto?.obra?.endereco || "Sorocaba/SP"})</p>
+                        </div>
+
+                        {/* Ficha de Compensação Barcode Mock */}
+                        <div className="space-y-1">
+                          <p className="text-[6px] text-slate-400">FICHA DE COMPENSAÇÃO - AUTENTICAÇÃO MECÂNICA</p>
+                          {/* Simulated Barcode */}
+                          <div className="h-8 bg-black flex gap-0.5 items-stretch p-0.5 w-full justify-between">
+                            <div className="w-1 bg-white"></div>
+                            <div className="w-2 bg-white"></div>
+                            <div className="w-0.5 bg-white"></div>
+                            <div className="w-1.5 bg-white"></div>
+                            <div className="w-1 bg-white"></div>
+                            <div className="w-3 bg-white"></div>
+                            <div className="w-0.5 bg-white"></div>
+                            <div className="w-2 bg-white"></div>
+                            <div className="w-1 bg-white"></div>
+                            <div className="w-1 bg-white"></div>
+                            <div className="w-3 bg-white"></div>
+                            <div className="w-0.5 bg-white"></div>
+                            <div className="w-1.5 bg-white"></div>
+                            <div className="w-1 bg-white"></div>
+                            <div className="w-2 bg-white"></div>
+                            <div className="w-1.5 bg-white"></div>
+                            <div className="w-1 bg-white"></div>
+                            <div className="w-3 bg-white"></div>
+                            <div className="w-0.5 bg-white"></div>
+                            <div className="w-2 bg-white"></div>
+                            <div className="w-1 bg-white"></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <DialogFooter className="mt-4 gap-2">
+                        <Button variant="outline" onClick={() => setSelectedBookingForBoleto(null)}>
+                          Fechar
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            markBoletoAsGenerated(selectedBookingForBoleto.id);
+                            setSelectedBookingForBoleto(null);
+                            toast.success("Boleto bancário gerado com sucesso! Arquivo PDF mockado baixado.");
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <FileDown className="h-4 w-4" />
+                          Gerar e Baixar Boleto (PDF)
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </>
               );
             })()}
