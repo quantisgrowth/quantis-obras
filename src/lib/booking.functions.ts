@@ -1467,7 +1467,19 @@ export const addMoldingCycle = createServerFn({ method: "POST" })
       throw new Error("Acesso negado: Perfil de técnico não encontrado.");
     }
 
-    const { error } = await supabase
+    // Fetch agendamento details (data_servico and idades_selecionadas)
+    const { data: booking, error: bookingErr } = await supabase
+      .from("agendamentos_medicoes")
+      .select("data_servico, idades_selecionadas")
+      .eq("id", input.bookingId)
+      .single();
+
+    if (bookingErr || !booking) {
+      throw new Error("Agendamento não encontrado.");
+    }
+
+    // Insert into historico_fotos
+    const { error: photoErr } = await supabase
       .from("historico_fotos")
       .insert({
         agendamento_id: input.bookingId,
@@ -1485,7 +1497,58 @@ export const addMoldingCycle = createServerFn({ method: "POST" })
         },
       });
 
-    if (error) throw error;
+    if (photoErr) throw photoErr;
+
+    // Insert into public.caminhoes_concretagem
+    const { data: caminhao, error: caminhaoErr } = await (supabase as any)
+      .from("caminhoes_concretagem")
+      .insert({
+        agendamento_id: input.bookingId,
+        numero_caminhao: parseInt(input.numeroCaminhao) || null,
+        numero_lacre: input.numeroCaminhao,
+        nota_fiscal_concreto: input.notaFiscal,
+        elemento_estrutural: input.pecaConcretada,
+        slump_test_mm: input.slump,
+        hora_moldagem: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (caminhaoErr) throw caminhaoErr;
+
+    // Distribute CPs to target ages
+    const targetAges = booking.idades_selecionadas || [7, 28];
+    const dataMoldagemStr = booking.data_servico; // "YYYY-MM-DD"
+    const dataMoldagem = new Date(dataMoldagemStr + "T12:00:00"); // avoid timezone offsets
+
+    const cpInserts = input.codigosBarras.map((barcode, idx) => {
+      // Even distribution: e.g., 4 CPs with ages [7, 28] -> 2 for 7, 2 for 28.
+      const ageIndex = Math.min(
+        Math.floor(idx / Math.ceil(input.codigosBarras.length / targetAges.length)),
+        targetAges.length - 1
+      );
+      const age = targetAges[ageIndex];
+      
+      const dataPrevista = new Date(dataMoldagem.getTime());
+      dataPrevista.setDate(dataPrevista.getDate() + age);
+      
+      return {
+        agendamento_id: input.bookingId,
+        caminhao_id: caminhao.id,
+        codigo_barras: barcode,
+        idade_alvo_dias: age,
+        data_moldagem: dataMoldagemStr,
+        data_prevista_rompimento: dataPrevista.toISOString().split("T")[0],
+        status: "Moldado"
+      };
+    });
+
+    const { error: cpsErr } = await (supabase as any)
+      .from("corpos_prova")
+      .insert(cpInserts);
+
+    if (cpsErr) throw cpsErr;
+
     return { success: true };
   });
 
@@ -2457,7 +2520,7 @@ export const getFinancialSummary = createServerFn({ method: "POST" })
 
     const { data: bookings, error } = await supabase
       .from("agendamentos_medicoes")
-      .select("id, codigo_pedido, data_servico, valor_total, status_pagamento, status_agendamento, servico_id, empresa_id, empresa:empresas_clientes(id, razao_social), servico:servicos_catalogo_pub(id, nome_servico, sku)");
+      .select("id, codigo_pedido, data_servico, valor_total, status_pagamento, status_agendamento, servico_id, empresa_id, forma_pagamento, quantidade_parcelas, empresa:empresas_clientes(id, razao_social), servico:servicos_catalogo_pub(id, nome_servico, sku)");
 
     if (error) throw error;
 
@@ -2984,6 +3047,191 @@ export const cancelarAtendimentoAtrasado = createServerFn({ method: "POST" })
     if (alertError) throw alertError;
 
     return { success: true };
+  });
+
+export const registerLaboratoryArrival = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    codigoBarras: z.string(),
+    localizacaoEstufa: z.string(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    const { data: cp, error: findErr } = await (supabase as any)
+      .from("corpos_prova")
+      .select("id, agendamento_id")
+      .eq("codigo_barras", input.codigoBarras)
+      .maybeSingle();
+
+    if (findErr) throw findErr;
+    if (!cp) throw new Error("Corpo de prova não encontrado com este código de barras.");
+
+    const { error: updateErr } = await (supabase as any)
+      .from("corpos_prova")
+      .update({
+        status: "Estufa",
+        localizacao_estufa: input.localizacaoEstufa,
+      })
+      .eq("id", cp.id);
+
+    if (updateErr) throw updateErr;
+
+    const { data: booking } = await supabase
+      .from("agendamentos_medicoes")
+      .select("status_agendamento")
+      .eq("id", cp.agendamento_id)
+      .single();
+
+    if (booking && ["Confirmado", "Em_Execucao", "Aguardando_Medicao"].includes(booking.status_agendamento)) {
+      await supabase
+        .from("agendamentos_medicoes")
+        .update({ status_agendamento: "Laboratorio" })
+        .eq("id", cp.agendamento_id);
+    }
+
+    return { success: true };
+  });
+
+export const registerSpecimenCrushing = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    codigoBarras: z.string(),
+    cargaRupturaKn: z.number(),
+    diametroMm: z.number(),
+    alturaMm: z.number(),
+    tipoRuptura: z.string(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+
+    const { data: cp, error: cpErr } = await (supabase as any)
+      .from("corpos_prova")
+      .select("id, agendamento_id, data_moldagem, idade_alvo_dias")
+      .eq("codigo_barras", input.codigoBarras)
+      .maybeSingle();
+
+    if (cpErr) throw cpErr;
+    if (!cp) throw new Error("Corpo de prova não encontrado.");
+
+    const radius = input.diametroMm / 2;
+    const areaMm2 = Math.PI * Math.pow(radius, 2);
+    const forceN = input.cargaRupturaKn * 1000;
+    const mpa = forceN / areaMm2;
+    const mpaRounded = Math.round(mpa * 10) / 10;
+
+    const { data: booking } = await supabase
+      .from("agendamentos_medicoes")
+      .select("*, servico:servicos_catalogo_pub(nome_servico, valor_cp_excedente)")
+      .eq("id", cp.agendamento_id)
+      .single();
+
+    let targetFck = 30;
+    if (booking?.servico?.nome_servico) {
+      const match = booking.servico.nome_servico.match(/fck\s*(\d+)/i);
+      if (match && match[1]) {
+        targetFck = parseInt(match[1]);
+      }
+    }
+
+    const targetPercentage = cp.idade_alvo_dias <= 7 ? 0.7 : 1.0;
+    const expectedMpa = targetFck * targetPercentage;
+    const isConforme = mpaRounded >= expectedMpa;
+    const statusConformidade = isConforme ? "Conforme" : "Abaixo_Fck_Esperado";
+
+    const { error: ensaioErr } = await (supabase as any)
+      .from("ensaios_rompimento")
+      .insert({
+        corpo_prova_id: cp.id,
+        carga_ruptura_kn: input.cargaRupturaKn,
+        diametro_mm: input.diametroMm,
+        altura_mm: input.alturaMm,
+        resistencia_mpa: mpaRounded,
+        tipo_ruptura: input.tipoRuptura,
+        operador_id: userId,
+        status_conformidade: statusConformidade,
+      });
+
+    if (ensaioErr) throw ensaioErr;
+
+    const { error: cpUpdateErr } = await (supabase as any)
+      .from("corpos_prova")
+      .update({ status: "Rompido" })
+      .eq("id", cp.id);
+
+    if (cpUpdateErr) throw cpUpdateErr;
+
+    const { data: siblingCps } = await (supabase as any)
+      .from("corpos_prova")
+      .select("status")
+      .eq("agendamento_id", cp.agendamento_id);
+
+    const allFinished = (siblingCps || []).every((c: any) => ["Rompido", "Perdido"].includes(c.status));
+    if (allFinished && booking) {
+      const CPsValidos = (siblingCps || []).filter((c: any) => c.status !== "Perdido").length;
+      const contratados = booking.cps_contratados || 0;
+      const valorSubtotal = booking.valor_subtotal || 0;
+      
+      let valorTotal = booking.valor_total || valorSubtotal;
+      
+      if (CPsValidos > contratados) {
+        const excedente = CPsValidos - contratados;
+        const valorExcedenteCp = booking.servico?.valor_cp_excedente || 0;
+        const valorJurosTotal = booking.valor_juros_total || 0;
+        const subtotalComExcedente = valorSubtotal + (excedente * valorExcedenteCp);
+        valorTotal = subtotalComExcedente + valorJurosTotal;
+      }
+
+      await supabase
+        .from("agendamentos_medicoes")
+        .update({ 
+          status_agendamento: "Validado",
+          valor_total: valorTotal,
+          cps_moldados_real: CPsValidos
+        })
+        .eq("id", cp.agendamento_id);
+    }
+
+    return { 
+      success: true, 
+      resistenciaMpa: mpaRounded, 
+      conformidade: statusConformidade,
+      fckProjeto: targetFck
+    };
+  });
+
+export const getWeeklyCrushingSchedule = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase } = context;
+
+    const { data: cps, error } = await (supabase as any)
+      .from("corpos_prova")
+      .select(`
+        id,
+        codigo_barras,
+        idade_alvo_dias,
+        data_moldagem,
+        data_prevista_rompimento,
+        status,
+        localizacao_estufa,
+        agendamento:agendamentos_medicoes(
+          id,
+          codigo_pedido,
+          obra:obras(nome_obra, cidade),
+          servico:servicos_catalogo_pub(nome_servico)
+        ),
+        ensaio:ensaios_rompimento(
+          resistencia_mpa,
+          carga_ruptura_kn,
+          status_conformidade
+        )
+      `)
+      .order("data_prevista_rompimento", { ascending: true });
+
+    if (error) throw error;
+
+    return { success: true, schedule: cps || [] };
   });
 
 

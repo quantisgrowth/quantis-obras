@@ -32,7 +32,8 @@ import {
   CalendarPlus,
   ShieldAlert,
   Clock,
-  PlusCircle
+  PlusCircle,
+  FlaskConical
 } from "lucide-react";
 
 type NovoAgendamentoSearch = {
@@ -425,7 +426,7 @@ function NovoAgendamento() {
       }
 
       if (profile?.empresa_id) {
-        const { data: empData } = await supabase.from("empresas_clientes").select("formas_pagamento_habilitadas, regras_parcelamento").eq("id", profile.empresa_id).single();
+        const { data: empData } = await (supabase as any).from("empresas_clientes").select("formas_pagamento_habilitadas, regras_parcelamento").eq("id", profile.empresa_id).single();
         if (empData) {
           const habilitadas = empData.formas_pagamento_habilitadas || ["Boleto_28", "Pix", "Cartao", "Dinheiro"];
           setFormasPagamentoDisponiveis(habilitadas);
@@ -469,6 +470,7 @@ function NovoAgendamento() {
           categoria: "Arrancamento",
           ativo: true,
           created_at: null,
+          valor_cp_excedente: null,
         });
       }
 
@@ -2243,9 +2245,9 @@ function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps)
         horario_na_obra: horarioNaObra + ":00",
         horario_saida_lab: horarioSaida,
         tecnico_id: (selectedTecnicoId && selectedTecnicoId !== "none") ? selectedTecnicoId : null,
-        status_agendamento: statusAgendamento,
-        status_pagamento: statusPagamento,
-        forma_pagamento: formaPagamento,
+        status_agendamento: statusAgendamento as any,
+        status_pagamento: statusPagamento as any,
+        forma_pagamento: formaPagamento as any,
         quantidade_parcelas: quantidadeParcelasAdmin,
         valor_entrada: 0,
         valor_juros_total: 0,
@@ -2276,7 +2278,7 @@ function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps)
         }
       };
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("agendamentos_medicoes")
         .insert(insertPayload);
 
