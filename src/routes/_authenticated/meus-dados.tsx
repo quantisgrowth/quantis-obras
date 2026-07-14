@@ -191,14 +191,32 @@ function MeusDadosPage() {
   const fetchTeam = async (compId: string) => {
     try {
       setLoadingTeam(true);
-      const { data, error } = await supabase
+      // 1. Fetch profiles under the company
+      const { data: profiles, error: profilesErr } = await supabase
         .from("profiles")
         .select("id, nome_completo, telefone, sub_role, permissoes, created_at")
         .eq("empresa_id", compId)
         .order("nome_completo", { ascending: true });
 
-      if (error) throw error;
-      setTeam((data || []) as TeamMember[]);
+      if (profilesErr) throw profilesErr;
+
+      // 2. Fetch user roles for these profiles and filter to only show 'cliente' role users
+      if (profiles && profiles.length > 0) {
+        const profileIds = profiles.map((p) => p.id);
+        const { data: rolesData, error: rolesErr } = await supabase
+          .from("user_roles")
+          .select("user_id, role")
+          .in("user_id", profileIds)
+          .eq("role", "cliente");
+
+        if (rolesErr) throw rolesErr;
+
+        const clienteUserIds = new Set((rolesData || []).map((r) => r.user_id));
+        const filteredTeam = profiles.filter((p) => clienteUserIds.has(p.id));
+        setTeam(filteredTeam as TeamMember[]);
+      } else {
+        setTeam([]);
+      }
     } catch (err: any) {
       console.error("Erro ao carregar equipe:", err);
       toast.error("Erro ao carregar equipe: " + err.message);
