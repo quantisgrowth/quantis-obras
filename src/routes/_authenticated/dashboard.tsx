@@ -4291,6 +4291,13 @@ function AdminDash() {
   const [clienteCnpj, setClienteCnpj] = useState("");
   const [clienteRequerAprovacaoTecnico, setClienteRequerAprovacaoTecnico] = useState(false);
   const [clienteFormasPagamento, setClienteFormasPagamento] = useState<string[]>(["Boleto_28", "Pix", "Cartao", "Dinheiro"]);
+  // Installment config states
+  const [clienteParcelamentoHabilitado, setClienteParcelamentoHabilitado] = useState(false);
+  const [clienteParcelamentoPrazoPrimeiro, setClienteParcelamentoPrazoPrimeiro] = useState(7);
+  const [clienteParcelamentoValorMin, setClienteParcelamentoValorMin] = useState(150);
+  const [clienteParcelamentoTaxaJuros, setClienteParcelamentoTaxaJuros] = useState(0);
+  const [clienteParcelamentoEntradaPct, setClienteParcelamentoEntradaPct] = useState(0);
+  const [clienteParcelamentoFaixas, setClienteParcelamentoFaixas] = useState<{valor_minimo: number; max_parcelas: number}[]>([]);
 
   // Admin Agendamentos panel states
   const [adminAgendamentos, setAdminAgendamentos] = useState<any[]>([]);
@@ -4445,6 +4452,14 @@ function AdminDash() {
         cnpj: clienteCnpj,
         requer_aprovacao_tecnico: clienteRequerAprovacaoTecnico,
         formas_pagamento_habilitadas: clienteFormasPagamento,
+        regras_parcelamento: {
+          habilitado: clienteParcelamentoHabilitado,
+          prazo_primeiro_vencimento_dias: clienteParcelamentoPrazoPrimeiro,
+          valor_minimo_parcela: clienteParcelamentoValorMin,
+          taxa_juros_mensal: clienteParcelamentoTaxaJuros,
+          entrada_percentual: clienteParcelamentoEntradaPct,
+          faixas: clienteParcelamentoFaixas,
+        },
       };
 
       if (clienteId) {
@@ -4502,6 +4517,12 @@ function AdminDash() {
     setClienteCnpj("");
     setClienteRequerAprovacaoTecnico(false);
     setClienteFormasPagamento(["Boleto_28", "Pix", "Cartao", "Dinheiro"]);
+    setClienteParcelamentoHabilitado(false);
+    setClienteParcelamentoPrazoPrimeiro(7);
+    setClienteParcelamentoValorMin(150);
+    setClienteParcelamentoTaxaJuros(0);
+    setClienteParcelamentoEntradaPct(0);
+    setClienteParcelamentoFaixas([]);
     setClienteViewMode("form");
     setClienteDialogOpen(true);
   };
@@ -4512,6 +4533,13 @@ function AdminDash() {
     setClienteCnpj(emp.cnpj);
     setClienteRequerAprovacaoTecnico(emp.requer_aprovacao_tecnico || false);
     setClienteFormasPagamento(emp.formas_pagamento_habilitadas || ["Boleto_28", "Pix", "Cartao", "Dinheiro"]);
+    const rp = emp.regras_parcelamento || {};
+    setClienteParcelamentoHabilitado(rp.habilitado || false);
+    setClienteParcelamentoPrazoPrimeiro(rp.prazo_primeiro_vencimento_dias ?? 7);
+    setClienteParcelamentoValorMin(rp.valor_minimo_parcela ?? 150);
+    setClienteParcelamentoTaxaJuros(rp.taxa_juros_mensal ?? 0);
+    setClienteParcelamentoEntradaPct(rp.entrada_percentual ?? 0);
+    setClienteParcelamentoFaixas(rp.faixas || []);
     setClienteViewMode("form");
     setClienteDialogOpen(true);
   };
@@ -4555,7 +4583,7 @@ function AdminDash() {
     try {
       const { data, error } = await supabase
         .from("empresas_clientes")
-        .select("id, razao_social, cnpj, requer_aprovacao_tecnico, formas_pagamento_habilitadas")
+        .select("id, razao_social, cnpj, requer_aprovacao_tecnico, formas_pagamento_habilitadas, regras_parcelamento")
         .order("razao_social", { ascending: true });
       if (!error && data) {
         setEmpresasClientes(data);
@@ -8672,16 +8700,25 @@ function AdminDash() {
           // Full-page form view
           if (clienteViewMode === "form") {
             const allPaymentMethods = [
-              { id: "Boleto_28", label: "Faturado (Boleto 28 Dias)", description: "Pagamento via boleto bancário com vencimento em 28 dias após execução" },
-              { id: "Pix",       label: "Pix (à Vista)",              description: "Liquidação imediata via transferência Pix — geralmente com desconto" },
-              { id: "Cartao",    label: "Cartão de Crédito",          description: "Parcelamento via maquininha ou link de pagamento" },
-              { id: "Dinheiro",  label: "Dinheiro / À Vista",         description: "Pagamento presencial em espécie ou transferência direta" },
+              { id: "Boleto_Vista", label: "Boleto à Vista",     description: "Pagamento via boleto com vencimento imediato após a execução" },
+              { id: "Boleto_7",     label: "Boleto 7 dias",      description: "Boleto com vencimento 7 dias após a execução do serviço" },
+              { id: "Boleto_14",    label: "Boleto 14 dias",     description: "Boleto com vencimento 14 dias após a execução do serviço" },
+              { id: "Boleto_21",    label: "Boleto 21 dias",     description: "Boleto com vencimento 21 dias após a execução do serviço" },
+              { id: "Boleto_28",    label: "Boleto 28 dias",     description: "Boleto com vencimento 28 dias após a execução do serviço" },
+              { id: "Pix",          label: "Pix (à Vista)",      description: "Liquidação imediata via transferência Pix — geralmente com desconto" },
+              { id: "Cartao",       label: "Cartão de Crédito",  description: "Pagamento via maquininha ou link de pagamento parcelado" },
+              { id: "Dinheiro",     label: "Dinheiro / À Vista", description: "Pagamento presencial em espécie ou transferência direta" },
             ];
             const togglePagamento = (id: string) => {
               setClienteFormasPagamento(prev =>
                 prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
               );
             };
+            const temBoleto = clienteFormasPagamento.some(f => f.startsWith("Boleto"));
+            const addFaixa = () => setClienteParcelamentoFaixas(prev => [...prev, { valor_minimo: 0, max_parcelas: 2 }]);
+            const removeFaixa = (idx: number) => setClienteParcelamentoFaixas(prev => prev.filter((_, i) => i !== idx));
+            const updateFaixa = (idx: number, field: string, value: number) =>
+              setClienteParcelamentoFaixas(prev => prev.map((f, i) => i === idx ? { ...f, [field]: value } : f));
 
             return (
               <div className="space-y-6 animate-in fade-in-50 duration-200">
@@ -8830,6 +8867,145 @@ function AdminDash() {
                     </CardContent>
                   </Card>
 
+                  {/* Seção 4: Configuração de Parcelamento */}
+                  {temBoleto && (
+                    <Card className="border border-border bg-card">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base font-bold flex items-center gap-2">
+                          <CalendarPlus className="h-4 w-4 text-primary" /> Configuração de Parcelamento
+                        </CardTitle>
+                        <CardDescription>Defina as regras de parcelamento de boleto disponíveis para esta empresa.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-5">
+                        {/* Toggle habilitar */}
+                        <label htmlFor="cli-parc-hab" className="flex items-start justify-between gap-4 cursor-pointer p-4 rounded-xl border border-border bg-card hover:bg-accent/30 transition-all group">
+                          <div className="space-y-0.5">
+                            <p className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">Habilitar parcelamento de boleto</p>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">Quando ativo, o cliente poderá escolher parcelar o valor total do serviço em múltiplos boletos.</p>
+                          </div>
+                          <div className="pt-0.5 shrink-0">
+                            <input type="checkbox" id="cli-parc-hab" className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary" checked={clienteParcelamentoHabilitado} onChange={(e) => setClienteParcelamentoHabilitado(e.target.checked)} />
+                          </div>
+                        </label>
+
+                        {clienteParcelamentoHabilitado && (
+                          <div className="space-y-5 animate-in fade-in-0 duration-200">
+                            {/* Parâmetros gerais */}
+                            <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-4">
+                              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Parâmetros Gerais</p>
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="space-y-1.5">
+                                  <Label className="font-bold text-sm">Prazo do 1º Vencimento</Label>
+                                  <select
+                                    value={clienteParcelamentoPrazoPrimeiro}
+                                    onChange={(e) => setClienteParcelamentoPrazoPrimeiro(Number(e.target.value))}
+                                    className="w-full h-10 rounded-md border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                  >
+                                    <option value={0}>Imediato (0 dias após o serviço)</option>
+                                    <option value={7}>7 dias após o serviço</option>
+                                    <option value={14}>14 dias após o serviço</option>
+                                    <option value={21}>21 dias após o serviço</option>
+                                    <option value={28}>28 dias após o serviço</option>
+                                  </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="font-bold text-sm">Valor Mínimo por Parcela (R$)</Label>
+                                  <Input type="number" min={0} step={10} value={clienteParcelamentoValorMin} onChange={(e) => setClienteParcelamentoValorMin(Number(e.target.value))} placeholder="150" className="h-10" />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="font-bold text-sm">Taxa de Juros Mensal (%)</Label>
+                                  <div className="relative">
+                                    <Input type="number" min={0} step={0.1} value={clienteParcelamentoTaxaJuros} onChange={(e) => setClienteParcelamentoTaxaJuros(Number(e.target.value))} placeholder="0" className="h-10 pr-8" />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold">%</span>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground">0% = sem juros. Os juros são calculados como juros simples e acrescidos ao valor de cada parcela.</p>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="font-bold text-sm">Entrada Obrigatória (%)</Label>
+                                  <div className="relative">
+                                    <Input type="number" min={0} max={90} step={1} value={clienteParcelamentoEntradaPct} onChange={(e) => setClienteParcelamentoEntradaPct(Number(e.target.value))} placeholder="0" className="h-10 pr-8" />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold">%</span>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground">Percentual do valor total pago no ato do agendamento. 0% = sem entrada.</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Faixas de parcelamento */}
+                            <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Faixas de Parcelamento</p>
+                                <button type="button" onClick={addFaixa} className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer">
+                                  <Plus className="h-3.5 w-3.5" /> Adicionar Faixa
+                                </button>
+                              </div>
+                              {clienteParcelamentoFaixas.length === 0 ? (
+                                <p className="text-[11px] text-muted-foreground italic text-center py-3">Nenhuma faixa definida. Adicione ao menos uma faixa para habilitar o parcelamento.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {clienteParcelamentoFaixas.map((faixa, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 rounded-lg border border-border bg-card p-3">
+                                      <span className="text-xs text-muted-foreground shrink-0">Acima de</span>
+                                      <div className="relative flex-1 min-w-0">
+                                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">R$</span>
+                                        <input
+                                          type="number" min={0} step={100}
+                                          value={faixa.valor_minimo}
+                                          onChange={(e) => updateFaixa(idx, "valor_minimo", Number(e.target.value))}
+                                          className="w-full h-8 rounded-md border border-border bg-transparent pl-8 pr-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                        />
+                                      </div>
+                                      <span className="text-xs text-muted-foreground shrink-0">→ até</span>
+                                      <select
+                                        value={faixa.max_parcelas}
+                                        onChange={(e) => updateFaixa(idx, "max_parcelas", Number(e.target.value))}
+                                        className="h-8 rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                      >
+                                        {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}x</option>)}
+                                      </select>
+                                      <button type="button" onClick={() => removeFaixa(idx)} className="shrink-0 p-1.5 rounded-md text-destructive hover:bg-destructive/10 transition-colors cursor-pointer">
+                                        <X className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {clienteParcelamentoHabilitado && clienteParcelamentoFaixas.length === 0 && (
+                                <p className="text-[10px] text-amber-600 font-semibold flex items-center gap-1">
+                                  <AlertTriangle className="h-3 w-3" /> Adicione ao menos uma faixa para que o parcelamento seja oferecido ao cliente.
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Preview do cálculo */}
+                            {clienteParcelamentoFaixas.length > 0 && (
+                              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
+                                <p className="text-xs font-bold uppercase tracking-wider text-primary">Exemplo de Cálculo</p>
+                                {(() => {
+                                  const exValor = clienteParcelamentoFaixas[clienteParcelamentoFaixas.length - 1]?.valor_minimo || 1000;
+                                  const entrada = exValor * (clienteParcelamentoEntradaPct / 100);
+                                  const saldo = exValor - entrada;
+                                  const maxParcelas = clienteParcelamentoFaixas[clienteParcelamentoFaixas.length - 1]?.max_parcelas || 2;
+                                  const juros = saldo * (clienteParcelamentoTaxaJuros / 100) * maxParcelas;
+                                  const totalComJuros = saldo + juros;
+                                  const valorParcela = totalComJuros / maxParcelas;
+                                  return (
+                                    <div className="text-[11px] text-muted-foreground space-y-1">
+                                      <p>Para um serviço de <strong>R$ {exValor.toLocaleString('pt-BR', {minimumFractionDigits:2})}</strong>:</p>
+                                      {entrada > 0 && <p>• Entrada: <strong>R$ {entrada.toLocaleString('pt-BR', {minimumFractionDigits:2})}</strong></p>}
+                                      <p>• {maxParcelas}x de <strong>R$ {valorParcela.toLocaleString('pt-BR', {minimumFractionDigits:2})}</strong>{clienteParcelamentoTaxaJuros > 0 ? ` (${clienteParcelamentoTaxaJuros}% a.m.)` : ' sem juros'}</p>
+                                      <p>• Total: <strong>R$ {(entrada + totalComJuros).toLocaleString('pt-BR', {minimumFractionDigits:2})}</strong></p>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Actions */}
                   <div className="flex justify-end gap-3 pt-2">
                     <Button
@@ -8919,6 +9095,7 @@ function AdminDash() {
                           <th className="p-4">Razão Social</th>
                           <th className="p-4">CNPJ</th>
                           <th className="p-4 text-center">Formas de Pagamento</th>
+                          <th className="p-4 text-center">Parcelamento</th>
                           <th className="p-4 text-center">Aprovação Alocação</th>
                           <th className="p-4 text-center">Ações</th>
                         </tr>
@@ -8927,11 +9104,14 @@ function AdminDash() {
                         {filteredClientes.map((emp) => {
                           const formas: string[] = emp.formas_pagamento_habilitadas || ["Boleto_28", "Pix", "Cartao", "Dinheiro"];
                           const formaLabels: Record<string, string> = {
-                            Boleto_28: "Boleto",
-                            Pix: "Pix",
-                            Cartao: "Cartão",
-                            Dinheiro: "Dinheiro",
+                            Boleto_Vista: "Boleto à Vista", Boleto_7: "Boleto 7d", Boleto_14: "Boleto 14d",
+                            Boleto_21: "Boleto 21d", Boleto_28: "Boleto 28d",
+                            Pix: "Pix", Cartao: "Cartão", Dinheiro: "Dinheiro",
                           };
+                          const rp = emp.regras_parcelamento || {};
+                          const maxParcelas = rp.habilitado && rp.faixas?.length > 0
+                            ? Math.max(...rp.faixas.map((f: any) => f.max_parcelas))
+                            : null;
                           return (
                             <tr key={emp.id} className="hover:bg-muted/10 transition-colors">
                               <td className="p-4 font-bold text-foreground">
@@ -8948,6 +9128,13 @@ function AdminDash() {
                                     </span>
                                   ))}
                                 </div>
+                              </td>
+                              <td className="p-4 text-center">
+                                {maxParcelas ? (
+                                  <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 font-bold text-[10px]">Até {maxParcelas}x</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-muted-foreground font-medium text-[10px]">—</Badge>
+                                )}
                               </td>
                               <td className="p-4 text-center">
                                 {emp.requer_aprovacao_tecnico ? (
