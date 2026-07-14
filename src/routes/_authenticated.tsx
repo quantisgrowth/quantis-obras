@@ -87,6 +87,24 @@ function AuthLayout() {
           <nav className="flex flex-col gap-1 mt-2">
             {/* ADMIN NAV */}
             {role === "admin" && (() => {
+              const isLaboratorist = profile?.sub_role === "laboratorista";
+
+              if (isLaboratorist) {
+                return (
+                  <Link
+                    to="/laboratorio"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      isRouteActive("/laboratorio")
+                        ? "bg-primary/10 text-primary border-primary/20 font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                    }`}
+                  >
+                    <FlaskConical className="h-4 w-4 shrink-0" />
+                    <span>Operação Laboratório</span>
+                  </Link>
+                );
+              }
+
               const adminSidebarItems = [
                 { id: "agendamentos", label: "Gestão de Escala", icon: ClipboardList },
                 { id: "tecnicos", label: "Gestão de Técnicos", icon: Users },
@@ -101,7 +119,6 @@ function AuthLayout() {
                 { id: "configuracoes", label: "Configurações Globais", icon: Settings },
                 { id: "produtos", label: "Produtos e Serviços", icon: FlaskConical },
                 { id: "financeiro", label: "Módulo Financeiro", icon: BarChart3 },
-                { id: "laboratorio", label: "Operação Laboratório", icon: FlaskConical },
               ];
 
               return (
@@ -167,6 +184,18 @@ function AuthLayout() {
                   >
                     <CalendarPlus className="h-4 w-4 shrink-0" />
                     <span>Agendamento Manual</span>
+                  </Link>
+
+                  <Link
+                    to="/laboratorio"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      isRouteActive("/laboratorio")
+                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                    }`}
+                  >
+                    <FlaskConical className="h-4 w-4 shrink-0" />
+                    <span>Operação Laboratório</span>
                   </Link>
                 </>
               );
