@@ -18,6 +18,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedNovoAgendamentoRouteImport } from './routes/_authenticated/novo-agendamento'
 import { Route as AuthenticatedMinhasObrasRouteImport } from './routes/_authenticated/minhas-obras'
 import { Route as AuthenticatedMeusDadosRouteImport } from './routes/_authenticated/meus-dados'
+import { Route as AuthenticatedLaboratorioRouteImport } from './routes/_authenticated/laboratorio'
 import { Route as AuthenticatedFinanceiroClienteRouteImport } from './routes/_authenticated/financeiro-cliente'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCrmRouteImport } from './routes/_authenticated/crm'
@@ -68,6 +69,12 @@ const AuthenticatedMeusDadosRoute = AuthenticatedMeusDadosRouteImport.update({
   path: '/meus-dados',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedLaboratorioRoute =
+  AuthenticatedLaboratorioRouteImport.update({
+    id: '/laboratorio',
+    path: '/laboratorio',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedFinanceiroClienteRoute =
   AuthenticatedFinanceiroClienteRouteImport.update({
     id: '/financeiro-cliente',
@@ -94,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/financeiro-cliente': typeof AuthenticatedFinanceiroClienteRoute
+  '/laboratorio': typeof AuthenticatedLaboratorioRoute
   '/meus-dados': typeof AuthenticatedMeusDadosRoute
   '/minhas-obras': typeof AuthenticatedMinhasObrasRoute
   '/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
@@ -107,6 +115,7 @@ export interface FileRoutesByTo {
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/financeiro-cliente': typeof AuthenticatedFinanceiroClienteRoute
+  '/laboratorio': typeof AuthenticatedLaboratorioRoute
   '/meus-dados': typeof AuthenticatedMeusDadosRoute
   '/minhas-obras': typeof AuthenticatedMinhasObrasRoute
   '/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
@@ -122,6 +131,7 @@ export interface FileRoutesById {
   '/_authenticated/crm': typeof AuthenticatedCrmRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/financeiro-cliente': typeof AuthenticatedFinanceiroClienteRoute
+  '/_authenticated/laboratorio': typeof AuthenticatedLaboratorioRoute
   '/_authenticated/meus-dados': typeof AuthenticatedMeusDadosRoute
   '/_authenticated/minhas-obras': typeof AuthenticatedMinhasObrasRoute
   '/_authenticated/novo-agendamento': typeof AuthenticatedNovoAgendamentoRoute
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/crm'
     | '/dashboard'
     | '/financeiro-cliente'
+    | '/laboratorio'
     | '/meus-dados'
     | '/minhas-obras'
     | '/novo-agendamento'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/crm'
     | '/dashboard'
     | '/financeiro-cliente'
+    | '/laboratorio'
     | '/meus-dados'
     | '/minhas-obras'
     | '/novo-agendamento'
@@ -164,6 +176,7 @@ export interface FileRouteTypes {
     | '/_authenticated/crm'
     | '/_authenticated/dashboard'
     | '/_authenticated/financeiro-cliente'
+    | '/_authenticated/laboratorio'
     | '/_authenticated/meus-dados'
     | '/_authenticated/minhas-obras'
     | '/_authenticated/novo-agendamento'
@@ -243,6 +256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMeusDadosRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/laboratorio': {
+      id: '/_authenticated/laboratorio'
+      path: '/laboratorio'
+      fullPath: '/laboratorio'
+      preLoaderRoute: typeof AuthenticatedLaboratorioRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/financeiro-cliente': {
       id: '/_authenticated/financeiro-cliente'
       path: '/financeiro-cliente'
@@ -271,6 +291,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCrmRoute: typeof AuthenticatedCrmRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedFinanceiroClienteRoute: typeof AuthenticatedFinanceiroClienteRoute
+  AuthenticatedLaboratorioRoute: typeof AuthenticatedLaboratorioRoute
   AuthenticatedMeusDadosRoute: typeof AuthenticatedMeusDadosRoute
   AuthenticatedMinhasObrasRoute: typeof AuthenticatedMinhasObrasRoute
   AuthenticatedNovoAgendamentoRoute: typeof AuthenticatedNovoAgendamentoRoute
@@ -280,6 +301,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCrmRoute: AuthenticatedCrmRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedFinanceiroClienteRoute: AuthenticatedFinanceiroClienteRoute,
+  AuthenticatedLaboratorioRoute: AuthenticatedLaboratorioRoute,
   AuthenticatedMeusDadosRoute: AuthenticatedMeusDadosRoute,
   AuthenticatedMinhasObrasRoute: AuthenticatedMinhasObrasRoute,
   AuthenticatedNovoAgendamentoRoute: AuthenticatedNovoAgendamentoRoute,
