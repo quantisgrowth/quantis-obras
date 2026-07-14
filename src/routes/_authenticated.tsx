@@ -5,7 +5,7 @@ import { useBranding } from "@/hooks/use-branding";
 import { Button } from "@/components/ui/button";
 import {
   FlaskConical, LogOut, LayoutDashboard, CalendarPlus, FolderKanban,
-  Building, Clock, Calendar, CheckCircle2, HardHat, Plus
+  Building, Clock, Calendar, CheckCircle2, HardHat, Plus, CircleDollarSign
 } from "lucide-react";
 import {
   AlertDialog,
