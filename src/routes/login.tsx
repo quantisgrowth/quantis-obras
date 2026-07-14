@@ -203,11 +203,6 @@ function LoginPage() {
                   "Entrar"
                 )}
               </Button>
-              {loginType === "cliente" && (
-                <p className="text-center text-sm text-muted-foreground pt-2">
-                  Ainda não tem conta? <Link to="/signup" className="font-semibold text-primary hover:underline">Criar conta</Link>
-                </p>
-              )}
             </form>
           </CardContent>
         </Card>
