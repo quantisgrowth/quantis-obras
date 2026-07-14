@@ -101,6 +101,7 @@ function AuthLayout() {
                 { id: "configuracoes", label: "Configurações Globais", icon: Settings },
                 { id: "produtos", label: "Produtos e Serviços", icon: FlaskConical },
                 { id: "financeiro", label: "Módulo Financeiro", icon: BarChart3 },
+                { id: "laboratorio", label: "Operação Laboratório", icon: FlaskConical },
               ];
 
               return (
