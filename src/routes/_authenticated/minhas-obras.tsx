@@ -85,6 +85,7 @@ function MinhasObrasPage() {
   const [cno, setCno] = useState("");
   const [responsavel, setResponsavel] = useState("");
   const [cargoResponsavel, setCargoResponsavel] = useState("");
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
 
   const loadObras = async () => {
     if (!user?.id) return;
@@ -113,6 +114,39 @@ function MinhasObrasPage() {
 
       if (obrasErr) throw obrasErr;
       setObras(obrasData || []);
+
+      // Fetch company team members (filtered to client role only)
+      const { data: profiles, error: teamErr } = await supabase
+        .from("profiles")
+        .select("id, nome_completo, sub_role, tecnico_id")
+        .eq("empresa_id", profile.empresa_id);
+
+      if (!teamErr && profiles && profiles.length > 0) {
+        const profileIds = profiles.map((p) => p.id);
+        const { data: rolesData } = await supabase
+          .from("user_roles")
+          .select("user_id, role")
+          .in("user_id", profileIds);
+
+        const userRolesMap = new Map<string, string[]>();
+        (rolesData || []).forEach((r) => {
+          const list = userRolesMap.get(r.user_id) || [];
+          list.push(r.role);
+          userRolesMap.set(r.user_id, list);
+        });
+
+        const filteredTeam = profiles.filter((p) => {
+          const userRoles = userRolesMap.get(p.id) || [];
+          const hasCliente = userRoles.includes("cliente");
+          const hasAdminOrTecnico = userRoles.includes("admin") || userRoles.includes("tecnico");
+          const hasNoTechnicianLink = !p.tecnico_id;
+          return hasCliente && !hasAdminOrTecnico && hasNoTechnicianLink;
+        });
+
+        setTeamMembers(filteredTeam);
+      } else {
+        setTeamMembers([]);
+      }
     } catch (err: any) {
       toast.error("Erro ao carregar obras: " + err.message);
     } finally {
@@ -476,22 +510,52 @@ function MinhasObrasPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="obra-resp">Responsável (Nome)</Label>
-                <Input
+                <select
                   id="obra-resp"
                   value={responsavel}
-                  onChange={(e) => setResponsavel(e.target.value)}
-                  placeholder="Ex: Eng. Ricardo Silva"
-                />
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setResponsavel(val);
+                    const selected = teamMembers.find(m => m.nome_completo === val);
+                    if (selected) {
+                      const cargoLabel = selected.sub_role === "master" ? "Master" : 
+                                         selected.sub_role === "engenheiro" ? "Engenheiro" : 
+                                         selected.sub_role === "financeiro" ? "Financeiro" : 
+                                         "Membro";
+                      setCargoResponsavel(cargoLabel);
+                    }
+                  }}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">Selecione um responsável...</option>
+                  {teamMembers.map((member) => (
+                    <option key={member.id} value={member.nome_completo}>
+                      {member.nome_completo}
+                    </option>
+                  ))}
+                  {responsavel && !teamMembers.some(m => m.nome_completo === responsavel) && (
+                    <option value={responsavel}>{responsavel}</option>
+                  )}
+                </select>
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="obra-cargo">Cargo Responsável</Label>
-                <Input
+                <select
                   id="obra-cargo"
                   value={cargoResponsavel}
                   onChange={(e) => setCargoResponsavel(e.target.value)}
-                  placeholder="Ex: Engenheiro Residente"
-                />
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">Selecione o cargo...</option>
+                  <option value="Master">Master</option>
+                  <option value="Engenheiro">Engenheiro</option>
+                  <option value="Financeiro">Financeiro</option>
+                  <option value="Membro">Membro</option>
+                  {cargoResponsavel && !["Master", "Engenheiro", "Financeiro", "Membro"].includes(cargoResponsavel) && (
+                    <option value={cargoResponsavel}>{cargoResponsavel}</option>
+                  )}
+                </select>
               </div>
             </div>
 
