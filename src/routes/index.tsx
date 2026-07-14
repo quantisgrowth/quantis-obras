@@ -143,7 +143,7 @@ function Index() {
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h2 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-              Dores que solucionamos por perfil
+              Principais desafios que ajudamos a Solucionar
             </h2>
             <p className="mt-4 text-muted-foreground">
               Entendemos os desafios do canteiro de obras e do laboratório. Veja como a plataforma simplifica a vida de cada envolvido.
