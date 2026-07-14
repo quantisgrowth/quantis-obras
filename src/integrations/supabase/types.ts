@@ -670,6 +670,8 @@ export type Database = {
           tecnico_id: string | null
           telefone: string | null
           updated_at: string
+          sub_role: string | null
+          permissoes: string[] | null
         }
         Insert: {
           created_at?: string
@@ -679,6 +681,8 @@ export type Database = {
           tecnico_id?: string | null
           telefone?: string | null
           updated_at?: string
+          sub_role?: string | null
+          permissoes?: string[] | null
         }
         Update: {
           created_at?: string
@@ -688,6 +692,8 @@ export type Database = {
           tecnico_id?: string | null
           telefone?: string | null
           updated_at?: string
+          sub_role?: string | null
+          permissoes?: string[] | null
         }
         Relationships: []
       }

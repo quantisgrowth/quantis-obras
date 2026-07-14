@@ -181,7 +181,16 @@ const STATUS_LABELS: Record<string, string> = {
 function ClienteDash({ email, userId }: { email: string; userId: string }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { profile, roles } = useAuth();
   const tab = (location.search as any)?.tab;
+
+  const role = primaryRole(roles);
+  const hasPermission = (permission: string) => {
+    if (role !== "cliente") return true;
+    if (!profile) return false;
+    if (profile.sub_role === "master") return true;
+    return profile.permissoes?.includes(permission) ?? false;
+  };
 
   const [agendamentos, setAgendamentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,6 +201,18 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
       setActiveTab(tab);
     }
   }, [tab]);
+
+  if (!hasPermission("dashboard")) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-6 text-center space-y-4 max-w-md mx-auto">
+        <div className="grid h-16 w-16 place-items-center rounded-full bg-destructive/10 text-destructive animate-pulse">
+          <HardHat className="h-8 w-8" />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-foreground">Acesso ao Painel Restrito</h2>
+        <p className="text-sm text-muted-foreground">Sua conta de usuário não possui permissão para visualizar o painel de acompanhamento de ensaios. Entre em contato com o gestor da sua conta.</p>
+      </div>
+    );
+  }
   const [clientCompany, setClientCompany] = useState<any>(null);
   const [approvingTec, setApprovingTec] = useState<string | null>(null);
   const [reallocatingTec, setReallocatingTec] = useState<string | null>(null);

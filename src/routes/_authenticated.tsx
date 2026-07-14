@@ -22,7 +22,7 @@ import {
 export const Route = createFileRoute("/_authenticated")({ component: AuthLayout });
 
 function AuthLayout() {
-  const { user, loading, roles, signOut } = useAuth();
+  const { user, loading, roles, profile, signOut } = useAuth();
   const { branding } = useBranding();
   const navigate = useNavigate();
   const location = useLocation();
@@ -37,6 +37,13 @@ function AuthLayout() {
 
   const role = primaryRole(roles);
   const roleLabel = role === "admin" ? "Administrador" : role === "tecnico" ? "Técnico" : "Cliente";
+
+  const hasPermission = (permission: string) => {
+    if (role !== "cliente") return true;
+    if (!profile) return false;
+    if (profile.sub_role === "master") return true;
+    return profile.permissoes?.includes(permission) ?? false;
+  };
 
   // Helper to check active status of main routes
   const isRouteActive = (path: string) => {
@@ -121,77 +128,87 @@ function AuthLayout() {
             {/* CLIENTE NAV */}
             {role === "cliente" && (
               <>
-                <Link
-                  to="/dashboard?tab=pendentes"
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isTabActive("pendentes")
-                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
-                  }`}
-                >
-                  <Clock className="h-4 w-4 shrink-0" />
-                  <span>Aguardando Técnico</span>
-                </Link>
+                {hasPermission("dashboard") && (
+                  <>
+                    <Link
+                      to="/dashboard?tab=pendentes"
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                        isTabActive("pendentes")
+                          ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                      }`}
+                    >
+                      <Clock className="h-4 w-4 shrink-0" />
+                      <span>Aguardando Técnico</span>
+                    </Link>
 
-                <Link
-                  to="/dashboard?tab=confirmados"
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isTabActive("confirmados")
-                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
-                  }`}
-                >
-                  <Calendar className="h-4 w-4 shrink-0" />
-                  <span>Confirmados</span>
-                </Link>
+                    <Link
+                      to="/dashboard?tab=confirmados"
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                        isTabActive("confirmados")
+                          ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                      }`}
+                    >
+                      <Calendar className="h-4 w-4 shrink-0" />
+                      <span>Confirmados</span>
+                    </Link>
 
-                <Link
-                  to="/dashboard?tab=realizados"
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isTabActive("realizados")
-                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
-                  }`}
-                >
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  <span>Realizados</span>
-                </Link>
+                    <Link
+                      to="/dashboard?tab=realizados"
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                        isTabActive("realizados")
+                          ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                      }`}
+                    >
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      <span>Realizados</span>
+                    </Link>
+                  </>
+                )}
 
-                <Link
-                  to="/financeiro-cliente"
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isRouteActive("/financeiro-cliente")
-                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
-                  }`}
-                >
-                  <CircleDollarSign className="h-4 w-4 shrink-0" />
-                  <span>Financeiro</span>
-                </Link>
+                {hasPermission("financeiro") && (
+                  <Link
+                    to="/financeiro-cliente"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      isRouteActive("/financeiro-cliente")
+                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                    }`}
+                  >
+                    <CircleDollarSign className="h-4 w-4 shrink-0" />
+                    <span>Financeiro</span>
+                  </Link>
+                )}
 
-                <Link
-                  to="/minhas-obras"
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isRouteActive("/minhas-obras")
-                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
-                  }`}
-                >
-                  <HardHat className="h-4 w-4 shrink-0" />
-                  <span>Minhas Obras</span>
-                </Link>
+                {hasPermission("obras") && (
+                  <Link
+                    to="/minhas-obras"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      isRouteActive("/minhas-obras")
+                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                    }`}
+                  >
+                    <HardHat className="h-4 w-4 shrink-0" />
+                    <span>Minhas Obras</span>
+                  </Link>
+                )}
 
-                <Link
-                  to="/novo-agendamento"
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
-                    isRouteActive("/novo-agendamento")
-                      ? "bg-primary/10 text-primary border-primary/20 font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
-                  }`}
-                >
-                  <CalendarPlus className="h-4 w-4 shrink-0" />
-                  <span>Novo Pedido</span>
-                </Link>
+                {hasPermission("pedidos") && (
+                  <Link
+                    to="/novo-agendamento"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      isRouteActive("/novo-agendamento")
+                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                    }`}
+                  >
+                    <CalendarPlus className="h-4 w-4 shrink-0" />
+                    <span>Novo Pedido</span>
+                  </Link>
+                )}
               </>
             )}
 
@@ -302,7 +319,7 @@ function AuthLayout() {
           </Link>
         )}
 
-        {role === "cliente" && (
+        {role === "cliente" && hasPermission("obras") && (
           <Link
             to="/minhas-obras"
             activeProps={{ className: "text-primary" }}
@@ -314,7 +331,7 @@ function AuthLayout() {
           </Link>
         )}
 
-        {role === "cliente" && (
+        {role === "cliente" && hasPermission("financeiro") && (
           <Link
             to="/financeiro-cliente"
             activeProps={{ className: "text-primary" }}
@@ -326,7 +343,7 @@ function AuthLayout() {
           </Link>
         )}
 
-        {(role === "cliente" || role === "admin") && (
+        {(role === "admin" || (role === "cliente" && hasPermission("pedidos"))) && (
           <Link
             to="/novo-agendamento"
             activeProps={{ className: "text-primary" }}

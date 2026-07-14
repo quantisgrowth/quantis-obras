@@ -24,6 +24,24 @@ function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Invite states
+  const [inviteEmpresaId, setInviteEmpresaId] = useState<string | null>(null);
+  const [inviteSubRole, setInviteSubRole] = useState<string | null>(null);
+  const [invitePermissions, setInvitePermissions] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const companyId = params.get("invite_empresa_id");
+    const subRole = params.get("sub_role");
+    const permissionsStr = params.get("permissions");
+
+    if (companyId) setInviteEmpresaId(companyId);
+    if (subRole) setInviteSubRole(subRole);
+    if (permissionsStr) {
+      setInvitePermissions(permissionsStr.split(","));
+    }
+  }, []);
+
   useEffect(() => {
     if (user) navigate({ to: "/dashboard", replace: true });
   }, [user, navigate]);
@@ -31,12 +49,28 @@ function SignupPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+
+    const signUpData: any = {
+      nome_completo: nome,
+      telefone,
+    };
+
+    if (inviteEmpresaId) {
+      signUpData.empresa_id = inviteEmpresaId;
+    }
+    if (inviteSubRole) {
+      signUpData.sub_role = inviteSubRole;
+    }
+    if (invitePermissions) {
+      signUpData.permissoes = invitePermissions;
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { nome_completo: nome, telefone },
+        data: signUpData,
       },
     });
     setLoading(false);
@@ -56,7 +90,11 @@ function SignupPage() {
             <FlaskConical className="h-6 w-6" />
           </div>
           <CardTitle>Criar conta</CardTitle>
-          <CardDescription>Como Cliente (Engenheiro/Comprador). Técnicos e Admins são cadastrados pelo gestor.</CardDescription>
+          <CardDescription>
+            {inviteEmpresaId 
+              ? "Você foi convidado para se juntar à equipe de uma empresa. Preencha seus dados de acesso para concluir." 
+              : "Como Cliente (Engenheiro/Comprador). Técnicos e Admins são cadastrados pelo gestor."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">

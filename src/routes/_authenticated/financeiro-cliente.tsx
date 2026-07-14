@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, primaryRole } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   CircleDollarSign, TrendingUp, Clock, CheckCircle2,
   HardHat, ArrowUpRight, MessageSquare, PhoneCall,
-  Search, Loader2, DollarSign, Wallet, FileText, ArrowUpDown
+  Search, Loader2, DollarSign, Wallet, FileText, ArrowUpDown, ShieldAlert
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -56,8 +56,35 @@ interface Obra {
 }
 
 function FinanceiroClientePage() {
-  const { user } = useAuth();
+  const { user, profile, roles } = useAuth();
   const navigate = useNavigate();
+
+  const role = primaryRole(roles);
+  const hasPermission = (permission: string) => {
+    if (role !== "cliente") return true;
+    if (!profile) return false;
+    if (profile.sub_role === "master") return true;
+    return profile.permissoes?.includes(permission) ?? false;
+  };
+
+  if (!hasPermission("financeiro")) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-6 text-center space-y-4 max-w-md mx-auto">
+        <div className="grid h-16 w-16 place-items-center rounded-full bg-destructive/10 text-destructive animate-pulse">
+          <ShieldAlert className="h-8 w-8" />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-foreground">Acesso Financeiro Restrito</h2>
+        <p className="text-sm text-muted-foreground">Sua conta de usuário não possui permissão para visualizar o painel financeiro. Solicite o acesso ao gestor da sua empresa.</p>
+        <div className="pt-2">
+          <Link to="/dashboard">
+            <Button className="font-semibold bg-primary hover:bg-primary/90 text-primary-foreground">
+              Voltar ao Início
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const [loading, setLoading] = useState(true);
   const [agendamentos, setAgendamentos] = useState<AgendamentoFinanceiro[]>([]);
