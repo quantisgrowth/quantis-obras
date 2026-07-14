@@ -507,7 +507,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
         .single();
 
       // Self-healing: if profile has no company linked, associate them with the default test company
-      if (profile && !profile.empresa_id) {
+      if (profile && !profile.empresa_id && role === "cliente") {
         const { data: empresa } = await supabase
           .from("empresas_clientes")
           .select("id")

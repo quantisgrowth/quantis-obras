@@ -395,7 +395,7 @@ function NovoAgendamento() {
         toast.error(`Erro ao carregar perfil: ${profileErr.message}`);
       }
 
-      if (profile) {
+      if (profile && role === "cliente") {
         if (!profile.empresa_id) {
           toast.info("Configurando empresa de testes no seu perfil...");
           let { data: empresa } = await supabase.from("empresas_clientes").select("id").eq("cnpj", "12.345.678/0001-99").single();
@@ -409,6 +409,8 @@ function NovoAgendamento() {
             profile.empresa_id = newEmpresaId;
           }
         }
+        setUserProfile(profile);
+      } else if (profile) {
         setUserProfile(profile);
       }
 
