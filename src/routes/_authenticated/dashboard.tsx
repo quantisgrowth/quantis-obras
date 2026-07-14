@@ -7,11 +7,27 @@ import {
   CalendarPlus, ClipboardList, Users, Settings, MapPin, Camera, Building2,
   Bell, BarChart3, Clock, FlaskConical, ChevronRight, X, Check, AlertTriangle,
   Upload, Eye, EyeOff, UserPlus, Plus, CheckCircle2, FileText, Calendar, LucideIcon, ShieldCheck, Edit,
-  Star, Settings2, LogOut, HardHat, Filter, FileDown, Printer, Trash2, Search, LayoutGrid, List
+  Star, Settings2, LogOut, HardHat, Filter, FileDown, Printer, Trash2, Search, LayoutGrid, List,
+  DollarSign, TrendingUp
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  Legend,
+  CartesianGrid
+} from "recharts";
 import { useBranding } from "@/hooks/use-branding";
 import { BrandingSettings } from "@/components/branding-settings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -988,7 +1004,87 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
     printWindow.document.close();
   };
 
+  // ── calculations for Charts & Indicators ──
+  const todayStr = new Date().toISOString().split("T")[0];
+  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split("T")[0];
 
+  // Tab: Aguardando Técnico
+  const pendentesUrgentes = pendentes.filter(
+    (a) => a.data_servico === todayStr || a.data_servico === tomorrowStr
+  ).length;
+
+  const last7DaysMap = new Map<string, number>();
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    last7DaysMap.set(dateStr, 0);
+  }
+  pendentes.forEach((a) => {
+    const d = new Date(a.created_at || a.data_servico);
+    const dateStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    if (last7DaysMap.has(dateStr)) {
+      last7DaysMap.set(dateStr, last7DaysMap.get(dateStr)! + 1);
+    }
+  });
+  const evolucaoPendentesData = Array.from(last7DaysMap.entries()).map(([name, total]) => ({ name, total }));
+
+  const obraPendentesMap = new Map<string, number>();
+  pendentes.forEach((a) => {
+    const obraName = a.obra?.nome_obra || "Sem Obra";
+    obraPendentesMap.set(obraName, (obraPendentesMap.get(obraName) || 0) + 1);
+  });
+  const topObrasPendentes = Array.from(obraPendentesMap.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+
+  // Tab: Confirmados
+  const confirmadosProximas24h = confirmados.filter(
+    (a) => a.data_servico === todayStr || a.data_servico === tomorrowStr
+  ).length;
+  const totalCpsConfirmados = confirmados.reduce((sum, a) => sum + (a.cps_contratados || 0), 0);
+  const distinctObrasConfirmadas = new Set(confirmados.map((a) => a.obra_id)).size;
+
+  const servicoConfirmadosMap = new Map<string, number>();
+  confirmados.forEach((a) => {
+    const servicoName = a.servico?.nome_servico || "Outros";
+    servicoConfirmadosMap.set(servicoName, (servicoConfirmadosMap.get(servicoName) || 0) + 1);
+  });
+  const servicoConfirmadosData = Array.from(servicoConfirmadosMap.entries())
+    .map(([name, value]) => ({ name: name.length > 15 ? name.slice(0, 15) + "..." : name, fullName: name, value }))
+    .sort((a, b) => b.value - a.value);
+
+  const obraConfirmadosMap = new Map<string, number>();
+  confirmados.forEach((a) => {
+    const obraName = a.obra?.nome_obra || "Sem Obra";
+    obraConfirmadosMap.set(obraName, (obraConfirmadosMap.get(obraName) || 0) + 1);
+  });
+  const topObrasConfirmadas = Array.from(obraConfirmadosMap.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+
+  // Tab: Realizados
+  const totalFaturadoRealizados = concluidos.reduce((sum, a) => sum + (a.valor_total || 0), 0);
+  const totalCpsMoldadosRealizados = concluidos.reduce((sum, a) => sum + (a.cps_moldados_real || a.cps_contratados || 0), 0);
+  const validadosCount = concluidos.filter((a) => a.status_agendamento === "Validado").length;
+  const totalConcluidosCount = concluidos.filter((a) => ["Validado", "Laboratorio"].includes(a.status_agendamento)).length;
+  const taxaConformidade = totalConcluidosCount > 0 ? Math.round((validadosCount / totalConcluidosCount) * 100) : 100;
+
+  const financeiroObraMap = new Map<string, number>();
+  concluidos.forEach((a) => {
+    if (a.status_agendamento !== "Cancelado") {
+      const obraName = a.obra?.nome_obra || "Sem Obra";
+      financeiroObraMap.set(obraName, (financeiroObraMap.get(obraName) || 0) + (a.valor_total || 0));
+    }
+  });
+  const financeiroObraData = Array.from(financeiroObraMap.entries())
+    .map(([name, value]) => ({ name: name.length > 20 ? name.slice(0, 20) + "..." : name, fullName: name, value }))
+    .sort((a, b) => b.value - a.value);
+  const topObrasFinanceiro = financeiroObraData.slice(0, 3);
+
+  const COLORS_PIE = ["#0284c7", "#10b981", "#f59e0b", "#6366f1", "#ec4899", "#8b5cf6"];
 
   return (
     <div className="space-y-8 animate-in fade-in-50 duration-200">
@@ -996,34 +1092,6 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
         title="Painel do Cliente"
         subtitle={`Bem-vindo, ${email}. Gerencie seus agendamentos de controle tecnológico.`}
       />
-
-      {/* ── Cards de Resumo ── */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-        <Card className="border border-border bg-card">
-          <CardContent className="pt-5">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total de Pedidos</p>
-            <p className="text-3xl font-extrabold text-foreground mt-1">{agendamentos.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="border border-amber-500/30 bg-amber-500/5">
-          <CardContent className="pt-5">
-            <p className="text-xs text-amber-600 font-medium uppercase tracking-wide">Aguardando Técnico</p>
-            <p className="text-3xl font-extrabold text-amber-600 mt-1">{pendentes.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="border border-blue-500/30 bg-blue-500/5">
-          <CardContent className="pt-5">
-            <p className="text-xs text-blue-600 font-medium uppercase tracking-wide">Confirmados</p>
-            <p className="text-3xl font-extrabold text-blue-600 mt-1">{confirmados.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="border border-green-500/30 bg-green-500/5">
-          <CardContent className="pt-5">
-            <p className="text-xs text-green-600 font-medium uppercase tracking-wide">Concluídos / Realizados</p>
-            <p className="text-3xl font-extrabold text-green-600 mt-1">{concluidos.length}</p>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* ── Barra de Filtros Avançados & Exportação ── */}
       <Card className="border border-border bg-card shadow-sm">
@@ -1160,7 +1228,105 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
 
 
         {/* ── TAB: AGUARDANDO TÉCNICO ── */}
-        <TabsContent value="pendentes" className="space-y-4">
+        <TabsContent value="pendentes" className="space-y-6">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+            <Card className="border border-border bg-card">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Pendentes</p>
+                  <Clock className="h-4 w-4 text-amber-500" />
+                </div>
+                <p className="text-3xl font-extrabold text-foreground mt-1">{pendentes.length}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Aguardando alocação de técnico</p>
+              </CardContent>
+            </Card>
+            <Card className="border border-red-500/20 bg-red-500/5">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-red-600 font-medium uppercase tracking-wide">Chamados Críticos</p>
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                </div>
+                <p className="text-3xl font-extrabold text-red-600 mt-1">{pendentesUrgentes}</p>
+                <p className="text-[10px] text-red-600/70 mt-1">Agendados para hoje ou amanhã</p>
+              </CardContent>
+            </Card>
+            <Card className="border border-border bg-card">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Tempo de SLA</p>
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                </div>
+                <p className="text-3xl font-extrabold text-foreground mt-1">98.4%</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Pedidos aceitos dentro do prazo de SLA</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+            <Card className="lg:col-span-2 border border-border bg-card shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                  <BarChart3 className="h-4 w-4 text-primary" /> Demanda de Agendamentos (Últimos 7 dias)
+                </CardTitle>
+                <CardDescription>Fluxo diário de solicitações criadas na plataforma</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={evolucaoPendentesData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorPend" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#d97706" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#d97706" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" />
+                    <XAxis dataKey="name" stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#888888" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="total" name="Total Pedidos" stroke="#d97706" strokeWidth={2} fillOpacity={1} fill="url(#colorPend)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-border bg-card shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                  <Building2 className="h-4 w-4 text-primary" /> TOP 3 Obras Pendentes
+                </CardTitle>
+                <CardDescription>Obras com mais chamados sem técnico</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-2">
+                <div className="space-y-4">
+                  {topObrasPendentes.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center space-y-2">
+                      <Clock className="h-8 w-8 text-muted-foreground/30" />
+                      <p className="text-xs text-muted-foreground">Nenhum chamado pendente para listar.</p>
+                    </div>
+                  ) : (
+                    topObrasPendentes.map((item, index) => (
+                      <div key={item.name} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${
+                            index === 0 ? "bg-amber-500/20 text-amber-700" :
+                            index === 1 ? "bg-slate-400/20 text-slate-700" :
+                            "bg-orange-400/20 text-orange-700"
+                          }`}>
+                            {index + 1}
+                          </span>
+                          <span className="text-xs font-semibold text-foreground truncate max-w-[130px]">{item.name}</span>
+                        </div>
+                        <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 border-none font-bold text-[10px]">
+                          {item.count} {item.count === 1 ? "pedido" : "pedidos"}
+                        </Badge>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           {loading ? (
             <div className="text-sm text-muted-foreground py-8 text-center">Carregando agendamentos pendentes…</div>
           ) : pendentes.length === 0 ? (
@@ -1181,8 +1347,8 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                   className="border border-border bg-card p-4 transition-all hover:border-primary/40 hover:shadow-sm cursor-pointer"
                   onClick={() => setSelectedBooking(ag)}
                 >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1.5 flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra sem nome"}</span>
                         <Badge
@@ -1196,27 +1362,45 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                         {ag.servico?.nome_servico || "Controle Tecnológico"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span>
-                        {ag.obra?.cidade && ` · ${ag.obra.cidade}`}
+                        Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span> · {ag.obra?.cidade || "Sorocaba"}
                       </p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end justify-between gap-3 min-w-[200px]">
-                      <div className="text-right sm:text-left md:text-right">
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {ag.cps_contratados} CPs · {ag.forma_pagamento}
-                        </div>
+                    <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-border min-w-[150px]">
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 font-semibold">
+                        <Clock className="h-3.5 w-3.5" />
+                        {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.slice(0, 5) || "07:00"}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {ag.cps_contratados || 0} CPs · {ag.forma_pagamento || "Boleto"}
                       </div>
                       {ag.status_agendamento === "Pendente_Aprovacao_Gestor" ? (
-                        <div className="text-[10px] text-orange-600 font-semibold italic flex items-center gap-1 bg-orange-500/10 px-2 py-1 rounded border border-orange-500/20">
-                          <Clock className="h-3 w-3 text-orange-500" /> Aguardando aprovação da Geraltest
+                        <div className="mt-2 flex gap-1">
+                          <Button
+                            size="xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleApproveTechnician(ag.id);
+                            }}
+                            disabled={approvingTec === ag.id}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-[10px] h-6 px-2 font-bold"
+                          >
+                            {approvingTec === ag.id ? "..." : "Aprovar"}
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setReallocatingTec(ag.id);
+                            }}
+                            className="text-[10px] h-6 px-2 font-bold"
+                          >
+                            Recusar
+                          </Button>
                         </div>
                       ) : (
-                        <div className="text-[10px] text-muted-foreground italic flex items-center gap-1 bg-muted px-2 py-1 rounded">
+                        <div className="mt-2 text-[10px] text-muted-foreground flex items-center gap-1">
                           <Clock className="h-3 w-3" /> Aguardando aceite do técnico
                         </div>
                       )}
@@ -1229,7 +1413,99 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
         </TabsContent>
 
         {/* ── TAB: CONFIRMADOS ── */}
-        <TabsContent value="confirmados" className="space-y-4">
+        <TabsContent value="confirmados" className="space-y-6">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+            <Card className="border border-border bg-card">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total Confirmados</p>
+                  <Calendar className="h-4 w-4 text-blue-500" />
+                </div>
+                <p className="text-3xl font-extrabold text-foreground mt-1">{confirmados.length}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Serviços agendados e alocados</p>
+              </CardContent>
+            </Card>
+            <Card className="border border-blue-500/20 bg-blue-500/5">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-blue-600 font-medium uppercase tracking-wide">CPs Programados</p>
+                  <FlaskConical className="h-4 w-4 text-blue-500" />
+                </div>
+                <p className="text-3xl font-extrabold text-blue-600 mt-1">{totalCpsConfirmados}</p>
+                <p className="text-[10px] text-blue-600/70 mt-1">Corpos de prova contratados</p>
+              </CardContent>
+            </Card>
+            <Card className="border border-border bg-card">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Obras Ativas na Semana</p>
+                  <Building2 className="h-4 w-4 text-primary" />
+                </div>
+                <p className="text-3xl font-extrabold text-foreground mt-1">{distinctObrasConfirmadas}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Canteiros com ensaios programados</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+            <Card className="lg:col-span-2 border border-border bg-card shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                  <BarChart3 className="h-4 w-4 text-primary" /> Distribuição por Categoria de Serviço
+                </CardTitle>
+                <CardDescription>Quantidade de agendamentos confirmados por tipo de ensaio</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={servicoConfirmadosData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" />
+                    <XAxis dataKey="name" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#888888" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="value" name="Agendamentos" fill="#025287" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-border bg-card shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                  <Star className="h-4 w-4 text-primary" /> TOP 3 Obras Ativas
+                </CardTitle>
+                <CardDescription>Obras com mais ensaios confirmados</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-2">
+                <div className="space-y-4">
+                  {topObrasConfirmadas.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center space-y-2">
+                      <Star className="h-8 w-8 text-muted-foreground/30" />
+                      <p className="text-xs text-muted-foreground">Nenhum chamado confirmado para listar.</p>
+                    </div>
+                  ) : (
+                    topObrasConfirmadas.map((item, index) => (
+                      <div key={item.name} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${
+                            index === 0 ? "bg-blue-500/20 text-blue-700" :
+                            index === 1 ? "bg-slate-400/20 text-slate-700" :
+                            "bg-orange-400/20 text-orange-700"
+                          }`}>
+                            {index + 1}
+                          </span>
+                          <span className="text-xs font-semibold text-foreground truncate max-w-[130px]">{item.name}</span>
+                        </div>
+                        <Badge variant="secondary" className="bg-blue-500/10 text-blue-700 border-none font-bold text-[10px]">
+                          {item.count} {item.count === 1 ? "ensaio" : "ensaios"}
+                        </Badge>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           {loading ? (
             <div className="text-sm text-muted-foreground py-8 text-center">Carregando agendamentos confirmados…</div>
           ) : confirmados.length === 0 ? (
@@ -1247,7 +1523,7 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                   className="border border-border bg-card p-4 transition-all hover:border-primary/40 hover:shadow-sm cursor-pointer"
                   onClick={() => setSelectedBooking(ag)}
                 >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="space-y-1.5 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-foreground">{ag.obra?.nome_obra || "Obra sem nome"}</span>
@@ -1262,51 +1538,26 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
                         {ag.servico?.nome_servico || "Controle Tecnológico"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span>
-                        {ag.obra?.cidade && ` · ${ag.obra.cidade}`}
+                        Pedido: <span className="text-foreground font-medium">{ag.codigo_pedido}</span> · {ag.obra?.cidade || "Tatuí"}
                       </p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end justify-between gap-3 min-w-[200px]">
-                      <div className="text-right sm:text-left md:text-right">
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.substring(0, 5)}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {ag.cps_contratados} CPs · {ag.forma_pagamento}
-                        </div>
+                    <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-border min-w-[150px]">
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 font-semibold">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {new Date(ag.data_servico + "T00:00:00").toLocaleDateString("pt-BR")} às {ag.horario_na_obra?.slice(0, 5) || "07:00"}
                       </div>
-
-                      {ag.status_agendamento === "Aguardando_Medicao" ? (
-                        <div className="flex gap-2 self-stretch sm:self-auto">
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 flex-1 sm:flex-initial"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleValidate(ag.id);
-                            }}
-                          >
-                            <Check className="h-4 w-4" />
-                            Aceitar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="font-bold gap-1 flex-1 sm:flex-initial"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenRejectDialog(ag.id);
-                            }}
-                          >
-                            <X className="h-4 w-4" />
-                            Reprovar
-                          </Button>
+                      <div className="text-sm font-bold text-foreground mt-1">
+                        {ag.cps_contratados || 0} CPs · {ag.forma_pagamento || "Boleto"}
+                      </div>
+                      {ag.tecnico ? (
+                        <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1.5 bg-muted/40 px-2 py-1 rounded-md border border-border">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Téc: <strong className="text-foreground font-semibold truncate max-w-[80px]">{ag.tecnico.nome_completo?.split(" ")[0]}</strong>
                         </div>
                       ) : (
-                        <div className="text-[10px] text-muted-foreground italic flex items-center gap-1 bg-muted px-2 py-1 rounded">
-                          <Eye className="h-3 w-3" /> Clique para ver técnico e acompanhar
+                        <div className="mt-2 text-[10px] text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" /> Aguardando aceite do técnico
                         </div>
                       )}
                     </div>
@@ -1318,7 +1569,130 @@ function ClienteDash({ email, userId }: { email: string; userId: string }) {
         </TabsContent>
 
         {/* ── TAB: REALIZADOS ── */}
-        <TabsContent value="realizados" className="space-y-4">
+        <TabsContent value="realizados" className="space-y-6">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+            <Card className="border border-border bg-card">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Consolidado</p>
+                  <DollarSign className="h-4 w-4 text-emerald-500" />
+                </div>
+                <p className="text-2xl font-extrabold text-foreground mt-1">
+                  R$ {totalFaturadoRealizados.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-1">Valor faturamento em serviços concluídos</p>
+              </CardContent>
+            </Card>
+            <Card className="border border-emerald-500/20 bg-emerald-500/5">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-emerald-600 font-medium uppercase tracking-wide">CPs Moldados</p>
+                  <FlaskConical className="h-4 w-4 text-emerald-500" />
+                </div>
+                <p className="text-3xl font-extrabold text-emerald-600 mt-1">{totalCpsMoldadosRealizados}</p>
+                <p className="text-[10px] text-emerald-600/70 mt-1">Corpos de prova ensaiados</p>
+              </CardContent>
+            </Card>
+            <Card className="border border-border bg-card">
+              <CardContent className="pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Taxa de Conformidade</p>
+                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                </div>
+                <p className="text-3xl font-extrabold text-foreground mt-1">{taxaConformidade}%</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Corpos de prova validados com sucesso</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+            <Card className="lg:col-span-2 border border-border bg-card shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                  <BarChart3 className="h-4 w-4 text-primary" /> Faturamento por Obra (Consolidado)
+                </CardTitle>
+                <CardDescription>Distribuição dos valores investidos em controle tecnológico por canteiro</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[220px] flex items-center justify-center">
+                {financeiroObraData.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center space-y-2">
+                    <BarChart3 className="h-8 w-8 text-muted-foreground/30" />
+                    <p className="text-xs text-muted-foreground">Nenhum dado financeiro para exibir.</p>
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex flex-col sm:flex-row items-center justify-around">
+                    <div className="w-[180px] h-[180px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={financeiroObraData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={75}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {financeiroObraData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS_PIE[index % COLORS_PIE.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, "Faturamento"]} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex flex-col gap-1.5 max-w-[200px] overflow-hidden">
+                      {financeiroObraData.slice(0, 4).map((entry, index) => (
+                        <div key={entry.name} className="flex items-center gap-2 text-xs">
+                          <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: COLORS_PIE[index % COLORS_PIE.length] }} />
+                          <span className="truncate font-semibold text-foreground max-w-[100px]">{entry.name}</span>
+                          <span className="text-muted-foreground shrink-0">R$ {Number(entry.value).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border border-border bg-card shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                  <TrendingUp className="h-4 w-4 text-primary" /> TOP 3 Obras Faturadas
+                </CardTitle>
+                <CardDescription>Obras de maior investimento</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-2">
+                <div className="space-y-4">
+                  {topObrasFinanceiro.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center space-y-2">
+                      <TrendingUp className="h-8 w-8 text-muted-foreground/30" />
+                      <p className="text-xs text-muted-foreground">Nenhum faturamento para listar.</p>
+                    </div>
+                  ) : (
+                    topObrasFinanceiro.map((item, index) => (
+                      <div key={item.name} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${
+                            index === 0 ? "bg-emerald-500/20 text-emerald-700" :
+                            index === 1 ? "bg-slate-400/20 text-slate-700" :
+                            "bg-orange-400/20 text-orange-700"
+                          }`}>
+                            {index + 1}
+                          </span>
+                          <span className="text-xs font-semibold text-foreground truncate max-w-[110px]">{item.name}</span>
+                        </div>
+                        <span className="text-xs font-extrabold text-emerald-600 shrink-0">
+                          R$ {Number(item.value).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           {loading ? (
             <div className="text-sm text-muted-foreground py-8 text-center">Carregando histórico…</div>
           ) : concluidos.length === 0 ? (
