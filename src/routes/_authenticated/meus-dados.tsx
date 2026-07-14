@@ -8,18 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { lookupCEP } from "@/components/address-autocomplete";
 import { toast } from "sonner";
-import { Building, Save, Loader2, Phone, Mail, User, Users, UserPlus, Shield, Copy, Check, Info } from "lucide-react";
+import { Building, Save, Loader2, Phone, Mail, User, Users, UserPlus, Shield, Copy, Check, Info, Edit, Trash2, ShieldAlert } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { createClient } from "@supabase/supabase-js";
 
 export const Route = createFileRoute("/_authenticated/meus-dados")({
   head: () => ({ meta: [{ title: "Meus Dados — Quantis Obras" }] }),
   component: MeusDadosPage,
 });
-
-interface Obra {
-  id: string;
-  nome_obra: string;
-}
 
 interface TeamMember {
   id: string;
@@ -66,13 +63,38 @@ function MeusDadosPage() {
   const [generatedLink, setGeneratedLink] = useState("");
   const [copied, setCopied] = useState(false);
 
+  // Manual Register Modal States
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPhone, setNewUserPhone] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("Quantis@123");
+  const [manualSubRole, setManualSubRole] = useState<"master" | "engenheiro" | "financeiro" | "custom">("engenheiro");
+  const [manualPermPedidos, setManualPermPedidos] = useState(true);
+  const [manualPermObras, setManualPermObras] = useState(true);
+  const [manualPermDashboard, setManualPermDashboard] = useState(true);
+  const [manualPermFinanceiro, setManualPermFinanceiro] = useState(false);
+  const [manualPermEquipe, setManualPermEquipe] = useState(false);
+
+  // Edit Permissions Modal States
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+  const [editSubRole, setEditSubRole] = useState<"master" | "engenheiro" | "financeiro" | "custom">("engenheiro");
+  const [editPermPedidos, setEditPermPedidos] = useState(true);
+  const [editPermObras, setEditPermObras] = useState(true);
+  const [editPermDashboard, setEditPermDashboard] = useState(true);
+  const [editPermFinanceiro, setEditPermFinanceiro] = useState(false);
+  const [editPermEquipe, setEditPermEquipe] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const hasPermission = (permission: string) => {
     if (!profile) return false;
     if (profile.sub_role === "master") return true;
     return profile.permissoes?.includes(permission) ?? false;
   };
 
-  // Preset permissions based on selected subrole
+  // Preset permissions based on selected subrole (Invite)
   useEffect(() => {
     if (inviteSubRole === "master") {
       setPermPedidos(true);
@@ -94,6 +116,52 @@ function MeusDadosPage() {
       setPermEquipe(false);
     }
   }, [inviteSubRole]);
+
+  // Preset permissions based on selected subrole (Manual Register)
+  useEffect(() => {
+    if (manualSubRole === "master") {
+      setManualPermPedidos(true);
+      setManualPermObras(true);
+      setManualPermDashboard(true);
+      setManualPermFinanceiro(true);
+      setManualPermEquipe(true);
+    } else if (manualSubRole === "engenheiro") {
+      setManualPermPedidos(true);
+      setManualPermObras(true);
+      setManualPermDashboard(true);
+      setManualPermFinanceiro(false);
+      setManualPermEquipe(false);
+    } else if (manualSubRole === "financeiro") {
+      setManualPermPedidos(false);
+      setManualPermObras(true);
+      setManualPermDashboard(true);
+      setManualPermFinanceiro(true);
+      setManualPermEquipe(false);
+    }
+  }, [manualSubRole]);
+
+  // Preset permissions based on selected subrole (Edit)
+  useEffect(() => {
+    if (editSubRole === "master") {
+      setEditPermPedidos(true);
+      setEditPermObras(true);
+      setEditPermDashboard(true);
+      setEditPermFinanceiro(true);
+      setEditPermEquipe(true);
+    } else if (editSubRole === "engenheiro") {
+      setEditPermPedidos(true);
+      setEditPermObras(true);
+      setEditPermDashboard(true);
+      setEditPermFinanceiro(false);
+      setEditPermEquipe(false);
+    } else if (editSubRole === "financeiro") {
+      setEditPermPedidos(false);
+      setEditPermObras(true);
+      setEditPermDashboard(true);
+      setEditPermFinanceiro(true);
+      setEditPermEquipe(false);
+    }
+  }, [editSubRole]);
 
   // Format CNPJ helper
   const formatCNPJ = (value: string) => {
@@ -300,6 +368,146 @@ function MeusDadosPage() {
     setCopied(true);
     toast.success("Link de convite copiado para a área de transferência!");
     setTimeout(() => setCopied(false), 3000);
+  };
+
+  // Manual register action
+  const handleRegisterManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!empresaId) return;
+
+    if (!newUserName.trim() || !newUserEmail.trim() || !newUserPassword.trim()) {
+      toast.error("Nome completo, e-mail e senha são obrigatórios.");
+      return;
+    }
+
+    setRegistering(true);
+    try {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || (process as any).env.SUPABASE_URL;
+      const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || (process as any).env.SUPABASE_PUBLISHABLE_KEY;
+
+      // Initialize secondary Supabase client without session persistence to avoid logging out active Admin session
+      const tempSupabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+        auth: { persistSession: false }
+      });
+
+      // Assemble permissions array
+      const permissions: string[] = [];
+      if (manualPermPedidos) permissions.push("pedidos");
+      if (manualPermObras) permissions.push("obras");
+      if (manualPermDashboard) permissions.push("dashboard");
+      if (manualPermFinanceiro) permissions.push("financeiro");
+      if (manualPermEquipe) permissions.push("equipe");
+
+      const { error } = await tempSupabase.auth.signUp({
+        email: newUserEmail.trim().toLowerCase(),
+        password: newUserPassword.trim(),
+        options: {
+          data: {
+            nome_completo: newUserName.trim(),
+            telefone: newUserPhone.trim() || null,
+            empresa_id: empresaId,
+            sub_role: manualSubRole,
+            permissoes: permissions
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success("Usuário cadastrado com sucesso! E-mail de confirmação enviado.");
+      
+      // Reset form
+      setNewUserName("");
+      setNewUserEmail("");
+      setNewUserPhone("");
+      setNewUserPassword("Quantis@123");
+      setIsRegisterOpen(false);
+
+      // Reload team members list
+      await fetchTeam(empresaId);
+    } catch (err: any) {
+      toast.error("Erro ao cadastrar membro: " + err.message);
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  // Start Edit Member permissions
+  const handleStartEdit = (member: TeamMember) => {
+    setEditingMember(member);
+    setEditSubRole((member.sub_role as any) || "engenheiro");
+    
+    const perms = member.permissoes || [];
+    setEditPermPedidos(perms.includes("pedidos"));
+    setEditPermObras(perms.includes("obras"));
+    setEditPermDashboard(perms.includes("dashboard"));
+    setEditPermFinanceiro(perms.includes("financeiro"));
+    setEditPermEquipe(perms.includes("equipe"));
+    
+    setIsEditOpen(true);
+  };
+
+  // Save member edits
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMember || !empresaId) return;
+
+    setSavingEdit(true);
+    try {
+      const permissions: string[] = [];
+      if (editPermPedidos) permissions.push("pedidos");
+      if (editPermObras) permissions.push("obras");
+      if (editPermDashboard) permissions.push("dashboard");
+      if (editPermFinanceiro) permissions.push("financeiro");
+      if (editPermEquipe) permissions.push("equipe");
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          sub_role: editSubRole,
+          permissoes: permissions
+        })
+        .eq("id", editingMember.id);
+
+      if (error) throw error;
+
+      toast.success("Permissões atualizadas com sucesso!");
+      await fetchTeam(empresaId);
+      setIsEditOpen(false);
+    } catch (err: any) {
+      toast.error("Erro ao atualizar permissões: " + err.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // Sever user connection to company (Remove)
+  const handleDeleteMember = async (memberId: string, memberName: string) => {
+    if (memberId === user?.id) {
+      toast.error("Você não pode remover a si mesmo da equipe.");
+      return;
+    }
+    if (!window.confirm(`Tem certeza que deseja remover ${memberName} da sua empresa?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          empresa_id: null,
+          sub_role: null,
+          permissoes: null
+        })
+        .eq("id", memberId);
+
+      if (error) throw error;
+
+      toast.success(`${memberName} removido com sucesso.`);
+      if (empresaId) await fetchTeam(empresaId);
+    } catch (err: any) {
+      toast.error("Erro ao remover membro: " + err.message);
+    }
   };
 
   if (loading) {
@@ -516,14 +724,177 @@ function MeusDadosPage() {
             
             {/* Invite Generator Panel */}
             <Card className="border border-border bg-card">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <UserPlus className="h-4 w-4 text-primary" />
-                  Convidar Novo Membro da Equipe
-                </CardTitle>
-                <CardDescription>
-                  Gere um link exclusivo configurado com as permissões da função. Copie e envie para o seu colaborador se cadastrar.
-                </CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <UserPlus className="h-4 w-4 text-primary" />
+                    Convidar Novo Membro da Equipe
+                  </CardTitle>
+                  <CardDescription>
+                    Gere um link exclusivo configurado com as permissões da função. Copie e envie para o seu colaborador se cadastrar.
+                  </CardDescription>
+                </div>
+                
+                {/* Manual Register Trigger */}
+                <Dialog open={isRegisterOpen} onOpenChange={setIsRegisterOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="bg-primary/10 border-primary/20 text-primary hover:bg-primary/20 font-semibold text-xs flex items-center gap-1">
+                      <UserPlus className="h-3.5 w-3.5" /> Cadastrar Manualmente
+                    </Button>
+                  </DialogTrigger>
+                  
+                  {/* Manual Register Modal */}
+                  <DialogContent className="max-w-lg border border-border shadow-xl">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <UserPlus className="h-5 w-5 text-primary" />
+                        Cadastrar Usuário Manualmente
+                      </DialogTitle>
+                      <DialogDescription>
+                        Crie os dados de acesso de seu funcionário diretamente. Ele poderá entrar imediatamente com o e-mail e senha cadastrados.
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    <form onSubmit={handleRegisterManual} className="space-y-4 py-2">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label htmlFor="manual-name">Nome Completo *</Label>
+                          <Input
+                            id="manual-name"
+                            required
+                            value={newUserName}
+                            onChange={(e) => setNewUserName(e.target.value)}
+                            placeholder="Ex: Carlos Santos"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="manual-phone">Telefone</Label>
+                          <Input
+                            id="manual-phone"
+                            value={newUserPhone}
+                            onChange={(e) => setNewUserPhone(formatPhone(e.target.value))}
+                            placeholder="(15) 99999-9999"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label htmlFor="manual-email">E-mail *</Label>
+                          <Input
+                            id="manual-email"
+                            required
+                            type="email"
+                            value={newUserEmail}
+                            onChange={(e) => setNewUserEmail(e.target.value)}
+                            placeholder="carlos@empresa.com"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="manual-password">Senha Temporária *</Label>
+                          <Input
+                            id="manual-password"
+                            required
+                            minLength={6}
+                            value={newUserPassword}
+                            onChange={(e) => setNewUserPassword(e.target.value)}
+                            placeholder="Senha forte"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="border-t border-border/80 pt-3 space-y-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="manual-role">Função / Perfil do Usuário</Label>
+                          <select
+                            id="manual-role"
+                            value={manualSubRole}
+                            onChange={(e) => setManualSubRole(e.target.value as any)}
+                            className="w-full h-10 rounded-md border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none text-foreground font-medium shadow-sm"
+                          >
+                            <option value="engenheiro">Engenheiro / Operacional (Pedidos & Acompanhamento)</option>
+                            <option value="financeiro">Financeiro (Gráficos, Custos & Obras)</option>
+                            <option value="master">Gestor Master (Administrador da Empresa - Acesso Total)</option>
+                            <option value="custom">Personalizado (Escolher permissões individualmente)</option>
+                          </select>
+                        </div>
+
+                        {/* Checkboxes manual */}
+                        <div className="p-3 bg-muted/30 border rounded-lg space-y-2">
+                          <Label className="font-bold text-[10px] text-muted-foreground uppercase tracking-wider block">Permissões do Usuário</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="flex items-center gap-2 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={manualPermDashboard}
+                                disabled={manualSubRole !== "custom"}
+                                onChange={(e) => setManualPermDashboard(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-input text-primary"
+                              />
+                              <span>Ver Acompanhamento</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={manualPermPedidos}
+                                disabled={manualSubRole !== "custom"}
+                                onChange={(e) => setManualPermPedidos(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-input text-primary"
+                              />
+                              <span>Solicitar Pedidos</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={manualPermObras}
+                                disabled={manualSubRole !== "custom"}
+                                onChange={(e) => setManualPermObras(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-input text-primary"
+                              />
+                              <span>Gerenciar Obras</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={manualPermFinanceiro}
+                                disabled={manualSubRole !== "custom"}
+                                onChange={(e) => setManualPermFinanceiro(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-input text-primary"
+                              />
+                              <span>Módulo Financeiro</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-xs cursor-pointer col-span-2">
+                              <input
+                                type="checkbox"
+                                checked={manualPermEquipe}
+                                disabled={manualSubRole !== "custom"}
+                                onChange={(e) => setManualPermEquipe(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-input text-primary"
+                              />
+                              <span>Gestão de Equipe (Convites & Cadastro)</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      <DialogFooter className="pt-2">
+                        <Button type="button" variant="outline" onClick={() => setIsRegisterOpen(false)} disabled={registering}>
+                          Cancelar
+                        </Button>
+                        <Button type="submit" className="bg-primary text-primary-foreground font-semibold" disabled={registering}>
+                          {registering ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                              Cadastrando...
+                            </>
+                          ) : (
+                            "Cadastrar Usuário"
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid md:grid-cols-2 gap-6">
@@ -698,6 +1069,7 @@ function MeusDadosPage() {
                           <th className="py-3 px-4">Função / Cargo</th>
                           <th className="py-3 px-4">Permissões Habilitadas</th>
                           <th className="py-3 px-4">Data do Cadastro</th>
+                          <th className="py-3 px-4 text-right">Ações</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -747,12 +1119,38 @@ function MeusDadosPage() {
                             <td className="py-3 px-4">
                               {member.created_at ? new Date(member.created_at).toLocaleDateString("pt-BR") : "—"}
                             </td>
+                            <td className="py-3 px-4 text-right">
+                              {member.id !== user?.id ? (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                    onClick={() => handleStartEdit(member)}
+                                    title="Editar permissões"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteMember(member.id, member.nome_completo)}
+                                    title="Remover da empresa"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground italic mr-2">Você (Master)</span>
+                              )}
+                            </td>
                           </tr>
                         ))}
 
                         {team.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="py-8 text-center text-muted-foreground font-medium">
+                            <td colSpan={6} className="py-8 text-center text-muted-foreground font-medium">
                               Nenhum membro registrado na sua empresa.
                             </td>
                           </tr>
@@ -763,6 +1161,131 @@ function MeusDadosPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Edit Permissions Modal */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+              <DialogContent className="max-w-md border border-border shadow-xl">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-primary" />
+                    Editar Permissões do Usuário
+                  </DialogTitle>
+                  <DialogDescription>
+                    Modifique a função ou adicione/remova permissões específicas para o perfil de {editingMember?.nome_completo}.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <form onSubmit={handleSaveEdit} className="space-y-4 py-1">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-role">Função / Perfil</Label>
+                    <select
+                      id="edit-role"
+                      value={editSubRole}
+                      onChange={(e) => setEditSubRole(e.target.value as any)}
+                      className="w-full h-10 rounded-md border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none text-foreground font-medium shadow-sm"
+                    >
+                      <option value="engenheiro">Engenheiro / Operacional (Pedidos & Acompanhamento)</option>
+                      <option value="financeiro">Financeiro (Gráficos, Custos & Obras)</option>
+                      <option value="master">Gestor Master (Administrador da Empresa - Acesso Total)</option>
+                      <option value="custom">Personalizado (Escolher permissões individualmente)</option>
+                    </select>
+                  </div>
+
+                  {/* Checkboxes edit */}
+                  <div className="p-4 bg-muted/20 border border-border/80 rounded-xl space-y-3">
+                    <Label className="font-semibold text-xs text-muted-foreground uppercase tracking-wider block mb-1">Permissões Habilitadas</Label>
+
+                    <div className="space-y-2.5">
+                      <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-primary">
+                        <input
+                          type="checkbox"
+                          checked={editPermDashboard}
+                          disabled={editSubRole !== "custom"}
+                          onChange={(e) => setEditPermDashboard(e.target.checked)}
+                          className="h-4 w-4 rounded border-input text-primary"
+                        />
+                        <div>
+                          <span className="font-bold block">Ver Acompanhamento</span>
+                          <span className="text-[9px] text-muted-foreground block">Acesso ao Dashboard e visualização de ensaios/laudos</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-primary">
+                        <input
+                          type="checkbox"
+                          checked={editPermPedidos}
+                          disabled={editSubRole !== "custom"}
+                          onChange={(e) => setEditPermPedidos(e.target.checked)}
+                          className="h-4 w-4 rounded border-input text-primary"
+                        />
+                        <div>
+                          <span className="font-bold block">Solicitar Pedidos</span>
+                          <span className="text-[9px] text-muted-foreground block">Cadastrar novos ensaios/agendamentos na plataforma</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-primary">
+                        <input
+                          type="checkbox"
+                          checked={editPermObras}
+                          disabled={editSubRole !== "custom"}
+                          onChange={(e) => setEditPermObras(e.target.checked)}
+                          className="h-4 w-4 rounded border-input text-primary"
+                        />
+                        <div>
+                          <span className="font-bold block">Gerenciar Obras</span>
+                          <span className="text-[9px] text-muted-foreground block">Visualizar e cadastrar canteiros de obras da construtora</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-primary">
+                        <input
+                          type="checkbox"
+                          checked={editPermFinanceiro}
+                          disabled={editSubRole !== "custom"}
+                          onChange={(e) => setEditPermFinanceiro(e.target.checked)}
+                          className="h-4 w-4 rounded border-input text-primary"
+                        />
+                        <div>
+                          <span className="font-bold block">Módulo Financeiro</span>
+                          <span className="text-[9px] text-muted-foreground block">Gráficos de ticket médio, faturamento e extrato financeiro</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-primary">
+                        <input
+                          type="checkbox"
+                          checked={editPermEquipe}
+                          disabled={editSubRole !== "custom"}
+                          onChange={(e) => setEditPermEquipe(e.target.checked)}
+                          className="h-4 w-4 rounded border-input text-primary"
+                        />
+                        <div>
+                          <span className="font-bold block">Gestão de Equipe</span>
+                          <span className="text-[9px] text-muted-foreground block">Gerar convites, cadastrar novos membros e editar permissões</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <DialogFooter className="pt-2">
+                    <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)} disabled={savingEdit}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit" className="bg-primary text-primary-foreground font-semibold" disabled={savingEdit}>
+                      {savingEdit ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                          Salvando...
+                        </>
+                      ) : (
+                        "Salvar Alterações"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
 
           </TabsContent>
         )}
