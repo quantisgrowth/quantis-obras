@@ -74,7 +74,7 @@ export const getPipelines = createServerFn({ method: "GET" })
 export const createPipeline = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => PipelineSchema.parse(input))
-  .handler(async ({ input, context }) => {
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
     const empresaId = await getEmpresaId(supabase, userId);
 
@@ -113,7 +113,7 @@ export const createPipeline = createServerFn({ method: "POST" })
 export const updatePipeline = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ id: z.string().uuid(), nome: z.string().min(1) }).parse(input))
-  .handler(async ({ input, context }) => {
+  .handler(async ({ data: input, context }) => {
     const { supabase } = context;
 
     const { error } = await supabase
@@ -129,7 +129,7 @@ export const updatePipeline = createServerFn({ method: "POST" })
 export const deletePipeline = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
-  .handler(async ({ input, context }) => {
+  .handler(async ({ data: input, context }) => {
     const { supabase } = context;
 
     const { error } = await supabase
@@ -145,7 +145,7 @@ export const deletePipeline = createServerFn({ method: "POST" })
 export const getPipelineStages = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.string().uuid().parse(input))
-  .handler(async ({ input: pipelineId, context }) => {
+  .handler(async ({ data: pipelineId, context }) => {
     const { supabase } = context;
 
     const { data, error } = await supabase
@@ -162,7 +162,7 @@ export const getPipelineStages = createServerFn({ method: "GET" })
 export const savePipelineStages = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => SaveStagesSchema.parse(input))
-  .handler(async ({ input, context }) => {
+  .handler(async ({ data: input, context }) => {
     const { supabase } = context;
     const { pipelineId, stages } = input;
 
@@ -222,7 +222,7 @@ export const savePipelineStages = createServerFn({ method: "POST" })
 export const getOportunidades = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.string().uuid().parse(input))
-  .handler(async ({ input: pipelineId, context }) => {
+  .handler(async ({ data: pipelineId, context }) => {
     const { supabase } = context;
 
     const { data, error } = await supabase
@@ -239,7 +239,7 @@ export const getOportunidades = createServerFn({ method: "GET" })
 export const saveOportunidade = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => OpportunitySchema.parse(input))
-  .handler(async ({ input, context }) => {
+  .handler(async ({ data: input, context }) => {
     const { supabase, userId } = context;
     const empresaId = await getEmpresaId(supabase, userId);
 
@@ -262,7 +262,7 @@ export const saveOportunidade = createServerFn({ method: "POST" })
 export const updateOportunidadeStage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => UpdateOpportunityStageSchema.parse(input))
-  .handler(async ({ input, context }) => {
+  .handler(async ({ data: input, context }) => {
     const { supabase } = context;
 
     const { error } = await supabase
@@ -281,7 +281,7 @@ export const updateOportunidadeStage = createServerFn({ method: "POST" })
 export const deleteOportunidade = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
-  .handler(async ({ input, context }) => {
+  .handler(async ({ data: input, context }) => {
     const { supabase } = context;
 
     const { error } = await supabase

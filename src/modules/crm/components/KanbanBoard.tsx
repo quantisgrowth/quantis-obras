@@ -75,11 +75,11 @@ export function KanbanBoard() {
     setBoardLoading(true);
     try {
       const [stagesData, oppsData] = await Promise.all([
-        getPipelineStages(pipelineId),
-        getOportunidades(pipelineId)
+        getPipelineStages({ data: pipelineId }),
+        getOportunidades({ data: pipelineId })
       ]);
       setStages(stagesData);
-      setOpportunities(oppsData);
+      setOpportunities(oppsData as any);
     } catch (err: any) {
       toast.error("Erro ao carregar dados do Kanban: " + err.message);
     } finally {
@@ -128,9 +128,11 @@ export function KanbanBoard() {
 
     try {
       await updateOportunidadeStage({
-        oportunidadeId: opportunityId,
-        etapaId: targetStageId,
-        posicaoEtapa: 0 // Default to top of list
+        data: {
+          oportunidadeId: opportunityId,
+          etapaId: targetStageId,
+          posicaoEtapa: 0 // Default to top of list
+        }
       });
       toast.success(`Oportunidade movida!`);
     } catch (err: any) {

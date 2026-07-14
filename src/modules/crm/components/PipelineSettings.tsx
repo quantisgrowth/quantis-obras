@@ -59,7 +59,7 @@ export function PipelineSettings() {
   const loadStages = async (pipelineId: string) => {
     setStagesLoading(true);
     try {
-      const data = await getPipelineStages(pipelineId);
+      const data = await getPipelineStages({ data: pipelineId });
       setStages(data);
     } catch (err: any) {
       toast.error("Erro ao carregar etapas: " + err.message);
@@ -93,7 +93,7 @@ export function PipelineSettings() {
     }
 
     try {
-      const created = await createPipeline({ nome: newPipelineName.trim() });
+      const created = await createPipeline({ data: { nome: newPipelineName.trim() } });
       toast.success("Funil de vendas criado com sucesso!");
       setNewPipelineName("");
       // Reload and select the newly created pipeline
@@ -111,7 +111,7 @@ export function PipelineSettings() {
     if (!selectedPipeline || !editingPipelineName.trim()) return;
 
     try {
-      await updatePipeline({ id: selectedPipeline.id, nome: editingPipelineName.trim() });
+      await updatePipeline({ data: { id: selectedPipeline.id, nome: editingPipelineName.trim() } });
       toast.success("Nome do funil atualizado!");
       setIsEditingPipeline(false);
       setSelectedPipeline({ ...selectedPipeline, nome: editingPipelineName.trim() });
@@ -129,7 +129,7 @@ export function PipelineSettings() {
     }
 
     try {
-      await deletePipeline({ id: selectedPipeline.id });
+      await deletePipeline({ data: { id: selectedPipeline.id } });
       toast.success("Funil excluído com sucesso!");
       const nextIndex = pipelines.findIndex((p) => p.id === selectedPipeline.id);
       const updatedList = pipelines.filter((p) => p.id !== selectedPipeline.id);
@@ -219,12 +219,14 @@ export function PipelineSettings() {
     try {
       setLoading(true);
       await savePipelineStages({
-        pipelineId: selectedPipeline.id,
-        stages: stages.map((s) => ({
-          id: s.id,
-          nome: s.nome.trim(),
-          posicao: s.posicao
-        }))
+        data: {
+          pipelineId: selectedPipeline.id,
+          stages: stages.map((s) => ({
+            id: s.id,
+            nome: s.nome.trim(),
+            posicao: s.posicao
+          }))
+        }
       });
       toast.success("Estrutura do funil salva com sucesso!");
       loadStages(selectedPipeline.id);

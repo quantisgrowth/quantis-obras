@@ -75,16 +75,18 @@ export function OpportunityModal({
     setLoading(true);
     try {
       await saveOportunidade({
-        id: opportunity?.id,
-        pipeline_id: pipelineId,
-        etapa_id: etapaId,
-        nome_oportunidade: nomeOportunidade.trim(),
-        valor_estimado: parseFloat(valorEstimado) || 0,
-        cliente_contato_nome: clienteContatoNome.trim() || null,
-        cliente_contato_email: clienteContatoEmail.trim() || null,
-        cliente_contato_telefone: clienteContatoTelefone.trim() || null,
-        status,
-        posicao_etapa: opportunity?.posicao_etapa || 0
+        data: {
+          id: opportunity?.id,
+          pipeline_id: pipelineId,
+          etapa_id: etapaId,
+          nome_oportunidade: nomeOportunidade.trim(),
+          valor_estimado: parseFloat(valorEstimado) || 0,
+          cliente_contato_nome: clienteContatoNome.trim() || null,
+          cliente_contato_email: clienteContatoEmail.trim() || null,
+          cliente_contato_telefone: clienteContatoTelefone.trim() || null,
+          status,
+          posicao_etapa: opportunity?.posicao_etapa || 0
+        }
       });
 
       toast.success(opportunity ? "Oportunidade atualizada!" : "Oportunidade criada com sucesso!");
@@ -103,7 +105,7 @@ export function OpportunityModal({
 
     setLoading(true);
     try {
-      await deleteOportunidade({ id: opportunity.id });
+      await deleteOportunidade({ data: { id: opportunity.id } });
       toast.success("Oportunidade excluída!");
       onSaveSuccess();
       onClose();
