@@ -39,16 +39,37 @@ const UpdateOpportunityStageSchema = z.object({
 
 // Helper to get company ID for the authenticated user
 async function getEmpresaId(supabase: any, userId: string): Promise<string> {
-  const { data: profile, error } = await supabase
+  const { data: profile } = await supabase
     .from("profiles")
     .select("empresa_id")
     .eq("id", userId)
     .single();
 
-  if (error || !profile?.empresa_id) {
-    throw new Error("Usuário não está associado a nenhuma empresa.");
+  if (profile?.empresa_id) {
+    return profile.empresa_id;
   }
-  return profile.empresa_id;
+
+  // Fallback for admin users who do not belong to a single client company
+  const { data: roleData } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+
+  if (roleData) {
+    const { data: firstCompany } = await supabase
+      .from("empresas_clientes")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+
+    if (firstCompany) {
+      return firstCompany.id;
+    }
+  }
+
+  throw new Error("Usuário não está associado a nenhuma empresa.");
 }
 
 // ── SERVER FUNCTIONS ────────────────────────────────────────────────────────
