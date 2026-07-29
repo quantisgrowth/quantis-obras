@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import {
   FlaskConical, LogOut, LayoutDashboard, CalendarPlus, FolderKanban,
   Building, Clock, Calendar, CheckCircle2, HardHat, Plus, CircleDollarSign,
-  ClipboardList, Users, Star, Building2, MapPin, AlertTriangle, Settings2, Settings, BarChart3
+  ClipboardList, Users, Star, Building2, MapPin, AlertTriangle, Settings2, Settings, BarChart3,
+  LayoutGrid
 } from "lucide-react";
 import {
   AlertDialog,
@@ -166,13 +167,56 @@ function AuthLayout() {
                     to="/crm"
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
                       isRouteActive("/crm")
-                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     }`}
                   >
                     <FolderKanban className="h-4 w-4 shrink-0" />
                     <span>CRM & Vendas</span>
                   </Link>
+
+                  {isRouteActive("/crm") && (
+                    <div className="ml-4 pl-3 border-l border-border flex flex-col gap-1 my-1 animate-in slide-in-from-top-1 duration-200">
+                      <Link
+                        to="/crm"
+                        search={{ tab: "kanban" }}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-xs transition-all border ${
+                          ((location.search as any)?.tab || "kanban") === "kanban"
+                            ? "bg-primary/10 text-primary border-primary/20 font-semibold"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
+                        }`}
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Funil de Vendas</span>
+                      </Link>
+
+                      <Link
+                        to="/crm"
+                        search={{ tab: "leads" }}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-xs transition-all border ${
+                          (location.search as any)?.tab === "leads"
+                            ? "bg-primary/10 text-primary border-primary/20 font-semibold"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
+                        }`}
+                      >
+                        <Users className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Contatos (Leads)</span>
+                      </Link>
+
+                      <Link
+                        to="/crm"
+                        search={{ tab: "settings" }}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-xs transition-all border ${
+                          (location.search as any)?.tab === "settings"
+                            ? "bg-primary/10 text-primary border-primary/20 font-semibold"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border-transparent"
+                        }`}
+                      >
+                        <Settings2 className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Configurações</span>
+                      </Link>
+                    </div>
+                  )}
 
                   <Link
                     to="/novo-agendamento"
