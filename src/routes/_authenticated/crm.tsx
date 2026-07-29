@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KanbanBoard } from "@/modules/crm/components/KanbanBoard";
 import { PipelineSettings } from "@/modules/crm/components/PipelineSettings";
-import { LayoutGrid, Settings2, Sparkles } from "lucide-react";
+import { LeadsManager } from "@/modules/crm/components/LeadsManager";
+import { LayoutGrid, Settings2, Sparkles, Users } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/crm")({
   head: () => ({ meta: [{ title: "CRM — Quantis Obras" }] }),
@@ -35,6 +36,10 @@ function CRMPage() {
             <LayoutGrid className="h-4 w-4" />
             Funil de Vendas
           </TabsTrigger>
+          <TabsTrigger value="leads" className="gap-1.5 h-8">
+            <Users className="h-4 w-4" />
+            Contatos (Leads)
+          </TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5 h-8">
             <Settings2 className="h-4 w-4" />
             Configurações de Funil
@@ -43,6 +48,10 @@ function CRMPage() {
 
         <TabsContent value="kanban" className="space-y-4 focus-visible:outline-none">
           <KanbanBoard />
+        </TabsContent>
+
+        <TabsContent value="leads" className="space-y-4 focus-visible:outline-none">
+          <LeadsManager />
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4 focus-visible:outline-none">

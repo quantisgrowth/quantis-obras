@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Trash2, PlusCircle } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { saveOportunidade, deleteOportunidade } from "../crm.api";
+import { saveOportunidade, deleteOportunidade, getCompaniesForSelect, getLeads, getObrasForSelect } from "../crm.api";
 
 interface Stage {
   id: string;
@@ -41,18 +41,57 @@ export function OpportunityModal({
   const [status, setStatus] = useState<"Aberta" | "Ganha" | "Perdida">("Aberta");
   const [etapaId, setEtapaId] = useState("");
 
+  // Relational data list states
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [allLeads, setAllLeads] = useState<any[]>([]);
+  const [allObras, setAllObras] = useState<any[]>([]);
+
+  // Selected relational states
+  const [clienteEmpresaId, setClienteEmpresaId] = useState("none");
+  const [leadId, setLeadId] = useState("none");
+  const [obraId, setObraId] = useState("none");
+
+  // Load companies, leads, and obras
+  useEffect(() => {
+    if (isOpen) {
+      const loadModalData = async () => {
+        try {
+          const [comps, lds, obs] = await Promise.all([
+            getCompaniesForSelect(),
+            getLeads(),
+            getObrasForSelect()
+          ]);
+          setCompanies(comps as any);
+          setAllLeads(lds as any);
+          setAllObras(obs as any);
+        } catch (err: any) {
+          toast.error("Erro ao carregar dados do modal: " + err.message);
+        }
+      };
+      loadModalData();
+    }
+  }, [isOpen]);
+
   const handleGenerateProposal = () => {
+    const selectedLead = allLeads.find((l) => l.id === leadId);
     navigate({
       to: "/novo-agendamento",
       search: {
-        nomeContato: clienteContatoNome,
-        telefoneContato: clienteContatoTelefone,
-        emailContato: clienteContatoEmail,
+        nomeContato: selectedLead ? selectedLead.nome : (clienteContatoNome || undefined),
+        telefoneContato: selectedLead ? (selectedLead.telefone || undefined) : (clienteContatoTelefone || undefined),
+        emailContato: selectedLead ? (selectedLead.email || undefined) : (clienteContatoEmail || undefined),
         valorEstimado: valorEstimado,
         nomeOportunidade: nomeOportunidade,
       }
     });
   };
+
+  const filteredLeads = allLeads.filter(
+    (l) => clienteEmpresaId === "none" || l.empresa_cliente_id === clienteEmpresaId
+  );
+  const filteredObras = allObras.filter(
+    (o) => clienteEmpresaId === "none" || o.empresa_id === clienteEmpresaId
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -64,6 +103,11 @@ export function OpportunityModal({
         setClienteContatoTelefone(opportunity.cliente_contato_telefone || "");
         setStatus(opportunity.status);
         setEtapaId(opportunity.etapa_id);
+        
+        // Relational states
+        setClienteEmpresaId(opportunity.cliente_empresa_id || "none");
+        setLeadId(opportunity.lead_id || "none");
+        setObraId(opportunity.obra_id || "none");
       } else {
         setNomeOportunidade("");
         setValorEstimado("0");
@@ -72,6 +116,11 @@ export function OpportunityModal({
         setClienteContatoTelefone("");
         setStatus("Aberta");
         setEtapaId(stages[0]?.id || "");
+
+        // Relational states
+        setClienteEmpresaId("none");
+        setLeadId("none");
+        setObraId("none");
       }
     }
   }, [isOpen, opportunity, stages]);
@@ -87,6 +136,8 @@ export function OpportunityModal({
       return;
     }
 
+    const selectedLead = allLeads.find((l) => l.id === leadId);
+
     setLoading(true);
     try {
       await saveOportunidade({
@@ -96,11 +147,14 @@ export function OpportunityModal({
           etapa_id: etapaId,
           nome_oportunidade: nomeOportunidade.trim(),
           valor_estimado: parseFloat(valorEstimado) || 0,
-          cliente_contato_nome: clienteContatoNome.trim() || null,
-          cliente_contato_email: clienteContatoEmail.trim() || null,
-          cliente_contato_telefone: clienteContatoTelefone.trim() || null,
+          cliente_contato_nome: selectedLead ? selectedLead.nome : (clienteContatoNome.trim() || null),
+          cliente_contato_email: selectedLead ? selectedLead.email : (clienteContatoEmail.trim() || null),
+          cliente_contato_telefone: selectedLead ? selectedLead.telefone : (clienteContatoTelefone.trim() || null),
           status,
-          posicao_etapa: opportunity?.posicao_etapa || 0
+          posicao_etapa: opportunity?.posicao_etapa || 0,
+          cliente_empresa_id: clienteEmpresaId === "none" ? null : clienteEmpresaId,
+          lead_id: leadId === "none" ? null : leadId,
+          obra_id: obraId === "none" ? null : obraId,
         }
       });
 
@@ -189,39 +243,65 @@ export function OpportunityModal({
             </div>
           </div>
 
+          {/* Relational selectors */}
           <div className="space-y-1">
-            <Label htmlFor="opp-contact-name">Nome do Contato</Label>
-            <Input
-              id="opp-contact-name"
-              placeholder="Ex: João da Silva"
-              value={clienteContatoNome}
-              onChange={(e) => setClienteContatoNome(e.target.value)}
-              className="h-10"
-            />
+            <Label htmlFor="opp-company">Empresa Cliente</Label>
+            <Select
+              value={clienteEmpresaId}
+              onValueChange={(val) => {
+                setClienteEmpresaId(val);
+                // Reset lead and obra when company changes to prevent cross-linking
+                setLeadId("none");
+                setObraId("none");
+              }}
+            >
+              <SelectTrigger id="opp-company" className="h-10">
+                <SelectValue placeholder="Selecione a empresa..." />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border border-border">
+                <SelectItem value="none">Nenhuma</SelectItem>
+                {companies.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.razao_social}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <Label htmlFor="opp-contact-phone">Telefone</Label>
-              <Input
-                id="opp-contact-phone"
-                placeholder="Ex: (11) 99999-9999"
-                value={clienteContatoTelefone}
-                onChange={(e) => setClienteContatoTelefone(e.target.value)}
-                className="h-10"
-              />
+              <Label htmlFor="opp-lead">Contato / Lead</Label>
+              <Select value={leadId} onValueChange={setLeadId}>
+                <SelectTrigger id="opp-lead" className="h-10">
+                  <SelectValue placeholder="Selecione o contato..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border border-border">
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {filteredLeads.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.nome} {l.cargo ? `(${l.cargo})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="opp-contact-email">E-mail</Label>
-              <Input
-                id="opp-contact-email"
-                type="email"
-                placeholder="Ex: joao@alfa.com"
-                value={clienteContatoEmail}
-                onChange={(e) => setClienteContatoEmail(e.target.value)}
-                className="h-10"
-              />
+              <Label htmlFor="opp-obra">Obra Vinculada</Label>
+              <Select value={obraId} onValueChange={setObraId}>
+                <SelectTrigger id="opp-obra" className="h-10">
+                  <SelectValue placeholder="Selecione a obra..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border border-border">
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {filteredObras.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.nome_obra} ({o.cidade})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

@@ -29,6 +29,18 @@ const OpportunitySchema = z.object({
   cliente_contato_telefone: z.string().nullable().optional(),
   status: z.enum(["Aberta", "Ganha", "Perdida"]).default("Aberta"),
   posicao_etapa: z.number().int().default(0),
+  cliente_empresa_id: z.string().uuid().nullable().optional(),
+  lead_id: z.string().uuid().nullable().optional(),
+  obra_id: z.string().uuid().nullable().optional(),
+});
+
+const LeadSchema = z.object({
+  id: z.string().uuid().optional(),
+  empresa_cliente_id: z.string().uuid().nullable().optional(),
+  nome: z.string().min(1).max(255),
+  email: z.string().nullable().optional(),
+  telefone: z.string().nullable().optional(),
+  cargo: z.string().nullable().optional(),
 });
 
 const UpdateOpportunityStageSchema = z.object({
@@ -316,4 +328,90 @@ export const deleteOportunidade = createServerFn({ method: "POST" })
 
     if (error) throw new Error("Erro ao excluir oportunidade: " + error.message);
     return { success: true };
+  });
+
+// 11. Get all leads for the user's company
+export const getLeads = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const empresaId = await getEmpresaId(supabase, userId);
+
+    const { data, error } = await supabase
+      .from("crm_leads")
+      .select("*, empresa_cliente:empresas_clientes(id, razao_social)")
+      .eq("empresa_id", empresaId)
+      .order("nome", { ascending: true });
+
+    if (error) throw new Error("Erro ao buscar leads: " + error.message);
+    return data;
+  });
+
+// 12. Create or Update a lead
+export const saveLead = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => LeadSchema.parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase, userId } = context;
+    const empresaId = await getEmpresaId(supabase, userId);
+
+    const leadData = {
+      ...input,
+      empresa_id: empresaId,
+    };
+
+    const { data, error } = await supabase
+      .from("crm_leads")
+      .upsert(leadData)
+      .select()
+      .single();
+
+    if (error) throw new Error("Erro ao salvar lead: " + error.message);
+    return data;
+  });
+
+// 13. Delete a lead
+export const deleteLead = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase } = context;
+
+    const { error } = await supabase
+      .from("crm_leads")
+      .delete()
+      .eq("id", input.id);
+
+    if (error) throw new Error("Erro ao excluir lead: " + error.message);
+    return { success: true };
+  });
+
+// 14. Get all companies for dropdown selection
+export const getCompaniesForSelect = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase } = context;
+
+    const { data, error } = await supabase
+      .from("empresas_clientes")
+      .select("id, razao_social, cnpj")
+      .order("razao_social", { ascending: true });
+
+    if (error) throw new Error("Erro ao buscar empresas: " + error.message);
+    return data;
+  });
+
+// 15. Get all works (obras) for dropdown selection
+export const getObrasForSelect = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase } = context;
+
+    const { data, error } = await supabase
+      .from("obras")
+      .select("id, nome_obra, empresa_id, cidade")
+      .order("nome_obra", { ascending: true });
+
+    if (error) throw new Error("Erro ao buscar obras: " + error.message);
+    return data;
   });
