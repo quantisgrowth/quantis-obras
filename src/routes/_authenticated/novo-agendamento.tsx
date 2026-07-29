@@ -38,13 +38,25 @@ import {
 
 type NovoAgendamentoSearch = {
   obraId?: string;
+  leadId?: string;
+  nomeContato?: string;
+  telefoneContato?: string;
+  emailContato?: string;
+  valorEstimado?: string;
+  nomeOportunidade?: string;
 };
 
 export const Route = createFileRoute("/_authenticated/novo-agendamento")({
   head: () => ({ meta: [{ title: "Novo Agendamento — Quantis Obras" }] }),
-  validateSearch: (search: Record<string, unknown>): NovoAgendamentoSearch => {
+  validateSearch: (search: Record<string, dynamic> | Record<string, unknown>): NovoAgendamentoSearch => {
     return {
       obraId: search.obraId as string | undefined,
+      leadId: search.leadId as string | undefined,
+      nomeContato: search.nomeContato as string | undefined,
+      telefoneContato: search.telefoneContato as string | undefined,
+      emailContato: search.emailContato as string | undefined,
+      valorEstimado: search.valorEstimado as string | undefined,
+      nomeOportunidade: search.nomeOportunidade as string | undefined,
     };
   },
   component: NovoAgendamento,
@@ -133,7 +145,7 @@ interface ConfiguredService {
 function NovoAgendamento() {
   const navigate = useNavigate();
   const { user, profile, roles } = useAuth();
-  const { obraId } = Route.useSearch();
+  const { obraId, nomeContato, telefoneContato, emailContato, valorEstimado, nomeOportunidade } = Route.useSearch();
 
   const role = primaryRole(roles);
 
@@ -185,7 +197,7 @@ function NovoAgendamento() {
   // Step 1 — Obra
   const [selectedObraId, setSelectedObraId] = useState<string>("nova");
   const [obraRascunhoId, setObraRascunhoId] = useState<string | null>(null); // ID da obra salva ao avançar Step 1
-  const [novaObraNome, setNovaObraNome] = useState("");
+  const [novaObraNome, setNovaObraNome] = useState(nomeOportunidade || "");
   const [novaObraEndereco, setNovaObraEndereco] = useState("");
   const [novaObraCidade, setNovaObraCidade] = useState("");
   const [novaObraLat, setNovaObraLat] = useState(0);
@@ -195,7 +207,7 @@ function NovoAgendamento() {
   const [novaObraBairro, setNovaObraBairro] = useState("");
   const [novaObraEstado, setNovaObraEstado] = useState("");
   const [cnoObra, setCnoObra] = useState("");
-  const [responsavelObra, setResponsavelObra] = useState("");
+  const [responsavelObra, setResponsavelObra] = useState(nomeContato || "");
   const [cargoResponsavel, setCargoResponsavel] = useState("");
   const [cepLoading, setCepLoading] = useState(false);
 
@@ -300,7 +312,17 @@ function NovoAgendamento() {
   // Step 3 — Agenda
   const [dataServico, setDataServico] = useState("");
   const [horarioNaObra, setHorarioNaObra] = useState("08:00");
-  const [observacoes, setObservacoes] = useState("");
+  const [observacoes, setObservacoes] = useState(() => {
+    let obs = "";
+    if (nomeContato || telefoneContato || emailContato) {
+      obs += `Contato vindo do CRM:\n`;
+      if (nomeContato) obs += `- Nome: ${nomeContato}\n`;
+      if (telefoneContato) obs += `- Telefone: ${telefoneContato}\n`;
+      if (emailContato) obs += `- E-mail: ${emailContato}\n`;
+      obs += `\n`;
+    }
+    return obs;
+  });
 
   // Disponibilidade de técnicos
   const [datasDisponiveis, setDatasDisponiveis] = useState<string[]>([]);
@@ -2042,6 +2064,7 @@ interface AdminManualSchedulingFormProps {
 }
 
 function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps) {
+  const { nomeContato, telefoneContato, emailContato, valorEstimado, nomeOportunidade } = Route.useSearch();
   const [loading, setLoading] = useState(false);
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>("");
@@ -2057,10 +2080,22 @@ function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps)
   const [horarioNaObra, setHorarioNaObra] = useState("08:00");
 
   // Financial
-  const [valorTotal, setValorTotal] = useState<number>(0);
+  const [valorTotal, setValorTotal] = useState<number>(() => {
+    return parseFloat(valorEstimado || "0") || 0;
+  });
   const [formaPagamento, setFormaPagamento] = useState("Boleto_28");
   const [quantidadeParcelasAdmin, setQuantidadeParcelasAdmin] = useState(1);
-  const [observacoes, setObservacoes] = useState("");
+  const [observacoes, setObservacoes] = useState(() => {
+    let obs = "";
+    if (nomeContato || telefoneContato || emailContato) {
+      obs += `Contato vindo do CRM:\n`;
+      if (nomeContato) obs += `- Nome: ${nomeContato}\n`;
+      if (telefoneContato) obs += `- Telefone: ${telefoneContato}\n`;
+      if (emailContato) obs += `- E-mail: ${emailContato}\n`;
+      obs += `\n`;
+    }
+    return obs;
+  });
 
   // Modals for creating new entities
   const [novaEmpresaOpen, setNovaEmpresaOpen] = useState(false);
@@ -2068,7 +2103,7 @@ function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps)
   const [novaEmpresaCNPJ, setNovaEmpresaCNPJ] = useState("");
 
   const [novaObraOpen, setNovaObraOpen] = useState(false);
-  const [novaObraNome, setNovaObraNome] = useState("");
+  const [novaObraNome, setNovaObraNome] = useState(nomeOportunidade || "");
   const [novaObraEndereco, setNovaObraEndereco] = useState("");
   const [novaObraCidade, setNovaObraCidade] = useState("Sorocaba");
   const [novaObraBairro, setNovaObraBairro] = useState("");

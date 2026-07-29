@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { Trash2, PlusCircle } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { saveOportunidade, deleteOportunidade } from "../crm.api";
 
 interface Stage {
@@ -30,6 +31,7 @@ export function OpportunityModal({
   stages,
   onSaveSuccess
 }: OpportunityModalProps) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [nomeOportunidade, setNomeOportunidade] = useState("");
   const [valorEstimado, setValorEstimado] = useState("0");
@@ -38,6 +40,19 @@ export function OpportunityModal({
   const [clienteContatoTelefone, setClienteContatoTelefone] = useState("");
   const [status, setStatus] = useState<"Aberta" | "Ganha" | "Perdida">("Aberta");
   const [etapaId, setEtapaId] = useState("");
+
+  const handleGenerateProposal = () => {
+    navigate({
+      to: "/novo-agendamento",
+      search: {
+        nomeContato: clienteContatoNome,
+        telefoneContato: clienteContatoTelefone,
+        emailContato: clienteContatoEmail,
+        valorEstimado: valorEstimado,
+        nomeOportunidade: nomeOportunidade,
+      }
+    });
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -224,26 +239,40 @@ export function OpportunityModal({
             </Select>
           </div>
 
-          <DialogFooter className="pt-4 border-t flex items-center justify-between sm:justify-between w-full">
-            {opportunity ? (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={loading}
-                className="gap-1.5"
-              >
-                <Trash2 className="h-4 w-4" /> Excluir
-              </Button>
-            ) : (
-              <div /> // Spacer
-            )}
+          <DialogFooter className="pt-4 border-t flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+            <div className="flex gap-2 w-full sm:w-auto justify-between sm:justify-start">
+              {opportunity && (
+                <>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleDelete}
+                    disabled={loading}
+                    className="gap-1.5 h-10"
+                  >
+                    <Trash2 className="h-4 w-4" /> Excluir
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleGenerateProposal}
+                    className={`gap-1.5 h-10 font-medium ${
+                      status === "Ganha"
+                        ? "bg-green-600/10 text-green-700 border-green-600/20 hover:bg-green-600/20 hover:text-green-800"
+                        : "text-primary border-primary/20 hover:bg-primary/5 hover:text-primary"
+                    }`}
+                  >
+                    <PlusCircle className="h-4 w-4" /> Gerar Proposta
+                  </Button>
+                </>
+              )}
+            </div>
             
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+            <div className="flex gap-2 w-full sm:w-auto justify-end">
+              <Button type="button" variant="outline" onClick={onClose} disabled={loading} className="h-10">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading} className="h-10">
                 {loading ? "Salvando..." : "Salvar"}
               </Button>
             </div>
