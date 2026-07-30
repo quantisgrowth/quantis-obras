@@ -110,6 +110,18 @@ export function LeadsManager() {
   const [cicloCompra, setCicloCompra] = useState(0);
   const [ultimaCompra, setUltimaCompra] = useState(0);
 
+  // Tab & Mock states to match screenshots
+  const [activeFormTab, setActiveFormTab] = useState<"contato" | "dados" | "endereco" | "anotacoes">("contato");
+  const [site, setSite] = useState("");
+  const [cep, setCep] = useState("");
+  const [endereco, setEndereco] = useState("");
+  const [numero, setNumero] = useState("");
+  const [complemento, setComplemento] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [uf, setUf] = useState("");
+  const [anotacoes, setAnotacoes] = useState("");
+
   // Import Dialog states
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -152,6 +164,16 @@ export function LeadsManager() {
     setComprasCount(0);
     setCicloCompra(0);
     setUltimaCompra(0);
+    setActiveFormTab("contato");
+    setSite("");
+    setCep("");
+    setEndereco("");
+    setNumero("");
+    setComplemento("");
+    setBairro("");
+    setCidade("");
+    setUf("");
+    setAnotacoes("");
     setIsFormOpen(true);
   };
 
@@ -168,6 +190,16 @@ export function LeadsManager() {
     setComprasCount(lead.compras_count || 0);
     setCicloCompra(lead.ciclo_compra_dias || 0);
     setUltimaCompra(lead.ultima_compra_dias || 0);
+    setActiveFormTab("contato");
+    setSite("");
+    setCep("");
+    setEndereco("");
+    setNumero("");
+    setComplemento("");
+    setBairro("");
+    setCidade("");
+    setUf("");
+    setAnotacoes("");
     setIsFormOpen(true);
   };
 
@@ -1026,165 +1058,322 @@ export function LeadsManager() {
 
       {/* Pop-up dialog for Create/Edit lead */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-md bg-card border border-border select-none max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-xl bg-card border border-border select-none max-h-[92vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold">
-              {editingLead ? "Editar Lead" : "Novo Lead"}
+            <DialogTitle className="text-lg font-bold">
+              {editingLead ? "Editar Lead" : "Criar novo Lead"}
             </DialogTitle>
             <DialogDescription className="text-xs">
               Insira os detalhes do contato do CRM.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4 pt-2">
-            <div className="space-y-1">
-              <Label htmlFor="lead-nome" className="text-xs font-semibold">Nome Completo *</Label>
-              <Input
-                id="lead-nome"
-                placeholder="Ex: João da Silva"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                className="h-9 text-xs"
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="lead-empresa" className="text-xs font-semibold">Empresa Cliente</Label>
-              <Select value={empresaClienteId} onValueChange={setEmpresaClienteId}>
-                <SelectTrigger id="lead-empresa" className="h-9 text-xs bg-background">
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border border-border">
-                  <SelectItem value="none">Nenhuma (Avulso)</SelectItem>
-                  {companies.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.razao_social}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="lead-cargo" className="text-xs font-semibold">Cargo / Função</Label>
-              <Input
-                id="lead-cargo"
-                placeholder="Ex: Comprador, Engenheiro"
-                value={cargo}
-                onChange={(e) => setCargo(e.target.value)}
-                className="h-9 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="lead-email" className="text-xs font-semibold">E-mail</Label>
-              <Input
-                id="lead-email"
-                type="email"
-                placeholder="Ex: joao@empresa.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-9 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="lead-phone" className="text-xs font-semibold">Telefone / WhatsApp</Label>
-              <Input
-                id="lead-phone"
-                placeholder="Ex: (11) 99999-9999"
-                value={telefone}
-                onChange={(e) => setTelefone(e.target.value)}
-                className="h-9 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="lead-tags" className="text-xs font-semibold">Tags (separadas por vírgula)</Label>
-              <Input
-                id="lead-tags"
-                placeholder="Ex: WhatsApp, Tráfego Pago"
-                value={tagsInput}
-                onChange={(e) => setTagsInput(e.target.value)}
-                className="h-9 text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
+            {/* Nome and Tags at the top (always visible) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1">
-                <Label htmlFor="lead-ticket" className="text-xs font-semibold">Ticket Médio (R$)</Label>
+                <Label htmlFor="lead-nome" className="text-xs font-semibold text-muted-foreground">Nome</Label>
                 <Input
-                  id="lead-ticket"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={ticketMedio}
-                  onChange={(e) => setTicketMedio(Number(e.target.value))}
-                  className="h-9 text-xs"
+                  id="lead-nome"
+                  placeholder="Informe o nome do lead"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  className="h-9 text-xs bg-card border-border"
+                  required
                 />
               </div>
+
               <div className="space-y-1">
-                <Label htmlFor="lead-total" className="text-xs font-semibold">Total Compras (R$)</Label>
+                <Label htmlFor="lead-tags" className="text-xs font-semibold text-muted-foreground">Tags (separadas por vírgula)</Label>
                 <Input
-                  id="lead-total"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={totalCompras}
-                  onChange={(e) => setTotalCompras(Number(e.target.value))}
-                  className="h-9 text-xs"
+                  id="lead-tags"
+                  placeholder="Ex: WhatsApp, Tráfego Pago"
+                  value={tagsInput}
+                  onChange={(e) => setTagsInput(e.target.value)}
+                  className="h-9 text-xs bg-card border-border"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <Label htmlFor="lead-qtd" className="text-[10px] font-semibold">Qtd Compras</Label>
-                <Input
-                  id="lead-qtd"
-                  type="number"
-                  min="0"
-                  value={comprasCount}
-                  onChange={(e) => setComprasCount(Number(e.target.value))}
-                  className="h-9 text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="lead-ciclo" className="text-[10px] font-semibold">Ciclo (dias)</Label>
-                <Input
-                  id="lead-ciclo"
-                  type="number"
-                  min="0"
-                  value={cicloCompra}
-                  onChange={(e) => setCicloCompra(Number(e.target.value))}
-                  className="h-9 text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="lead-ult" className="text-[10px] font-semibold">Última (dias)</Label>
-                <Input
-                  id="lead-ult"
-                  type="number"
-                  min="0"
-                  value={ultimaCompra}
-                  onChange={(e) => setUltimaCompra(Number(e.target.value))}
-                  className="h-9 text-xs"
-                />
-              </div>
+            {/* Tabs Header Buttons */}
+            <div className="flex flex-wrap gap-1 p-1 bg-muted/20 border border-border/80 rounded-lg w-full">
+              {[
+                { id: "contato", label: "Contato" },
+                { id: "dados", label: "Dados Pessoais" },
+                { id: "endereco", label: "Endereço" },
+                { id: "anotacoes", label: "Anotações" },
+              ].map((tab) => (
+                <Button
+                  key={tab.id}
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setActiveFormTab(tab.id as any)}
+                  className={`text-xs h-7 px-3 flex-1 rounded-md transition-all font-semibold ${
+                    activeFormTab === tab.id
+                      ? "bg-muted text-foreground font-bold shadow-sm"
+                      : "text-muted-foreground hover:text-foreground bg-transparent"
+                  }`}
+                >
+                  {tab.label}
+                </Button>
+              ))}
             </div>
 
-            <div className="flex gap-2 pt-4 border-t border-border">
+            {/* Tab content area */}
+            <div className="min-h-[220px] py-2">
+              {activeFormTab === "contato" && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="space-y-1">
+                    <Label htmlFor="lead-phone" className="text-xs font-semibold text-muted-foreground">Telefone</Label>
+                    <div className="flex gap-2">
+                      <div className="flex items-center gap-1.5 px-3 py-1 bg-muted/40 border border-border rounded-md text-xs select-none h-9 shrink-0">
+                        <span>🇧🇷</span>
+                        <span className="text-muted-foreground font-semibold">+55</span>
+                      </div>
+                      <Input
+                        id="lead-phone"
+                        placeholder="Digite o telefone"
+                        value={telefone}
+                        onChange={(e) => setTelefone(e.target.value)}
+                        className="h-9 text-xs flex-1 bg-card border-border"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="lead-email" className="text-xs font-semibold text-muted-foreground">E-mail</Label>
+                    <Input
+                      id="lead-email"
+                      type="email"
+                      placeholder="Exemplo: meulead@gmail.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-9 text-xs bg-card border-border"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="lead-site" className="text-xs font-semibold text-muted-foreground">Site</Label>
+                    <Input
+                      id="lead-site"
+                      placeholder="Exemplo: www.meulead.com.br"
+                      value={site}
+                      onChange={(e) => setSite(e.target.value)}
+                      className="h-9 text-xs bg-card border-border"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {activeFormTab === "dados" && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1">
+                      <Label htmlFor="lead-empresa" className="text-xs font-semibold text-muted-foreground">Empresa Cliente</Label>
+                      <Select value={empresaClienteId} onValueChange={setEmpresaClienteId}>
+                        <SelectTrigger id="lead-empresa" className="h-9 text-xs bg-background border-border">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover border border-border">
+                          <SelectItem value="none">Nenhuma (Avulso)</SelectItem>
+                          {companies.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.razao_social}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="lead-cargo" className="text-xs font-semibold text-muted-foreground">Cargo / Função</Label>
+                      <Input
+                        id="lead-cargo"
+                        placeholder="Ex: Comprador, Engenheiro"
+                        value={cargo}
+                        onChange={(e) => setCargo(e.target.value)}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1">
+                      <Label htmlFor="lead-ticket" className="text-xs font-semibold text-muted-foreground">Ticket Médio (R$)</Label>
+                      <Input
+                        id="lead-ticket"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={ticketMedio}
+                        onChange={(e) => setTicketMedio(Number(e.target.value))}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="lead-total" className="text-xs font-semibold text-muted-foreground">Total Compras (R$)</Label>
+                      <Input
+                        id="lead-total"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={totalCompras}
+                        onChange={(e) => setTotalCompras(Number(e.target.value))}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="lead-qtd" className="text-[10px] font-semibold text-muted-foreground">Qtd Compras</Label>
+                      <Input
+                        id="lead-qtd"
+                        type="number"
+                        min="0"
+                        value={comprasCount}
+                        onChange={(e) => setComprasCount(Number(e.target.value))}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="lead-ciclo" className="text-[10px] font-semibold text-muted-foreground">Ciclo (dias)</Label>
+                      <Input
+                        id="lead-ciclo"
+                        type="number"
+                        min="0"
+                        value={cicloCompra}
+                        onChange={(e) => setCicloCompra(Number(e.target.value))}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="lead-ult" className="text-[10px] font-semibold text-muted-foreground">Última (dias)</Label>
+                      <Input
+                        id="lead-ult"
+                        type="number"
+                        min="0"
+                        value={ultimaCompra}
+                        onChange={(e) => setUltimaCompra(Number(e.target.value))}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeFormTab === "endereco" && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground">CEP</Label>
+                      <Input
+                        placeholder="Ex: 01311-200"
+                        value={cep}
+                        onChange={(e) => setCep(e.target.value)}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground">País</Label>
+                      <div className="flex items-center gap-2 h-9 px-3 bg-muted/20 border border-border rounded-md text-xs select-none">
+                        <span>🇧🇷</span>
+                        <span>Brasil</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="space-y-1 col-span-2">
+                      <Label className="text-xs font-semibold text-muted-foreground">Endereço</Label>
+                      <Input
+                        placeholder="Ex: Avenida Paulista"
+                        value={endereco}
+                        onChange={(e) => setEndereco(e.target.value)}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                    <div className="space-y-1 col-span-1">
+                      <Label className="text-xs font-semibold text-muted-foreground">Número</Label>
+                      <Input
+                        placeholder="Ex: 1000"
+                        value={numero}
+                        onChange={(e) => setNumero(e.target.value)}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                    <div className="space-y-1 col-span-1">
+                      <Label className="text-xs font-semibold text-muted-foreground">Compl.</Label>
+                      <Input
+                        placeholder="Ex: Apto 101"
+                        value={complemento}
+                        onChange={(e) => setComplemento(e.target.value)}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground">Bairro</Label>
+                      <Input
+                        placeholder="Ex: Cerqueira César"
+                        value={bairro}
+                        onChange={(e) => setBairro(e.target.value)}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground">Cidade</Label>
+                      <Input
+                        placeholder="Ex: São Paulo"
+                        value={cidade}
+                        onChange={(e) => setCidade(e.target.value)}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-muted-foreground">UF</Label>
+                      <Input
+                        placeholder="Ex: SP"
+                        value={uf}
+                        onChange={(e) => setUf(e.target.value)}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeFormTab === "anotacoes" && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="space-y-1">
+                    <Label htmlFor="lead-anotacoes" className="text-xs font-semibold text-muted-foreground">Anotações do Lead</Label>
+                    <textarea
+                      id="lead-anotacoes"
+                      rows={6}
+                      placeholder="Escreva observações adicionais sobre o lead..."
+                      value={anotacoes}
+                      onChange={(e) => setAnotacoes(e.target.value)}
+                      className="w-full text-xs p-3 bg-card border border-border rounded-md focus:ring-1 focus:ring-ring focus:outline-none resize-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2.5 pt-4 border-t border-border/80 justify-end">
               <Button
                 type="button"
                 variant="outline"
-                className="flex-1 text-xs h-9 bg-card hover:bg-muted"
+                className="text-xs h-9 bg-card border-border hover:bg-muted px-4"
                 onClick={() => setIsFormOpen(false)}
                 disabled={loading}
               >
                 Cancelar
               </Button>
-              <Button type="submit" className="flex-1 text-xs h-9 font-semibold" disabled={loading}>
-                {loading ? "Salvando..." : "Salvar"}
+              <Button type="submit" className="text-xs h-9 font-semibold px-5" disabled={loading}>
+                {loading ? "Salvando..." : "Confirmar"}
               </Button>
             </div>
           </form>
