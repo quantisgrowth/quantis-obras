@@ -339,7 +339,7 @@ export const getLeads = createServerFn({ method: "GET" })
 
     const { data, error } = await supabase
       .from("crm_leads")
-      .select("*, empresa_cliente:empresas_clientes(id, razao_social)")
+      .select("*, empresa_cliente:empresas_clientes!empresa_cliente_id(id, razao_social)")
       .eq("empresa_id", empresaId)
       .order("nome", { ascending: true });
 
