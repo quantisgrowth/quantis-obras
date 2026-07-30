@@ -41,6 +41,12 @@ const LeadSchema = z.object({
   email: z.string().nullable().optional(),
   telefone: z.string().nullable().optional(),
   cargo: z.string().nullable().optional(),
+  tags: z.array(z.string()).default([]),
+  ticket_medio: z.number().default(0),
+  total_compras: z.number().default(0),
+  compras_count: z.number().int().default(0),
+  ciclo_compra_dias: z.number().int().default(0),
+  ultima_compra_dias: z.number().int().default(0),
 });
 
 const UpdateOpportunityStageSchema = z.object({
@@ -415,3 +421,64 @@ export const getObrasForSelect = createServerFn({ method: "GET" })
     if (error) throw new Error("Erro ao buscar obras: " + error.message);
     return data;
   });
+
+// 16. Save leads in batch (for import)
+export const saveLeadsBatch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.array(LeadSchema).parse(input))
+  .handler(async ({ data: inputList, context }) => {
+    const { supabase, userId } = context;
+    const empresaId = await getEmpresaId(supabase, userId);
+
+    const leadsData = inputList.map((lead) => ({
+      ...lead,
+      empresa_id: empresaId,
+    }));
+
+    const { data, error } = await supabase
+      .from("crm_leads")
+      .upsert(leadsData)
+      .select();
+
+    if (error) throw new Error("Erro ao salvar lote de leads: " + error.message);
+    return data;
+  });
+
+// 17. Get lead import template from app_settings
+export const getLeadsTemplate = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase } = context;
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "crm_leads_template")
+      .maybeSingle();
+
+    if (error) throw new Error("Erro ao buscar template de leads: " + error.message);
+    return data?.value || null;
+  });
+
+// 18. Save lead import template to app_settings
+export const saveLeadsTemplate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    fileName: z.string(),
+    contentType: z.string(),
+    base64Data: z.string(),
+  }).parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { supabase } = context;
+
+    const { error } = await supabase
+      .from("app_settings")
+      .upsert({
+        key: "crm_leads_template",
+        value: input,
+        descricao: "Template oficial de importação de Leads (CRM)"
+      });
+
+    if (error) throw new Error("Erro ao salvar template de leads: " + error.message);
+    return { success: true };
+  });
+
