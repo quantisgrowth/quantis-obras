@@ -1107,7 +1107,7 @@ export function LeadsManager() {
             <div className="flex flex-wrap gap-1 p-1 bg-muted/20 border border-border/80 rounded-lg w-full">
               {[
                 { id: "contato", label: "Contato" },
-                { id: "dados", label: "Dados Pessoais" },
+                { id: "dados", label: "Dados da Empresa" },
                 { id: "endereco", label: "Endereço" },
                 { id: "anotacoes", label: "Anotações" },
               ].map((tab) => (
