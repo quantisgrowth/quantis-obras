@@ -121,6 +121,9 @@ export function LeadsManager() {
   const [cidade, setCidade] = useState("");
   const [uf, setUf] = useState("");
   const [anotacoes, setAnotacoes] = useState("");
+  const [documento, setDocumento] = useState("");
+  const [origem, setOrigem] = useState("");
+  const [dataNascimento, setDataNascimento] = useState("");
 
   // Import Dialog states
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -174,6 +177,9 @@ export function LeadsManager() {
     setCidade("");
     setUf("");
     setAnotacoes("");
+    setDocumento("");
+    setOrigem("");
+    setDataNascimento("");
     setIsFormOpen(true);
   };
 
@@ -200,6 +206,9 @@ export function LeadsManager() {
     setCidade("");
     setUf("");
     setAnotacoes("");
+    setDocumento("");
+    setOrigem("");
+    setDataNascimento("");
     setIsFormOpen(true);
   };
 
@@ -1168,10 +1177,21 @@ export function LeadsManager() {
                 <div className="space-y-4 animate-in fade-in duration-200">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div className="space-y-1">
-                      <Label htmlFor="lead-empresa" className="text-xs font-semibold text-muted-foreground">Empresa Cliente</Label>
+                      <Label htmlFor="lead-documento" className="text-xs font-semibold text-muted-foreground">Documento</Label>
+                      <Input
+                        id="lead-documento"
+                        placeholder="Informe o CPF ou CNPJ"
+                        value={documento}
+                        onChange={(e) => setDocumento(e.target.value)}
+                        className="h-9 text-xs bg-card border-border"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="lead-empresa" className="text-xs font-semibold text-muted-foreground">Empresa</Label>
                       <Select value={empresaClienteId} onValueChange={setEmpresaClienteId}>
                         <SelectTrigger id="lead-empresa" className="h-9 text-xs bg-background border-border">
-                          <SelectValue placeholder="Selecione..." />
+                          <SelectValue placeholder="Informe a empresa do lead" />
                         </SelectTrigger>
                         <SelectContent className="bg-popover border border-border">
                           <SelectItem value="none">Nenhuma (Avulso)</SelectItem>
@@ -1183,80 +1203,110 @@ export function LeadsManager() {
                         </SelectContent>
                       </Select>
                     </div>
-
-                    <div className="space-y-1">
-                      <Label htmlFor="lead-cargo" className="text-xs font-semibold text-muted-foreground">Cargo / Função</Label>
-                      <Input
-                        id="lead-cargo"
-                        placeholder="Ex: Comprador, Engenheiro"
-                        value={cargo}
-                        onChange={(e) => setCargo(e.target.value)}
-                        className="h-9 text-xs bg-card border-border"
-                      />
-                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div className="space-y-1">
-                      <Label htmlFor="lead-ticket" className="text-xs font-semibold text-muted-foreground">Ticket Médio (R$)</Label>
+                      <Label htmlFor="lead-origem" className="text-xs font-semibold text-muted-foreground">Origem</Label>
                       <Input
-                        id="lead-ticket"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={ticketMedio}
-                        onChange={(e) => setTicketMedio(Number(e.target.value))}
+                        id="lead-origem"
+                        placeholder="Como o lead ficou sabendo da sua empresa?"
+                        value={origem}
+                        onChange={(e) => setOrigem(e.target.value)}
                         className="h-9 text-xs bg-card border-border"
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <Label htmlFor="lead-total" className="text-xs font-semibold text-muted-foreground">Total Compras (R$)</Label>
+                      <Label htmlFor="lead-datanasc" className="text-xs font-semibold text-muted-foreground">Data de Nascimento</Label>
                       <Input
-                        id="lead-total"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={totalCompras}
-                        onChange={(e) => setTotalCompras(Number(e.target.value))}
+                        id="lead-datanasc"
+                        type="date"
+                        value={dataNascimento}
+                        onChange={(e) => setDataNascimento(e.target.value)}
                         className="h-9 text-xs bg-card border-border"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="lead-qtd" className="text-[10px] font-semibold text-muted-foreground">Qtd Compras</Label>
-                      <Input
-                        id="lead-qtd"
-                        type="number"
-                        min="0"
-                        value={comprasCount}
-                        onChange={(e) => setComprasCount(Number(e.target.value))}
-                        className="h-9 text-xs bg-card border-border"
-                      />
+                  <div className="space-y-1">
+                    <Label htmlFor="lead-cargo" className="text-xs font-semibold text-muted-foreground">Cargo / Função</Label>
+                    <Input
+                      id="lead-cargo"
+                      placeholder="Ex: Comprador, Engenheiro"
+                      value={cargo}
+                      onChange={(e) => setCargo(e.target.value)}
+                      className="h-9 text-xs bg-card border-border"
+                    />
+                  </div>
+
+                  {/* Comercial/Métricas Section */}
+                  <div className="pt-3 border-t border-border/60">
+                    <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-3">
+                      Indicadores de Compra (CRM)
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="lead-ciclo" className="text-[10px] font-semibold text-muted-foreground">Ciclo (dias)</Label>
-                      <Input
-                        id="lead-ciclo"
-                        type="number"
-                        min="0"
-                        value={cicloCompra}
-                        onChange={(e) => setCicloCompra(Number(e.target.value))}
-                        className="h-9 text-xs bg-card border-border"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-1">
+                        <Label htmlFor="lead-ticket" className="text-xs font-semibold text-muted-foreground">Ticket Médio (R$)</Label>
+                        <Input
+                          id="lead-ticket"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={ticketMedio}
+                          onChange={(e) => setTicketMedio(Number(e.target.value))}
+                          className="h-9 text-xs bg-card border-border"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor="lead-total" className="text-xs font-semibold text-muted-foreground">Total Compras (R$)</Label>
+                        <Input
+                          id="lead-total"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={totalCompras}
+                          onChange={(e) => setTotalCompras(Number(e.target.value))}
+                          className="h-9 text-xs bg-card border-border"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="lead-ult" className="text-[10px] font-semibold text-muted-foreground">Última (dias)</Label>
-                      <Input
-                        id="lead-ult"
-                        type="number"
-                        min="0"
-                        value={ultimaCompra}
-                        onChange={(e) => setUltimaCompra(Number(e.target.value))}
-                        className="h-9 text-xs bg-card border-border"
-                      />
+
+                    <div className="grid grid-cols-3 gap-2 mt-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="lead-qtd" className="text-[10px] font-semibold text-muted-foreground">Qtd Compras</Label>
+                        <Input
+                          id="lead-qtd"
+                          type="number"
+                          min="0"
+                          value={comprasCount}
+                          onChange={(e) => setComprasCount(Number(e.target.value))}
+                          className="h-9 text-xs bg-card border-border"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="lead-ciclo" className="text-[10px] font-semibold text-muted-foreground">Ciclo (dias)</Label>
+                        <Input
+                          id="lead-ciclo"
+                          type="number"
+                          min="0"
+                          value={cicloCompra}
+                          onChange={(e) => setCicloCompra(Number(e.target.value))}
+                          className="h-9 text-xs bg-card border-border"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="lead-ult" className="text-[10px] font-semibold text-muted-foreground">Última (dias)</Label>
+                        <Input
+                          id="lead-ult"
+                          type="number"
+                          min="0"
+                          value={ultimaCompra}
+                          onChange={(e) => setUltimaCompra(Number(e.target.value))}
+                          className="h-9 text-xs bg-card border-border"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
