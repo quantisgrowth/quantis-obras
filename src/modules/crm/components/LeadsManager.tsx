@@ -141,8 +141,8 @@ export function LeadsManager() {
         getLeads(),
         getCompaniesForSelect(),
       ]);
-      setLeads(leadsData as any);
-      setCompanies(companiesData as any);
+      setLeads((leadsData as any) || []);
+      setCompanies((companiesData as any) || []);
     } catch (err: any) {
       toast.error("Erro ao carregar dados: " + err.message);
     } finally {

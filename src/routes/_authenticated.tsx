@@ -29,12 +29,14 @@ function AuthLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("sidebar_collapsed") === "true";
+      const saved = localStorage.getItem("sidebar_collapsed");
+      setSidebarCollapsed(saved === "true");
     }
-    return false;
-  });
+  }, []);
 
   const toggleSidebar = () => {
     setSidebarCollapsed((prev) => {
