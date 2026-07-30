@@ -844,9 +844,9 @@ export function LeadsManager() {
       </div>
 
       {/* Main Content Layout */}
-      <div className="grid gap-6 md:grid-cols-4 items-start">
-        {/* Table List Section */}
-        <Card className={`md:col-span-${isFormOpen ? "3" : "4"} border border-border bg-card overflow-hidden`}>
+      <div className="space-y-4">
+        {/* Table List Section - Full Width */}
+        <Card className="border border-border bg-card overflow-hidden">
           <div className="overflow-x-auto">
             {loading && leads.length === 0 ? (
               <div className="py-24 text-center text-sm text-muted-foreground flex flex-col items-center justify-center gap-3">
@@ -905,7 +905,10 @@ export function LeadsManager() {
                             aria-label={`Selecionar ${lead.nome}`}
                           />
                         </td>
-                        <td className="py-4 px-4 align-middle">
+                        <td
+                          className="py-4 px-4 align-middle cursor-pointer hover:text-primary transition-colors"
+                          onClick={() => handleOpenEditForm(lead)}
+                        >
                           <div className="flex items-center gap-3">
                             <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs select-none">
                               {initials}
@@ -920,7 +923,10 @@ export function LeadsManager() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-4 align-middle">
+                        <td
+                          className="py-4 px-4 align-middle cursor-pointer"
+                          onClick={() => handleOpenEditForm(lead)}
+                        >
                           {lead.telefone ? (
                             <div className="flex items-center gap-1.5 text-xs text-foreground font-medium">
                               <Phone className="h-3.5 w-3.5 text-muted-foreground/75" />
@@ -930,7 +936,10 @@ export function LeadsManager() {
                             <span className="text-xs text-muted-foreground/40 italic">Sem telefone</span>
                           )}
                         </td>
-                        <td className="py-4 px-4 align-middle">
+                        <td
+                          className="py-4 px-4 align-middle cursor-pointer"
+                          onClick={() => handleOpenEditForm(lead)}
+                        >
                           <div className="flex flex-wrap gap-1 max-w-[220px]">
                             {(lead.tags || []).length > 0 ? (
                               lead.tags?.map((tag, idx) => (
@@ -947,7 +956,10 @@ export function LeadsManager() {
                             )}
                           </div>
                         </td>
-                        <td className="py-4 px-4 align-middle">
+                        <td
+                          className="py-4 px-4 align-middle cursor-pointer"
+                          onClick={() => handleOpenEditForm(lead)}
+                        >
                           <div className="flex flex-col text-[11px] space-y-0.5 min-w-[120px]">
                             <div className="text-foreground">
                               Total <span className="font-semibold text-foreground/90">{formattedTotal}</span>
@@ -966,7 +978,10 @@ export function LeadsManager() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-4 align-middle text-xs font-medium text-muted-foreground">
+                        <td
+                          className="py-4 px-4 align-middle text-xs font-medium text-muted-foreground cursor-pointer"
+                          onClick={() => handleOpenEditForm(lead)}
+                        >
                           {lead.created_at ? (
                             new Date(lead.created_at).toLocaleDateString("pt-BR", {
                               day: "numeric",
@@ -1007,181 +1022,174 @@ export function LeadsManager() {
             )}
           </div>
         </Card>
-
-        {/* Lead Sidebar Form (Drawer style inside layout) */}
-        {isFormOpen && (
-          <Card className="md:col-span-1 border border-border bg-card animate-in slide-in-from-right-5 duration-200 shadow-lg sticky top-6">
-            <CardHeader className="border-b pb-4 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-bold">
-                  {editingLead ? "Editar Lead" : "Novo Lead"}
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Insira os detalhes do contato do CRM.
-                </CardDescription>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsFormOpen(false)} className="h-7 w-7 text-muted-foreground hover:bg-muted rounded-full">
-                <X className="h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent className="pt-5 space-y-4 max-h-[70vh] overflow-y-auto">
-              <form onSubmit={handleSave} className="space-y-4">
-                <div className="space-y-1">
-                  <Label htmlFor="lead-nome" className="text-xs font-semibold">Nome Completo *</Label>
-                  <Input
-                    id="lead-nome"
-                    placeholder="Ex: João da Silva"
-                    value={nome}
-                    onChange={(e) => setNome(e.target.value)}
-                    className="h-9 text-xs"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="lead-empresa" className="text-xs font-semibold">Empresa Cliente</Label>
-                  <Select value={empresaClienteId} onValueChange={setEmpresaClienteId}>
-                    <SelectTrigger id="lead-empresa" className="h-9 text-xs bg-background">
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover border border-border">
-                      <SelectItem value="none">Nenhuma (Avulso)</SelectItem>
-                      {companies.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.razao_social}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="lead-cargo" className="text-xs font-semibold">Cargo / Função</Label>
-                  <Input
-                    id="lead-cargo"
-                    placeholder="Ex: Comprador, Engenheiro"
-                    value={cargo}
-                    onChange={(e) => setCargo(e.target.value)}
-                    className="h-9 text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="lead-email" className="text-xs font-semibold">E-mail</Label>
-                  <Input
-                    id="lead-email"
-                    type="email"
-                    placeholder="Ex: joao@empresa.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="h-9 text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="lead-phone" className="text-xs font-semibold">Telefone / WhatsApp</Label>
-                  <Input
-                    id="lead-phone"
-                    placeholder="Ex: (11) 99999-9999"
-                    value={telefone}
-                    onChange={(e) => setTelefone(e.target.value)}
-                    className="h-9 text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="lead-tags" className="text-xs font-semibold">Tags (separadas por vírgula)</Label>
-                  <Input
-                    id="lead-tags"
-                    placeholder="Ex: WhatsApp, Tráfego Pago"
-                    value={tagsInput}
-                    onChange={(e) => setTagsInput(e.target.value)}
-                    className="h-9 text-xs"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="space-y-1">
-                    <Label htmlFor="lead-ticket" className="text-xs font-semibold">Ticket Médio (R$)</Label>
-                    <Input
-                      id="lead-ticket"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={ticketMedio}
-                      onChange={(e) => setTicketMedio(Number(e.target.value))}
-                      className="h-9 text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="lead-total" className="text-xs font-semibold">Total Compras (R$)</Label>
-                    <Input
-                      id="lead-total"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={totalCompras}
-                      onChange={(e) => setTotalCompras(Number(e.target.value))}
-                      className="h-9 text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="lead-qtd" className="text-[10px] font-semibold">Qtd Compras</Label>
-                    <Input
-                      id="lead-qtd"
-                      type="number"
-                      min="0"
-                      value={comprasCount}
-                      onChange={(e) => setComprasCount(Number(e.target.value))}
-                      className="h-9 text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="lead-ciclo" className="text-[10px] font-semibold">Ciclo (dias)</Label>
-                    <Input
-                      id="lead-ciclo"
-                      type="number"
-                      min="0"
-                      value={cicloCompra}
-                      onChange={(e) => setCicloCompra(Number(e.target.value))}
-                      className="h-9 text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="lead-ult" className="text-[10px] font-semibold">Última (dias)</Label>
-                    <Input
-                      id="lead-ult"
-                      type="number"
-                      min="0"
-                      value={ultimaCompra}
-                      onChange={(e) => setUltimaCompra(Number(e.target.value))}
-                      className="h-9 text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-4 border-t border-border">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1 text-xs h-9 bg-card hover:bg-muted"
-                    onClick={() => setIsFormOpen(false)}
-                    disabled={loading}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button type="submit" className="flex-1 text-xs h-9 font-semibold" disabled={loading}>
-                    {loading ? "Salvando..." : "Salvar"}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        )}
       </div>
+
+      {/* Pop-up dialog for Create/Edit lead */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="max-w-md bg-card border border-border select-none max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">
+              {editingLead ? "Editar Lead" : "Novo Lead"}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Insira os detalhes do contato do CRM.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSave} className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <Label htmlFor="lead-nome" className="text-xs font-semibold">Nome Completo *</Label>
+              <Input
+                id="lead-nome"
+                placeholder="Ex: João da Silva"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                className="h-9 text-xs"
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="lead-empresa" className="text-xs font-semibold">Empresa Cliente</Label>
+              <Select value={empresaClienteId} onValueChange={setEmpresaClienteId}>
+                <SelectTrigger id="lead-empresa" className="h-9 text-xs bg-background">
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border border-border">
+                  <SelectItem value="none">Nenhuma (Avulso)</SelectItem>
+                  {companies.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.razao_social}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="lead-cargo" className="text-xs font-semibold">Cargo / Função</Label>
+              <Input
+                id="lead-cargo"
+                placeholder="Ex: Comprador, Engenheiro"
+                value={cargo}
+                onChange={(e) => setCargo(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="lead-email" className="text-xs font-semibold">E-mail</Label>
+              <Input
+                id="lead-email"
+                type="email"
+                placeholder="Ex: joao@empresa.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="lead-phone" className="text-xs font-semibold">Telefone / WhatsApp</Label>
+              <Input
+                id="lead-phone"
+                placeholder="Ex: (11) 99999-9999"
+                value={telefone}
+                onChange={(e) => setTelefone(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="lead-tags" className="text-xs font-semibold">Tags (separadas por vírgula)</Label>
+              <Input
+                id="lead-tags"
+                placeholder="Ex: WhatsApp, Tráfego Pago"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="space-y-1">
+                <Label htmlFor="lead-ticket" className="text-xs font-semibold">Ticket Médio (R$)</Label>
+                <Input
+                  id="lead-ticket"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={ticketMedio}
+                  onChange={(e) => setTicketMedio(Number(e.target.value))}
+                  className="h-9 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="lead-total" className="text-xs font-semibold">Total Compras (R$)</Label>
+                <Input
+                  id="lead-total"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={totalCompras}
+                  onChange={(e) => setTotalCompras(Number(e.target.value))}
+                  className="h-9 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="lead-qtd" className="text-[10px] font-semibold">Qtd Compras</Label>
+                <Input
+                  id="lead-qtd"
+                  type="number"
+                  min="0"
+                  value={comprasCount}
+                  onChange={(e) => setComprasCount(Number(e.target.value))}
+                  className="h-9 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="lead-ciclo" className="text-[10px] font-semibold">Ciclo (dias)</Label>
+                <Input
+                  id="lead-ciclo"
+                  type="number"
+                  min="0"
+                  value={cicloCompra}
+                  onChange={(e) => setCicloCompra(Number(e.target.value))}
+                  className="h-9 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="lead-ult" className="text-[10px] font-semibold">Última (dias)</Label>
+                <Input
+                  id="lead-ult"
+                  type="number"
+                  min="0"
+                  value={ultimaCompra}
+                  onChange={(e) => setUltimaCompra(Number(e.target.value))}
+                  className="h-9 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-4 border-t border-border">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 text-xs h-9 bg-card hover:bg-muted"
+                onClick={() => setIsFormOpen(false)}
+                disabled={loading}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" className="flex-1 text-xs h-9 font-semibold" disabled={loading}>
+                {loading ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* --- IMPORT MODAL --- */}
       <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>

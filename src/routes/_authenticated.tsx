@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, Link, useLocation } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth, primaryRole } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import {
   FlaskConical, LogOut, LayoutDashboard, CalendarPlus, FolderKanban,
   Building, Clock, Calendar, CheckCircle2, HardHat, Plus, CircleDollarSign,
   ClipboardList, Users, Star, Building2, MapPin, AlertTriangle, Settings2, Settings, BarChart3,
-  LayoutGrid
+  LayoutGrid, ChevronLeft, ChevronRight
 } from "lucide-react";
 import {
   AlertDialog,
@@ -28,6 +28,21 @@ function AuthLayout() {
   const { branding } = useBranding();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("sidebar_collapsed") === "true";
+    }
+    return false;
+  });
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("sidebar_collapsed", String(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login", replace: true });
@@ -55,18 +70,21 @@ function AuthLayout() {
   // Helper to check active status of dashboard tabs
   const isTabActive = (tabName: string) => {
     const currentTab = (location.search as any)?.tab || "pendentes";
-    return location.pathname === "/dashboard" && currentTab === tabName;
   };
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row pb-16 md:pb-0">
       
       {/* Desktop Sidebar (Left Side) */}
-      <aside className="hidden md:flex w-64 border-r border-border bg-card flex-col justify-between h-screen sticky top-0 z-30 select-none">
-        <div className="flex flex-col gap-6 py-6 px-4 overflow-y-auto">
+      <aside className={`hidden md:flex border-r border-border bg-card flex-col justify-between h-screen sticky top-0 z-30 select-none transition-all duration-300 ${sidebarCollapsed ? "w-20" : "w-64"}`}>
+        <div className={`flex flex-col gap-6 py-6 overflow-y-auto ${sidebarCollapsed ? "px-2" : "px-4"}`}>
           {/* Logo Area */}
-          <Link to="/dashboard" className="flex items-center gap-2 px-2 shrink-0">
-            {branding?.logo_url ? (
+          <Link to="/dashboard" className={`flex items-center px-2 shrink-0 ${sidebarCollapsed ? "justify-center" : "gap-2"}`}>
+            {sidebarCollapsed ? (
+              <div className="grid h-9 w-9 place-items-center rounded-md bg-primary text-primary-foreground">
+                <FlaskConical className="h-5 w-5" />
+              </div>
+            ) : branding?.logo_url ? (
               <div className="flex flex-col gap-1.5">
                 <img src={branding.logo_url} alt="Logo" className="h-8 max-w-[180px] object-contain" />
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground w-fit">{roleLabel}</span>
@@ -94,14 +112,16 @@ function AuthLayout() {
                 return (
                   <Link
                     to="/laboratorio"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    className={`flex items-center rounded-lg text-sm transition-all border ${
+                      sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                    } ${
                       isRouteActive("/laboratorio")
                         ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     }`}
                   >
                     <FlaskConical className="h-4 w-4 shrink-0" />
-                    <span>Operação Laboratório</span>
+                    {!sidebarCollapsed && <span>Operação Laboratório</span>}
                   </Link>
                 );
               }
@@ -127,18 +147,20 @@ function AuthLayout() {
                   <Link
                     to="/dashboard"
                     search={{ tab: "tecnicos" }}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    className={`flex items-center rounded-lg text-sm transition-all border ${
+                      sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                    } ${
                       isRouteActive("/dashboard")
                         ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     }`}
                   >
                     <LayoutDashboard className="h-4 w-4 shrink-0" />
-                    <span>Painel Geral</span>
+                    {!sidebarCollapsed && <span>Painel Geral</span>}
                   </Link>
 
-                  {/* Sub-itens do Painel Geral para Admin (exibido apenas quando no /dashboard) */}
-                  {isRouteActive("/dashboard") && (
+                  {/* Sub-itens do Painel Geral para Admin (exibido apenas quando no /dashboard e expandido) */}
+                  {isRouteActive("/dashboard") && !sidebarCollapsed && (
                     <div className="ml-4 pl-3 border-l border-border flex flex-col gap-1 my-1 animate-in slide-in-from-top-1 duration-200">
                       {adminSidebarItems.map((item) => {
                         const Icon = item.icon;
@@ -165,17 +187,19 @@ function AuthLayout() {
 
                   <Link
                     to="/crm"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    className={`flex items-center rounded-lg text-sm transition-all border ${
+                      sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                    } ${
                       isRouteActive("/crm")
                         ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     }`}
                   >
                     <FolderKanban className="h-4 w-4 shrink-0" />
-                    <span>CRM & Vendas</span>
+                    {!sidebarCollapsed && <span>CRM & Vendas</span>}
                   </Link>
 
-                  {isRouteActive("/crm") && (
+                  {isRouteActive("/crm") && !sidebarCollapsed && (
                     <div className="ml-4 pl-3 border-l border-border flex flex-col gap-1 my-1 animate-in slide-in-from-top-1 duration-200">
                       <Link
                         to="/crm"
@@ -220,26 +244,30 @@ function AuthLayout() {
 
                   <Link
                     to="/novo-agendamento"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    className={`flex items-center rounded-lg text-sm transition-all border ${
+                      sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                    } ${
                       isRouteActive("/novo-agendamento")
-                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     }`}
                   >
                     <CalendarPlus className="h-4 w-4 shrink-0" />
-                    <span>Agendamento Manual</span>
+                    {!sidebarCollapsed && <span>Agendamento Manual</span>}
                   </Link>
 
                   <Link
                     to="/laboratorio"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    className={`flex items-center rounded-lg text-sm transition-all border ${
+                      sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                    } ${
                       isRouteActive("/laboratorio")
-                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     }`}
                   >
                     <FlaskConical className="h-4 w-4 shrink-0" />
-                    <span>Operação Laboratório</span>
+                    {!sidebarCollapsed && <span>Operação Laboratório</span>}
                   </Link>
                 </>
               );
@@ -252,38 +280,44 @@ function AuthLayout() {
                   <>
                     <Link
                       to="/dashboard?tab=pendentes"
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      className={`flex items-center rounded-lg text-sm transition-all border ${
+                        sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                      } ${
                         isTabActive("pendentes")
-                          ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                          ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                           : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                       }`}
                     >
                       <Clock className="h-4 w-4 shrink-0" />
-                      <span>Aguardando Técnico</span>
+                      {!sidebarCollapsed && <span>Aguardando Técnico</span>}
                     </Link>
 
                     <Link
                       to="/dashboard?tab=confirmados"
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      className={`flex items-center rounded-lg text-sm transition-all border ${
+                        sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                      } ${
                         isTabActive("confirmados")
-                          ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                          ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                           : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                       }`}
                     >
                       <Calendar className="h-4 w-4 shrink-0" />
-                      <span>Confirmados</span>
+                      {!sidebarCollapsed && <span>Confirmados</span>}
                     </Link>
 
                     <Link
                       to="/dashboard?tab=realizados"
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                      className={`flex items-center rounded-lg text-sm transition-all border ${
+                        sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                      } ${
                         isTabActive("realizados")
-                          ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                          ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                           : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                       }`}
                     >
                       <CheckCircle2 className="h-4 w-4 shrink-0" />
-                      <span>Realizados</span>
+                      {!sidebarCollapsed && <span>Realizados</span>}
                     </Link>
                   </>
                 )}
@@ -291,42 +325,48 @@ function AuthLayout() {
                 {hasPermission("financeiro") && (
                   <Link
                     to="/financeiro-cliente"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    className={`flex items-center rounded-lg text-sm transition-all border ${
+                      sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                    } ${
                       isRouteActive("/financeiro-cliente")
-                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     }`}
                   >
                     <CircleDollarSign className="h-4 w-4 shrink-0" />
-                    <span>Financeiro</span>
+                    {!sidebarCollapsed && <span>Financeiro</span>}
                   </Link>
                 )}
 
                 {hasPermission("obras") && (
                   <Link
                     to="/minhas-obras"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    className={`flex items-center rounded-lg text-sm transition-all border ${
+                      sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                    } ${
                       isRouteActive("/minhas-obras")
-                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     }`}
                   >
                     <HardHat className="h-4 w-4 shrink-0" />
-                    <span>Minhas Obras</span>
+                    {!sidebarCollapsed && <span>Minhas Obras</span>}
                   </Link>
                 )}
 
                 {hasPermission("pedidos") && (
                   <Link
                     to="/novo-agendamento"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                    className={`flex items-center rounded-lg text-sm transition-all border ${
+                      sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                    } ${
                       isRouteActive("/novo-agendamento")
-                        ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                        ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     }`}
                   >
                     <CalendarPlus className="h-4 w-4 shrink-0" />
-                    <span>Novo Pedido</span>
+                    {!sidebarCollapsed && <span>Novo Pedido</span>}
                   </Link>
                 )}
               </>
@@ -336,41 +376,51 @@ function AuthLayout() {
             {role === "tecnico" && (
               <Link
                 to="/dashboard"
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border ${
+                className={`flex items-center rounded-lg text-sm transition-all border ${
+                  sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+                } ${
                   isRouteActive("/dashboard")
-                    ? "bg-primary/10 text-primary border-primary/20 font-medium"
+                    ? "bg-primary/10 text-primary border-primary/20 font-semibold"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                 }`}
               >
                 <LayoutDashboard className="h-4 w-4 shrink-0" />
-                <span>Painel Técnico</span>
+                {!sidebarCollapsed && <span>Painel Técnico</span>}
               </Link>
             )}
           </nav>
         </div>
 
         {/* Desktop Footer (Fixed Bottom section) */}
-        <div className="p-4 border-t border-border bg-muted/20 space-y-3 shrink-0">
+        <div className={`p-4 border-t border-border bg-muted/20 space-y-3 shrink-0 ${sidebarCollapsed ? "px-2" : "p-4"}`}>
           {/* Meus Dados fixed at the bottom for client */}
           {role === "cliente" && (
             <Link
               to="/meus-dados"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border w-full ${
+              className={`flex items-center rounded-lg text-sm transition-all border w-full ${
+                sidebarCollapsed ? "justify-center p-2.5 gap-0" : "px-3 py-2.5 gap-3"
+              } ${
                 isRouteActive("/meus-dados")
                   ? "bg-primary/10 text-primary border-primary/20 font-medium"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
               }`}
             >
               <Building className="h-4 w-4 shrink-0" />
-              <span>Meus Dados</span>
+              {!sidebarCollapsed && <span>Meus Dados</span>}
             </Link>
           )}
 
-
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-9">
-                <LogOut className="mr-2 h-4 w-4" /> Sair da Conta
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`w-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-9 transition-all duration-200 ${
+                  sidebarCollapsed ? "justify-center px-0" : "justify-start"
+                }`}
+              >
+                <LogOut className={`h-4 w-4 ${sidebarCollapsed ? "" : "mr-2"}`} />
+                {!sidebarCollapsed && <span>Sair da Conta</span>}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent className="bg-card border border-border">
@@ -388,6 +438,19 @@ function AuthLayout() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Toggle Collapse Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleSidebar}
+            className={`w-full text-muted-foreground hover:text-foreground hover:bg-accent/50 h-9 transition-all duration-200 ${
+              sidebarCollapsed ? "justify-center px-0" : "justify-start"
+            }`}
+          >
+            <ChevronLeft className={`h-4 w-4 transition-transform duration-300 ${sidebarCollapsed ? "rotate-180" : "mr-2"}`} />
+            {!sidebarCollapsed && <span>Recolher Menu</span>}
+          </Button>
         </div>
       </aside>
 
