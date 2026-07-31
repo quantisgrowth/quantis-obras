@@ -2257,6 +2257,24 @@ function AdminManualSchedulingForm({ navigate }: AdminManualSchedulingFormProps)
     }
     setLoading(true);
     try {
+      // 1. Validar se existe Negócio ativo/ganho no CRM para esta Obra
+      const { data: crmOpps, error: crmErr } = await supabase
+        .from("crm_oportunidades")
+        .select("id")
+        .eq("obra_id", selectedObraId)
+        .in("status", ["Aberta", "Ganha"])
+        .limit(1);
+
+      if (crmErr) {
+        console.error("Erro ao validar oportunidade no CRM:", crmErr);
+      }
+
+      if (!crmOpps || crmOpps.length === 0) {
+        toast.error("Para lançar um agendamento manual, é necessário possuir um negócio (oportunidade) ativo ou ganho cadastrado no CRM para esta obra. Cadastre o negócio no CRM primeiro.");
+        setLoading(false);
+        return;
+      }
+
       const [h, m] = horarioNaObra.split(":").map(Number);
       const fimMin = h * 60 + m + 9 * 60;
       const fimHH = Math.floor(fimMin / 60) % 24;

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { createClient } from "@supabase/supabase-js";
 
 // Zod Schemas
 const PipelineSchema = z.object({
@@ -278,6 +279,84 @@ export const getOportunidades = createServerFn({ method: "GET" })
     return data;
   });
 
+// Helper to trigger automated onboarding for a lead
+async function triggerOnboardingForLead(supabase: any, leadId: string) {
+  try {
+    const { data: lead } = await supabase
+      .from("crm_leads")
+      .select("nome, email, telefone, empresa_cliente_id")
+      .eq("id", leadId)
+      .single();
+
+    if (lead && lead.email && lead.empresa_cliente_id) {
+      const SUPABASE_URL = process.env.SUPABASE_URL;
+      const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+
+      if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+        console.warn("Supabase credentials missing on server. Skipping onboarding.");
+        return;
+      }
+
+      const tempSupabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+
+      const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+      const generatedPassword = `Quantis@${randomSuffix}`;
+
+      const { data: signUpData, error: signUpError } = await tempSupabase.auth.signUp({
+        email: lead.email.trim().toLowerCase(),
+        password: generatedPassword,
+        options: {
+          data: {
+            nome_completo: lead.nome.trim(),
+            telefone: lead.telefone?.trim() || null,
+            empresa_id: lead.empresa_cliente_id,
+            sub_role: "master",
+            permissoes: ["pedidos", "obras", "dashboard", "financeiro", "equipe"]
+          }
+        }
+      });
+
+      if (signUpError) {
+        if (signUpError.message.includes("already registered") || signUpError.status === 422) {
+          return { success: false, reason: "already_registered" };
+        }
+        console.error("Erro no onboarding automático:", signUpError.message);
+        return;
+      }
+
+      if (signUpData?.user) {
+        const whatsText = `Olá! Bem-vindo(a) à plataforma *Quantis Obras*.\n\nSeu cadastro foi concluído com sucesso. Suas credenciais de acesso são:\n📧 *E-mail:* ${lead.email.trim().toLowerCase()}\n🔑 *Senha:* ${generatedPassword}\n\nVocê já pode acessar o sistema e acompanhar seus pedidos em:\nhttps://quantis-obras.vercel.app/login`;
+        
+        if (lead.telefone) {
+          const cleanPhone = lead.telefone.replace(/\D/g, "");
+          if (cleanPhone) {
+            const apiUrl = process.env.EVOLUTION_API_URL;
+            const apiToken = process.env.EVOLUTION_API_TOKEN;
+            const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
+            
+            if (apiUrl && apiToken && instanceName) {
+              let cleanNumber = cleanPhone;
+              if (cleanNumber.length === 11 || cleanNumber.length === 10) {
+                cleanNumber = "55" + cleanNumber;
+              }
+              const url = `${apiUrl.replace(/\/$/, "")}/message/sendText/${instanceName}`;
+              await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", apikey: apiToken },
+                body: JSON.stringify({ number: cleanNumber, text: whatsText, delay: 1200 }),
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Erro na rotina de onboarding:", err);
+  }
+}
+
 // 8. Create or Update an opportunity
 export const saveOportunidade = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -298,6 +377,12 @@ export const saveOportunidade = createServerFn({ method: "POST" })
       .single();
 
     if (error) throw new Error("Erro ao salvar oportunidade: " + error.message);
+    
+    // Disparar onboarding automático se houver um lead vinculado
+    if (data.lead_id) {
+      triggerOnboardingForLead(supabase, data.lead_id);
+    }
+
     return data;
   });
 
@@ -373,6 +458,12 @@ export const saveLead = createServerFn({ method: "POST" })
       .single();
 
     if (error) throw new Error("Erro ao salvar lead: " + error.message);
+
+    // Disparar onboarding automático se houver e-mail e empresa cliente vinculada
+    if (data.email && data.empresa_cliente_id) {
+      triggerOnboardingForLead(supabase, data.id);
+    }
+
     return data;
   });
 
@@ -480,5 +571,95 @@ export const saveLeadsTemplate = createServerFn({ method: "POST" })
 
     if (error) throw new Error("Erro ao salvar template de leads: " + error.message);
     return { success: true };
+  });
+
+// 19. Onboard client user (automated registration and WhatsApp message)
+export const onboardClientUser = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({
+    email: z.string().email(),
+    nome: z.string(),
+    telefone: z.string().nullable().optional(),
+    empresaClienteId: z.string().uuid(),
+  }).parse(input))
+  .handler(async ({ data: input }) => {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+
+    if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+      throw new Error("Credenciais do Supabase não configuradas no servidor.");
+    }
+
+    const tempSupabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+
+    // Gerar uma senha aleatória segura
+    const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+    const generatedPassword = `Quantis@${randomSuffix}`;
+
+    const { data: signUpData, error: signUpError } = await tempSupabase.auth.signUp({
+      email: input.email.trim().toLowerCase(),
+      password: generatedPassword,
+      options: {
+        data: {
+          nome_completo: input.nome.trim(),
+          telefone: input.telefone?.trim() || null,
+          empresa_id: input.empresaClienteId,
+          sub_role: "master",
+          permissoes: ["pedidos", "obras", "dashboard", "financeiro", "equipe"]
+        }
+      }
+    });
+
+    if (signUpError) {
+      // Se já estiver cadastrado, ignoramos o erro silenciosamente
+      if (signUpError.message.includes("already registered") || signUpError.status === 422) {
+        return { success: false, reason: "already_registered" };
+      }
+      throw new Error(`Erro ao criar acesso: ${signUpError.message}`);
+    }
+
+    // Se o usuário foi criado, enviar mensagem de WhatsApp
+    if (signUpData?.user) {
+      const whatsText = `Olá! Bem-vindo(a) à plataforma *Quantis Obras*.\n\nSeu cadastro foi concluído com sucesso. Suas credenciais de acesso são:\n📧 *E-mail:* ${input.email.trim().toLowerCase()}\n🔑 *Senha:* ${generatedPassword}\n\nVocê já pode acessar o sistema e acompanhar seus pedidos em:\nhttps://quantis-obras.vercel.app/login`;
+      
+      let sentWhats = false;
+      if (input.telefone) {
+        try {
+          const cleanPhone = input.telefone.replace(/\D/g, "");
+          if (cleanPhone) {
+            const apiUrl = process.env.EVOLUTION_API_URL;
+            const apiToken = process.env.EVOLUTION_API_TOKEN;
+            const instanceName = process.env.EVOLUTION_INSTANCE_NAME;
+            
+            if (apiUrl && apiToken && instanceName) {
+              let cleanNumber = cleanPhone;
+              if (cleanNumber.length === 11 || cleanNumber.length === 10) {
+                cleanNumber = "55" + cleanNumber;
+              }
+              const url = `${apiUrl.replace(/\/$/, "")}/message/sendText/${instanceName}`;
+              await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", apikey: apiToken },
+                body: JSON.stringify({ number: cleanNumber, text: whatsText, delay: 1200 }),
+              });
+              sentWhats = true;
+            }
+          }
+        } catch (e) {
+          console.error("Erro ao enviar boas-vindas por WhatsApp:", e);
+        }
+      }
+
+      return {
+        success: true,
+        email: input.email.trim().toLowerCase(),
+        password: generatedPassword,
+        sentWhats
+      };
+    }
+
+    return { success: false, reason: "no_user_created" };
   });
 

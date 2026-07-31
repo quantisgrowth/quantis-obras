@@ -285,6 +285,11 @@ export function OpportunityModal({
                   ))}
                 </SelectContent>
               </Select>
+              {leadId !== "none" && (
+                <p className="text-[9px] text-muted-foreground mt-1 leading-normal bg-muted/30 p-1.5 rounded border border-border/40">
+                  ⚡ <strong>Onboarding:</strong> Se este lead possuir e-mail, seu acesso à plataforma será gerado e enviado automaticamente por WhatsApp.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1">
